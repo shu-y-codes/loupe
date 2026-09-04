@@ -1,0 +1,16 @@
+---
+description: _notes/founding is locked; do not edit
+globs: _notes/founding/**
+alwaysApply: true
+---
+
+# Founding notes are read-only
+
+Do not create, edit, move, or delete files under `_notes/founding/`. That folder is a locked historical record (exercise brief and first-pass analysis).
+
+If UI, journeys, or product scope need to change, edit `specs/` instead:
+
+- UI / wireframes / tooltips → `specs/loupe-ui-design.md`
+- Implementation brief → `specs/loupe-solution-design.md`
+
+Do not "keep founding in sync." Cite founding as background only.

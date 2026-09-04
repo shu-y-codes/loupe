@@ -30,3 +30,4 @@ Do not put SQL, quality rules, or insight math in Streamlit callbacks.
 - Prefer a short plan before generating the first app code
 - Small, testable units; pytest for quality rules and query helpers
 - Do not invent extra services (Redis, extra DBs, auth) unless asked
+- `_notes/founding/` is **locked read-only**. Change product/UI in `specs/`, not there.
