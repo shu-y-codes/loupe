@@ -27,7 +27,7 @@ Do not put SQL, quality rules, or insight math in Streamlit callbacks.
 
 ## Agent workflow
 
-- Prefer a short plan before generating the first app code
+- Prefer a short plan in `plans/` before generating the first app code
 - Small, testable units; pytest for quality rules and query helpers
 - Do not invent extra services (Redis, extra DBs, auth) unless asked
-- `_notes/founding/` is **locked read-only**. Change product/UI in `specs/`, not there.
+- Product and calculation truth live in `specs/`. `_notes/` is research only (see `docs-authority.mdc`).

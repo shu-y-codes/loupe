@@ -5,14 +5,14 @@ alwaysApply: true
 
 # Opus / token discipline
 
-Prefer small, scoped agent turns. Do not load the whole `_notes/cursor/` corpus into every chat.
+Prefer small, scoped agent turns. Attach `specs/` (and the current `plans/` slice), not the whole `_notes/` scrapbook.
 
 ## When Opus is worth it
 
 Use Opus (or equivalent high-cost reasoning) for:
 
-- Analytics correctness (`02-analytics-semantics.md`): session/trade-date, expected grid, OHLCV aggregation, rolling VWAP
-- DQ engine design, scoring, reconciliation (`04-dq-rules-and-scoring.md`)
+- Analytics correctness: session/trade-date, expected grid, OHLCV aggregation, rolling VWAP
+- DQ engine design, scoring, reconciliation
 - Sticky bugs involving timezone, DST, session boundaries, or dual-frequency (`minute` vs `daily`)
 
 Prefer cheaper Cursor models (Composer / Grok) for scaffolding, boilerplate routes, Streamlit chrome, stub tests, and mechanical edits — unless the user has already directed otherwise.
@@ -21,24 +21,25 @@ Avoid Opus fast mode unless the user asks for speed; standard rates are enough.
 
 ## Context budget
 
-- Attach **only the note section(s)** needed for the current slice, plus the files being edited
+- Attach **only the spec section(s)** needed for the current slice, plus the files being edited
 - One concern per chat when possible (e.g. `CMP.*` only, or ingest only, or `/v1/analytics/vwap` only)
-- Prefer `@` references to specific paths over dumping all of `_notes/cursor/`
-- Where `06-sample-data.md` disagrees with earlier notes, `06` wins — but only open it when the claim is factual about the sample
+- Prefer `@` references to specific paths. Open `_notes/` only when researching, never as implementation law
+- If detail still lives only under `_notes/cursor/`, promote it into `specs/` before coding that slice
 
-Doc map for slices:
+Doc map for slices (prefer `specs/` once the topic is promoted; until then, research only):
 
-| Slice | Primary note |
-|---|---|
-| Domain / symbology | `01-futures-data-primer.md` |
-| Bars, VWAP, grid | `02-analytics-semantics.md` |
-| Schema / SQL | `03-data-model.md` |
-| Rules, score, insights | `04-dq-rules-and-scoring.md` |
-| Routes / payloads | `05-api-contract.md` |
-| Sample facts / oracle tests | `06-sample-data.md` |
+| Slice | Intended spec | Until promoted |
+|---|---|---|
+| Domain / symbology | (research only; not a v1 product spec) | `_notes/cursor/01-futures-data-primer.md` |
+| Bars, VWAP, grid | `specs/analytics-semantics.md` | `_notes/cursor/02-analytics-semantics.md` |
+| Schema / SQL | `specs/data-model.md` | `_notes/cursor/03-data-model.md` |
+| Rules, score | `specs/dq-rules-and-scoring.md` | `_notes/cursor/04-dq-rules-and-scoring.md` |
+| Routes / payloads | `specs/api-contract.md` | `_notes/cursor/05-api-contract.md` |
+| Sample facts / oracle tests | `specs/sample-corpus.md` | `_notes/cursor/06-sample-data.md` |
+| UI | `specs/loupe-ui-design.md` | — |
 
 ## Implementation shape
 
-- Short plan before first app code; then implement one layer or rule family
+- Short plan in `plans/` before first app code; then implement one layer or rule family
 - Small, testable units; pytest for quality rules and query helpers
-- Do not re-litigate locked decisions in `_notes/cursor/README.md` unless the user asks
+- Do not re-litigate locked decisions in `specs/loupe-solution-design.md` unless the user asks

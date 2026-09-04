@@ -13,4 +13,4 @@ If UI, journeys, or product scope need to change, edit `specs/` instead:
 - UI / wireframes / tooltips → `specs/loupe-ui-design.md`
 - Implementation brief → `specs/loupe-solution-design.md`
 
-Do not "keep founding in sync." Cite founding as background only.
+Other `_notes/` trees are a **scrapbook**, not a second spec. Do not "keep founding in sync." Cite founding as background only.
