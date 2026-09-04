@@ -1,3 +1,6 @@
+# notes
+_notes/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -216,3 +219,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Loupe — analytics store
+*.duckdb
+*.duckdb.wal
+
+# Loupe — vendor sample data.
+# Fetched by tools/fetch_samples.py, never committed: the upstream dataset carries no
+# licence grant. Small hand-built test fixtures live in tests/fixtures/ and ARE committed.
+data/samples/
+
+# macOS
+.DS_Store

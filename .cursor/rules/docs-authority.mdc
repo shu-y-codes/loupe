@@ -1,0 +1,49 @@
+---
+description: Specs are law; notes are scrapbook; plans are execution
+alwaysApply: true
+---
+
+# Document authority
+
+| Location | Role | Git |
+|---|---|---|
+| `specs/` | Normative product + computation + API + UI | commit |
+| `plans/` | Slice sequence and done-when | commit |
+| `_notes/` | Research scrapbook (non-binding) | ignore |
+| `_notes/founding/` | Locked historical brief | ignore; never edit |
+
+If a spec and a note disagree, **the spec wins**. Do not implement solely from `_notes/`.
+
+## Graduate, then build
+
+Trade date, expected grid, OHLCV, VWAP, schema, DQ rules/score, API payloads, and UI behaviour belong in `specs/`, not in rules and not as living law in `_notes/`.
+
+If the spec is still a summary and the detail lives only under `_notes/cursor/`, **promote that slice into `specs/` before treating it as implementation law**. Leave the note as archaeology or mark it superseded.
+
+## Spec evolution
+
+Amend in place. No `*-v2.md`, no copies into `_notes/founding/` or `plans/archive/`. Git is the version trail. A one-line revision (date + sentence) at the top of a spec is enough; do not keep a long changelog in the file.
+
+| Change | Edit | Then |
+|---|---|---|
+| Scope, personas, v1 vs extension, architecture | `specs/loupe-solution-design.md` | New `plans/` slice if work remains |
+| UI chrome, KPIs, tooltips, wireframes | `specs/loupe-ui-design.md` | Keep solution §12 as pointer + invariants |
+| Formula, grid, DDL, rule IDs, API shapes, sample claims | The sibling spec that owns it | Research may start in `_notes/`; promote before it is law |
+| Locked decisions (solution brief §3) | Rewrite the numbered item; do not leave two truths | Grep `plans/` and other specs for the old sentence |
+| Sequence / done-when only | `plans/` | Do not shadow-spec |
+
+Conflict after an edit: **intent / v1 boundary → spec**; **how a number is computed or what the sample contains → fix the spec** (notes are not a veto). Demo lessons that change product copy patch the UI spec the same day. Oracle lessons patch the analytics/sample spec, then one sentence in the brief if §3/§8 would still teach the wrong rule.
+
+Post-v1 features: new numbered plan, and a spec subsection marked **extension** until promoted to v1. Do not reopen a `done` plan except to point at the spec change.
+
+## Plans
+
+- Committed. One index plus one file per slice (not solution vs UI).
+- Done slices stay in place; mark done in the index. Move to `plans/archive/` only when **superseded**.
+- Plans do not restate the design. Pointers only.
+
+## Notes
+
+- `_notes/` is a lab notebook: drafts, dead ends, raw measurements, working SQL.
+- `_notes/founding/` is read-only. Do not keep founding in sync.
+- Do not load the whole `_notes/` tree into a chat.
