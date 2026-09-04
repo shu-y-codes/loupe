@@ -14,6 +14,7 @@ research scrapbook (gitignored; not in clones). Founding notes are locked histor
 - **[specs/loupe-ui-design.md](specs/loupe-ui-design.md)** — UI / personas / wireframes
 - **[plans/](plans/)** — slice sequence and done-when
 - **[specs/data-model.md](specs/data-model.md)** — DuckDB schema and its invariants
+- **[specs/dq-rules-and-scoring.md](specs/dq-rules-and-scoring.md)** — rule catalogue and DQ score
 - **[specs/sample-corpus.md](specs/sample-corpus.md)** — what the sample holds, and the oracle
 
 ## Setup

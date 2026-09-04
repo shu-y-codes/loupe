@@ -2,8 +2,9 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-05: `specs/data-model.md` and `specs/sample-corpus.md` promoted (slice 1).
-Remaining sibling specs are promoted by their own slice.
+Revised 2026-09-05: `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs
+(`data-model.md`, `sample-corpus.md`) already promoted. Remaining siblings are promoted
+by their own slice.
 
 This document is the implementation brief. **`specs/` is normative.** Calculation, schema,
 rule catalogues, API payloads, and UI belong in `specs/` (this brief plus sibling specs).
@@ -17,7 +18,7 @@ as binding. Execution sequence: `plans/`.
 | Persona UI, Summary / Specifics, wireframes, tooltips | `specs/loupe-ui-design.md` |
 | Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` (not yet; research `_notes/cursor/02-analytics-semantics.md`) |
 | Data model / DDL | `specs/data-model.md` |
-| DQ rules and scoring | `specs/dq-rules-and-scoring.md` (not yet; research `_notes/cursor/04-dq-rules-and-scoring.md`) |
+| DQ rules and scoring | `specs/dq-rules-and-scoring.md` |
 | API contract | `specs/api-contract.md` (not yet; research `_notes/cursor/05-api-contract.md`) |
 | Sample corpus / oracle claims | `specs/sample-corpus.md` |
 | Futures domain primer | Research only: `_notes/cursor/01-futures-data-primer.md` (not a v1 product spec) |
@@ -245,6 +246,9 @@ and `source_frequency` (`minute` derived vs `daily` supplied).
 ---
 
 ## 9. Data quality
+
+Full catalogue, score formula, pattern/suggestion shapes, and fixture map:
+`specs/dq-rules-and-scoring.md`.
 
 ### Dimensions
 

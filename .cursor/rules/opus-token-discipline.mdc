@@ -33,7 +33,7 @@ Doc map for slices (prefer `specs/` once the topic is promoted; until then, rese
 | Domain / symbology | (research only; not a v1 product spec) | `_notes/cursor/01-futures-data-primer.md` |
 | Bars, VWAP, grid | `specs/analytics-semantics.md` | `_notes/cursor/02-analytics-semantics.md` |
 | Schema / SQL | `specs/data-model.md` | `_notes/cursor/03-data-model.md` |
-| Rules, score | `specs/dq-rules-and-scoring.md` | `_notes/cursor/04-dq-rules-and-scoring.md` |
+| Rules, score | `specs/dq-rules-and-scoring.md` | — |
 | Routes / payloads | `specs/api-contract.md` | `_notes/cursor/05-api-contract.md` |
 | Sample facts / oracle tests | `specs/sample-corpus.md` | `_notes/cursor/06-sample-data.md` |
 | UI | `specs/loupe-ui-design.md` | — |

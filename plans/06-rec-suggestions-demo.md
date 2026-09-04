@@ -7,9 +7,8 @@ defect injection with a ground-truth manifest.
 
 ## Done when
 
-1. If `REC.*` / suggestion shapes are not already in `specs/dq-rules-and-scoring.md`,
-   promote the remaining pieces from `_notes/cursor/04-dq-rules-and-scoring.md` (and
-   sample claims from `06` if injection/oracle details are still only in the note).
+1. ✅ `REC.*` / pattern / suggestion shapes already live in `specs/dq-rules-and-scoring.md`
+   (slice 2 promote). No further promote from `_notes/cursor/04-dq-rules-and-scoring.md`.
 2. Reconciliation findings only when daily + minute exist for the same contract
    (OHLC disagreement coverage-gated, volume shortfall, session only-in-one,
    close-convention info). Score includes reconciliation when in scope.
@@ -33,9 +32,8 @@ injection rows labelled and listed in the manifest; suggestions have no apply pa
 
 - `specs/loupe-solution-design.md` §9 (reconciliation, patterns, demo defects)
 - `specs/loupe-ui-design.md` (Analyst specifics; report-only)
-- After promote: `specs/dq-rules-and-scoring.md`, `specs/sample-corpus.md`
-- Research until promoted: `_notes/cursor/04-dq-rules-and-scoring.md`,
-  `_notes/cursor/06-sample-data.md`
+- `specs/dq-rules-and-scoring.md` (incl. `REC.*`, patterns, suggestions)
+- `specs/sample-corpus.md`
 
 ## Non-goals
 
