@@ -2,20 +2,25 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-This document is the implementation brief. Detailed semantics, schema DDL, rule catalogues
-and API payloads live under `_notes/cursor/`; where that corpus and this brief disagree, this
-brief wins on scope and priority, and the numbered notes win on factual claims about the sample
-data and on calculation correctness.
+Revised 2026-09-05: `specs/data-model.md` and `specs/sample-corpus.md` promoted (slice 1).
+Remaining sibling specs are promoted by their own slice.
+
+This document is the implementation brief. **`specs/` is normative.** Calculation, schema,
+rule catalogues, API payloads, and UI belong in `specs/` (this brief plus sibling specs).
+`_notes/` is a research scrapbook and is not implementation law. `_notes/founding/` is a
+locked historical record. Where a spec and a note disagree, the spec wins. If a topic is
+still only documented under `_notes/cursor/`, promote it into `specs/` before treating it
+as binding. Execution sequence: `plans/`.
 
 | Detail | Document |
 |---|---|
-| Futures domain (symbology, sessions, rolls, ticks) | `_notes/cursor/01-futures-data-primer.md` |
-| Daily bars, VWAP, expected grid | `_notes/cursor/02-analytics-semantics.md` |
-| DuckDB schema | `_notes/cursor/03-data-model.md` |
-| DQ rules, score, patterns, suggestions, `REC.*` | `_notes/cursor/04-dq-rules-and-scoring.md` |
-| FastAPI contract | `_notes/cursor/05-api-contract.md` |
-| Sample corpus facts and oracle measurements | `_notes/cursor/06-sample-data.md` |
 | Persona UI, Summary / Specifics, wireframes, tooltips | `specs/loupe-ui-design.md` |
+| Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` (not yet; research `_notes/cursor/02-analytics-semantics.md`) |
+| Data model / DDL | `specs/data-model.md` |
+| DQ rules and scoring | `specs/dq-rules-and-scoring.md` (not yet; research `_notes/cursor/04-dq-rules-and-scoring.md`) |
+| API contract | `specs/api-contract.md` (not yet; research `_notes/cursor/05-api-contract.md`) |
+| Sample corpus / oracle claims | `specs/sample-corpus.md` |
+| Futures domain primer | Research only: `_notes/cursor/01-futures-data-primer.md` (not a v1 product spec) |
 | Founding journeys (locked historical) | `_notes/founding/loupe-solution-design.md` |
 
 ---
@@ -293,7 +298,7 @@ Four DuckDB schemas:
 
 Absent by design in v1: users, roles, report catalogues, runtime third-party fetches.
 
-Full DDL: `_notes/cursor/03-data-model.md`.
+Full DDL: `specs/data-model.md`.
 
 ---
 
@@ -313,7 +318,7 @@ Base path `/v1`. Synchronous writes return finished results. Conventions: UTC on
 VWAP on daily-only contracts returns a structured frequency-unavailable error. Comparison
 supports `compare=basis` (raw vs clean) and `compare=frequency` (supplied daily vs derived).
 
-Full contract: `_notes/cursor/05-api-contract.md`.
+Full contract: `specs/api-contract.md` (not yet; research `_notes/cursor/05-api-contract.md`).
 
 ---
 
@@ -420,10 +425,12 @@ User                    Streamlit                     FastAPI                   
 
 ## 17. Implementation order (suggested)
 
+Done-when and file lists: `plans/`. Promote the matching research note into `specs/` as the first done-when of each slice.
+
 1. `data` — DuckDB schema, ingest preview/load, reference seed from sample  
 2. `quality` — core rule families + score; fixtures first  
 3. `insights` — daily bars + VWAP; wire oracle test  
-4. `api` — routes matching `_notes/cursor/05-api-contract.md`  
+4. `api` — routes matching `specs/api-contract.md` (promote from research `05` first)  
 5. `ui` — Summary/Specifics, persona selector, upload with capability disclosure, tooltips  
 6. Reconciliation + **report-only** suggestions + demo injection (apply/override later)  
 7. README walkthrough against real `ESZ25` (or chosen volatile window)
