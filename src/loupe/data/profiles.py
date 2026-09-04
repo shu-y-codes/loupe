@@ -44,7 +44,7 @@ class SessionProfile:
 
 
 # Three distinct shapes across eight roots (specs/sample-corpus.md §5).
-# 17:00 -> 15:59 next day, one contiguous block: 23 hours, 1,380 slots. The 16:00-16:59
+# 17:00 -> 15:59 next day, one contiguous block: 239 hours, 1,380 slots. The 16:00-16:59
 # dead zone is the gap to the next session, not a halt inside this one.
 CME_23H = SessionProfile(
     name="cme_23h",
@@ -237,7 +237,10 @@ def _observed(day: date) -> date:
 
 
 def _easter(year: int) -> date:
-    """Anonymous Gregorian algorithm. Good Friday is an early close in this corpus, not a closure."""
+    """Anonymous Gregorian algorithm.
+
+    Good Friday is an early close in this corpus, not a closure.
+    """
     a = year % 19
     b, c = divmod(year, 100)
     d, e = divmod(b, 4)
