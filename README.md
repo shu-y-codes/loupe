@@ -22,6 +22,7 @@ Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                              # create the venv and install
+git config core.hooksPath .githooks  # ruff check on every commit (matches CI)
 uv run python tools/fetch_samples.py # ~15.5 MB of vendor sample data, gitignored
 uv run pytest                        # tests that need the corpus skip without it
 uv run ruff check .
