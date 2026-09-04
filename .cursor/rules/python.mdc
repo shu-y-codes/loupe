@@ -1,0 +1,28 @@
+---
+description: Python conventions for Loupe
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python
+
+- Python 3.12+, type hints on public functions, `from __future__ import annotations` only if needed
+- Package manager: **uv**. App code under `src/loupe/`. Tests under `tests/`
+- Format/lint with **Ruff**. No unused imports, no bare `except:`
+- Prefer small functions that return data over mutating globals
+- Raise specific errors; log and re-raise at process boundaries (API/UI)
+
+```python
+# ❌ BAD
+def load(symbol):
+    return con.execute(f"SELECT * FROM prices WHERE symbol = '{symbol}'").df()
+
+# ✅ GOOD
+def load_prices(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
+    return con.execute(
+        "SELECT * FROM prices WHERE symbol = ?",
+        [symbol],
+    ).df()
+```
+
+- Use pytest; name tests `test_<behavior>`. Mock I/O, not DuckDB SQL shape when a temp DB is easy

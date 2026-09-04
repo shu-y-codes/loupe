@@ -1,0 +1,32 @@
+---
+description: Loupe product context, stack, and how to structure work
+alwaysApply: true
+---
+
+# Loupe
+
+Lightweight app for **data quality** and **market insights** from historical futures data.
+
+Stack: **Python**, **Streamlit** (UI), **FastAPI** (API), **DuckDB** (analytics store/query).
+
+## Layers (keep these separate)
+
+- `quality`: checks, scores, anomaly flags — not charts
+- `insights`: market views derived from clean(er) series
+- `data`: DuckDB load/query; no UI widgets here
+- `api`: FastAPI routes that call quality/insights/data
+- `ui`: Streamlit pages that call the API or shared services — keep widgets thin
+
+Do not put SQL, quality rules, or insight math in Streamlit callbacks.
+
+## Data
+
+- Historical futures only unless the user asks otherwise
+- Treat missing contracts, rolls, and timestamps as first-class quality issues
+- DuckDB files and secrets stay out of git (`.env`, `.streamlit/secrets.toml`, `*.duckdb`)
+
+## Agent workflow
+
+- Prefer a short plan before generating the first app code
+- Small, testable units; pytest for quality rules and query helpers
+- Do not invent extra services (Redis, extra DBs, auth) unless asked
