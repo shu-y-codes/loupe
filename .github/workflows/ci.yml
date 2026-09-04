@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version-file: ".python-version"
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --frozen --group dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        # Vendor corpus is gitignored (no redistribution licence); those tests skip.
+        run: uv run pytest
