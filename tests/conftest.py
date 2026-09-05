@@ -46,13 +46,33 @@ def fixture_path():
     return _path
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def samples_dir() -> Path:
     """The fetched vendor corpus, or a skip when it is absent.
 
     The corpus carries no redistribution licence, so it is never committed and these tests
     are optional by design (`specs/sample-corpus.md` §1).
     """
-    if not (SAMPLES / "files.csv").exists():
+    present = (SAMPLES / "files.csv").exists()
+    # #region agent log
+    import json
+    import time
+
+    with open("/Users/shu/Documents/loupe/.cursor/debug-b987ef.log", "a") as _df:
+        _df.write(json.dumps({
+            "sessionId": "b987ef",
+            "runId": "post-fix",
+            "hypothesisId": "H4",
+            "location": "tests/conftest.py:samples_dir",
+            "message": "samples_dir session fixture",
+            "timestamp": int(time.time() * 1000),
+            "data": {
+                "samples": str(SAMPLES),
+                "files_csv_exists": present,
+                "will_skip": not present,
+            },
+        }) + "\n")
+    # #endregion
+    if not present:
         pytest.skip("data/samples/ not fetched; run python tools/fetch_samples.py")
     return SAMPLES

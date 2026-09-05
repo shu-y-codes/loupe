@@ -41,27 +41,50 @@ EXCLUDING_RULES = (
 
 
 @pytest.fixture(scope="module")
-def corpus_exclusions():
+def corpus_exclusions(samples_dir):
     """Load the fetched corpus once and run every rule that can exclude a record.
 
-    Module-scoped, and so it resolves the corpus itself rather than through the shared
-    function-scoped `samples_dir`: loading 48 files takes the better part of a minute and
-    doing it five times would make the measurement not worth having.
+    Module-scoped because loading 48 files takes the better part of a minute and doing it
+    five times would make the measurement not worth having. `samples_dir` is session-scoped
+    so this fixture can depend on it without importing `tests.conftest` as a package.
     """
-    from tests.conftest import SAMPLES  # noqa: PLC0415
+    # #region agent log
+    import json
+    import sys
+    import time
+    from pathlib import Path as _DbgPath
+
+    _repo = _DbgPath(__file__).resolve().parents[2]
+    _on_path = str(_repo) in {str(_DbgPath(p).resolve()) for p in sys.path if p}
+    _payload = {
+        "sessionId": "b987ef",
+        "runId": "post-fix",
+        "hypothesisId": "H2",
+        "location": "tests/quality/test_exclusion_rate.py:corpus_exclusions",
+        "message": "corpus_exclusions fixture using samples_dir",
+        "timestamp": int(time.time() * 1000),
+        "data": {
+            "cwd": str(_DbgPath.cwd()),
+            "argv0": sys.argv[0],
+            "samples_dir": str(samples_dir),
+            "files_csv_exists": (samples_dir / "files.csv").exists(),
+            "repo_root_on_sys_path": _on_path,
+            "module_name": __name__,
+        },
+    }
+    with open("/Users/shu/Documents/loupe/.cursor/debug-b987ef.log", "a") as _df:
+        _df.write(json.dumps(_payload) + "\n")
+    # #endregion
 
     from loupe.data import apply_schema, connect, seed_reference
     from loupe.quality import seed_quality
 
-    if not (SAMPLES / "files.csv").exists():
-        pytest.skip("data/samples/ not fetched; run python tools/fetch_samples.py")
-
     con = connect(":memory:")
     apply_schema(con)
-    seed_reference(con, manifest=SAMPLES / "files.csv")
+    seed_reference(con, manifest=samples_dir / "files.csv")
     seed_quality(con)
 
-    for path in sorted((SAMPLES / "data").rglob("*.parquet")):
+    for path in sorted((samples_dir / "data").rglob("*.parquet")):
         load_file(con, path)
 
     result = run_rules(con, rule_ids=EXCLUDING_RULES)
