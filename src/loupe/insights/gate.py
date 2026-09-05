@@ -182,27 +182,98 @@ def session_quality(
 
 
 @dataclass(frozen=True)
+class FrequencyUnavailable:
+    """The corpus cannot support the grain the caller asked for.
+
+    Distinct from an empty series on purpose. "No rows came back" and "no rows *can* come
+    back, because this contract holds daily records only" are different answers to the same
+    request, and they are different HTTP responses: an empty 200 against a 422 refusal
+    (`specs/api-contract.md` §5.2). Collapsing them is the failure `PublishedSeries` exists
+    to prevent, so the second one gets a type rather than an absence.
+
+    `substitute_offered` is always `False` and is carried anyway: it is the machine-readable
+    promise that nothing was quietly swapped in — no 15-*day* VWAP over daily bars standing
+    in for the 15-minute line that cannot be computed.
+    """
+
+    contract_id: str | None
+    requested_frequency: str
+    frequencies_available: tuple[str, ...]
+    substitute_offered: bool = False
+
+
+def frequencies_held(
+    con: duckdb.DuckDBPyConnection, *, contract_id: str | None = None
+) -> tuple[str, ...]:
+    """Which record grains the store actually holds, for one contract or for all of them."""
+    clauses = ["TRUE"]
+    args: list[object] = []
+    if contract_id is not None:
+        clauses.append("contract_id = ?")
+        args.append(contract_id)
+    rows = con.execute(
+        f"SELECT DISTINCT frequency FROM stage.market_record "
+        f"WHERE {' AND '.join(clauses)} ORDER BY 1",
+        args,
+    ).fetchall()
+    return tuple(row[0] for row in rows)
+
+
+def capability_gap(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    requested_frequency: str,
+    contract_id: str | None = None,
+) -> FrequencyUnavailable | None:
+    """`None` when the requested grain is held; the refusal when it is held for nothing.
+
+    A contract holding *nothing* is not a capability gap — it is an empty result. The refusal
+    means "this contract has data, just not at the grain that would answer your question",
+    which is the only case where telling the user to upload another file is useful advice.
+    """
+    held = frequencies_held(con, contract_id=contract_id)
+    if not held or requested_frequency in held:
+        return None
+    return FrequencyUnavailable(
+        contract_id=contract_id,
+        requested_frequency=requested_frequency,
+        frequencies_available=held,
+    )
+
+
+@dataclass(frozen=True)
 class PublishedSeries:
     """Analytics for a slice, and the reason any of it is missing.
 
-    Three states, and the caller must be able to tell them apart. `rows` present is the
+    Four states, and the caller must be able to tell them apart. `rows` present is the
     ordinary case. `blocked_sessions` non-empty means a `critical` finding blocked the slice —
-    the series is withheld, not absent. Both empty means there is genuinely nothing there.
-    An empty list would collapse the last two into "no data", which is the failure this type
-    exists to prevent (`plans/03-insights.md` done-when 9).
+    the series is withheld, not absent. `unsupported` means the corpus cannot answer at this
+    grain at all. All three empty means there is genuinely nothing there.
+    An empty list would collapse those into "no data", which is the failure this type
+    exists to prevent (`plans/03-insights.md` done-when 9, `plans/04-api.md` done-when 7).
+
+    The states are mutually exclusive in practice and are checked in that order by callers:
+    a refusal outranks a block, because a grain that cannot be computed was never a candidate
+    for publication in the first place.
     """
 
     rows: tuple = ()
     blocked_sessions: tuple[SessionQuality, ...] = ()
+    unsupported: FrequencyUnavailable | None = None
 
     @property
     def blocked(self) -> bool:
         return bool(self.blocked_sessions)
 
     @property
+    def frequency_unavailable(self) -> bool:
+        """The corpus holds no records at the grain this series needs. A 422, not a 200."""
+        return self.unsupported is not None
+
+    @property
     def unavailable(self) -> bool:
-        """Nothing to publish and nothing blocking it — the slice simply has no data."""
-        return not self.rows and not self.blocked_sessions
+        """Nothing to publish, nothing blocking it, and nothing refused — simply no data."""
+        return not self.rows and not self.blocked_sessions and self.unsupported is None
 
     @property
     def blocking_rule_ids(self) -> tuple[str, ...]:

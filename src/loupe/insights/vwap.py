@@ -31,7 +31,7 @@ from datetime import date, datetime
 import duckdb
 
 from .bars import BASIS_RELATION
-from .gate import PublishedSeries, blocked_sessions
+from .gate import PublishedSeries, blocked_sessions, capability_gap
 
 #: `price_basis` to the expression it means. Typical price is the default for bar data: using
 #: `close` alone discards the intra-bar range and is more sensitive to a single bad print.
@@ -144,7 +144,16 @@ def published_vwap(
     Blocked sessions are withheld and named rather than dropped: a misread timezone moves
     every session boundary, so a VWAP computed over it is wrong in a way no per-point check
     would notice.
+
+    A daily-only contract gets a refusal, not an empty line. The check belongs here rather
+    than in the caller: `insights` owns what may be published, and a handler that asked the
+    store which frequencies a contract holds would have taken that decision away from it
+    (`plans/04-api.md` done-when 7).
     """
+    gap = capability_gap(con, requested_frequency="minute", contract_id=contract_id)
+    if gap is not None:
+        return PublishedSeries(unsupported=gap)
+
     blocked = blocked_sessions(
         con, contract_id=contract_id, frequency="minute", trade_date=trade_date
     )

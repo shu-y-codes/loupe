@@ -8,12 +8,18 @@ dependencies = [
     "duckdb>=1.4.0",
     # DuckDB needs pytz to hand a TIMESTAMPTZ back to Python; ts_utc is one.
     "pytz>=2024.1",
+    "fastapi>=0.115",
+    # FastAPI's UploadFile will not parse a multipart body without it, and
+    # POST /v1/ingest/batches is multipart (specs/api-contract.md §4).
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    # TestClient is a thin wrapper over httpx; it is not pulled in by fastapi itself.
+    "httpx>=0.27",
 ]
 
 [build-system]

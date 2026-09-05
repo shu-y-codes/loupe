@@ -34,7 +34,7 @@ Doc map for slices (prefer `specs/` once the topic is promoted; until then, rese
 | Bars, VWAP, grid | `specs/analytics-semantics.md` | — |
 | Schema / SQL | `specs/data-model.md` | — |
 | Rules, score | `specs/dq-rules-and-scoring.md` | — |
-| Routes / payloads | `specs/api-contract.md` | `_notes/cursor/05-api-contract.md` |
+| Routes / payloads | `specs/api-contract.md` | — |
 | Sample facts / oracle tests | `specs/sample-corpus.md` | — |
 | UI | `specs/loupe-ui-design.md` | — |
 
