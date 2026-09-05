@@ -20,7 +20,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 |---|---|---|---|
 | 1 | data ingest | **done** | [01-data-ingest.md](01-data-ingest.md) |
 | 2 | quality | **done** | [02-quality.md](02-quality.md) |
-| 3 | insights | pending | [03-insights.md](03-insights.md) |
+| 3 | insights | **done** | [03-insights.md](03-insights.md) |
 | 4 | api | pending | [04-api.md](04-api.md) |
 | 5 | ui | pending | [05-ui.md](05-ui.md) |
 | 6 | rec / suggestions / demo | pending | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |

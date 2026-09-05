@@ -6,13 +6,14 @@ fact: run against this corpus's column it reports 179,934 weekend records, every
 a Sunday-evening CME bar that belongs to Monday's session. On the derived date the count is
 zero (`specs/sample-corpus.md` §7.1).
 
-`CON.DERIVED_BAR_INVALID` is deferred to slice 3 with the rest of bar provenance
-(`plans/02-quality.md`). Vendor daily rows still get record-scope OHLC checks here.
+`CON.DERIVED_BAR_INVALID` is the one rule in this family that reads a mart rather than the
+record set: the same violation means opposite things depending on where the bar came from, and
+only `mart.bar_daily` knows that.
 """
 
 from __future__ import annotations
 
-from ..registry import RECORDS, Finding, RuleContext, rule
+from ..registry import RECORDS, Finding, RuleContext, RuleRefusal, rule
 from .completeness import HALTS_CTE
 
 # Where high < low the bar's range is inverted and "inside the range" means nothing, so the
@@ -307,3 +308,86 @@ def price_jump(ctx: RuleContext) -> list[Finding]:
         )
         for record_id, contract_id, frequency, trade_date, ts_utc, details in rows
     ]
+
+
+@rule("CON.DERIVED_BAR_INVALID")
+def derived_bar_invalid(ctx: RuleContext) -> list[Finding]:
+    """A daily bar violates `low <= open, close <= high`.
+
+    **Severity follows provenance**, and the two branches mean opposite things. On a derived
+    bar it is critical: Loupe built this from records it had already validated, so a defect
+    escaped record-level validation and the series is not safe to publish. On a vendor bar it
+    is a warning: the vendor's close is a settlement struck near 15:00 local, which is not
+    obliged to sit inside the traded range and does not on 43 rows of this corpus
+    (`specs/sample-corpus.md` §7.5). Blocking those would be accurate about the arithmetic and
+    wrong about the data.
+
+    Both severities are read from the seeded row — the vendor branch from
+    `params.vendor_severity` — so a deployment can change either without a code change. The
+    precedent is `VAL.ZERO_VOLUME_WITH_RANGE`, which varies the same way on `daily_severity`.
+
+    Evaluated on the published basis (`params.basis`, `clean` by default). A bar the cleaning
+    policy already repaired is not a defect that escaped validation; it is validation working.
+    """
+    basis = str(ctx.param("basis", "clean"))
+    vendor_severity = str(ctx.param("vendor_severity", "warning"))
+
+    scoped = ctx.con.execute(
+        f"SELECT count(*) FROM mart.bar_daily b "
+        f"WHERE b.basis = ? AND b.contract_id IN (SELECT DISTINCT contract_id FROM {RECORDS})",
+        [basis],
+    ).fetchone()
+    if not scoped or scoped[0] == 0:
+        # Distinct from "evaluated and found nothing": with no bars materialised there is
+        # nothing to check, and reporting a clean result would be a claim we cannot make.
+        raise RuleRefusal(
+            f"no {basis} bars in mart.bar_daily for the contracts in scope; "
+            "run loupe.insights.build_bars first"
+        )
+
+    rows = ctx.con.execute(
+        f"""
+        SELECT b.contract_id, b.source_frequency, b.trade_date, b.first_ts_utc, b.last_ts_utc,
+               b.source, b.open, b.high, b.low, b.close, b.record_count
+        FROM mart.bar_daily b
+        WHERE b.basis = ?
+          AND b.contract_id IN (SELECT DISTINCT contract_id FROM {RECORDS})
+          AND b.high IS NOT NULL AND b.low IS NOT NULL
+          AND (b.high < b.low
+               OR (b.open IS NOT NULL AND (b.open < b.low OR b.open > b.high))
+               OR (b.close IS NOT NULL AND (b.close < b.low OR b.close > b.high)))
+        ORDER BY b.contract_id, b.trade_date, b.source
+        """,
+        [basis],
+    ).fetchall()
+
+    findings: list[Finding] = []
+    for contract_id, frequency, trade_date, first_ts, last_ts, source, o, h, low, c, n in rows:
+        vendor = source == "vendor"
+        findings.append(
+            ctx.finding(
+                severity=vendor_severity if vendor else ctx.severity,
+                contract_id=contract_id,
+                frequency=frequency,
+                trade_date=trade_date,
+                ts_start_utc=first_ts,
+                ts_end_utc=last_ts,
+                affected_rows=n,
+                details={
+                    "basis": basis,
+                    "source": source,
+                    "open": o,
+                    "high": h,
+                    "low": low,
+                    "close": c,
+                    "explanation": (
+                        "vendor settlement close outside the traded range; expected on an "
+                        "untraded or thinly traded session, see REC.CLOSE_CONVENTION"
+                        if vendor
+                        else "derived bar violates its own OHLC invariants; a defect escaped "
+                        "record-level validation"
+                    ),
+                },
+            )
+        )
+    return findings

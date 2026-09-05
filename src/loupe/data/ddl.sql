@@ -256,3 +256,36 @@ CREATE TABLE IF NOT EXISTS mart.dq_metric_daily (
   dimension_score  DOUBLE,     -- 0-100
   PRIMARY KEY (contract_id, trade_date, frequency, dimension)
 );
+
+-- VWAP is a view, not a table: cheap to compute and not worth materialising at this scale
+-- (`specs/data-model.md` §5). The body is owned by `specs/analytics-semantics.md` §4.6 —
+-- this is the default published line: typical price, clean basis, 15-minute trailing RANGE.
+--
+-- Intraday records only. A daily row cannot contribute to a rolling 15-minute window, so a
+-- daily-only corpus yields an empty result, which the API reports as *unavailable* rather
+-- than as an empty series.
+CREATE OR REPLACE VIEW mart.vwap_15m AS
+SELECT
+  contract_id,
+  trade_date,
+  ts_utc,
+  'clean'   AS basis,
+  'typical' AS price_basis,
+  sum(px * volume) OVER w / nullif(sum(volume) OVER w, 0) AS vwap_15m,
+  sum(volume)      OVER w                                 AS window_volume,
+  count(*)         OVER w                                 AS window_records,
+  ts_utc - first_value(ts_utc) OVER (
+      PARTITION BY contract_id, trade_date ORDER BY ts_utc
+  ) < INTERVAL 15 MINUTES                                 AS is_warmup
+FROM (
+  SELECT *, (high + low + close) / 3.0 AS px
+  FROM dq.market_record_clean
+  WHERE frequency = 'minute'
+    AND high IS NOT NULL AND low IS NOT NULL
+    AND close IS NOT NULL AND volume IS NOT NULL
+)
+WINDOW w AS (
+  PARTITION BY contract_id, trade_date
+  ORDER BY ts_utc
+  RANGE BETWEEN INTERVAL 15 MINUTES PRECEDING AND CURRENT ROW
+);

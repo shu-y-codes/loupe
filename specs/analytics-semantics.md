@@ -9,7 +9,10 @@ rolling 15-minute VWAP, and the MAD method for `OUT.*`. Promoted from research
 Revised 2026-09-05: promoted from research; first normative version. Same day: §3.1 defines
 `open_interest` on a derived bar (last reported, never summed) — `mart.bar_daily` carried the
 column with no definition behind it. Same day: §3.3 defines which findings intersect a
-bar, by `dq.dq_rule.scope`.
+bar, by `dq.dq_rule.scope`. Slice 3, on implementing both: §3.2 records that the compact
+`arg_min` / `arg_max` form is not a drop-in for the reference form unless the value is
+struct-wrapped, and §3.3's `file` row joins on the finding's timestamp span, because
+`dq.dq_finding` has no `batch_id` to join on.
 
 Validated against DuckDB 1.4.5 with the `icu` extension. Every SQL snippet below was executed
 before being written down. These calculations belong in the `insights` layer (bars, VWAP) and
@@ -469,6 +472,25 @@ GROUP BY contract_id, trade_date;
 DuckDB compares structs field-by-field in declaration order, so `{t, r}` is
 timestamp-then-row-number.
 
+**Wrap the value in a struct too.** `arg_min` and `arg_max` skip rows whose *value* is null,
+which is not this definition: §3.1 asks for the value of the earliest record, and that value
+may legitimately be null. On a session whose first record has a null `open`, the bare form
+returns the *second* record's open — a plausible number with no basis in the data, and one the
+`row_number()` reference form does not produce. Wrapping makes the value itself non-null, so
+the row is considered and the null is returned:
+
+```sql
+-- verified: returns NULL for a first record whose open is null, matching the reference form
+arg_min({'v': open},  {'t': ts_utc, 'r': source_row}).v AS open,
+arg_max({'v': close}, {'t': ts_utc, 'r': source_row}).v AS close
+```
+
+`open_interest` is the one field that genuinely wants the skip — "last *reported*" — so it
+takes the bare form with a `FILTER (WHERE open_interest IS NOT NULL)`.
+
+Revised 2026-09-05 (slice 3): the two forms above were previously presented as interchangeable.
+They are not, in the presence of a null price.
+
 **These semantics are tested against the vendor daily files, not just against themselves.**
 That oracle — what it covers, what it does not, the coverage gate, the never-narrower range
 invariant, and the claim wording ("agrees with the vendor's daily bars", never "verified
@@ -508,10 +530,17 @@ four-value enum, so the join is a branch and not a judgement:
 | `record` | the finding's `record_id` belongs to that `(contract_id, trade_date)` |
 | `session` | `contract_id`, `frequency` and `trade_date` match |
 | `series` | `contract_id` matches — every session in the series |
-| `file` | the finding's batch contributed any record to that session |
+| `file` | the finding's timestamp span overlaps the session's own span |
 
 Match `frequency` as well as `contract_id`: a finding about the daily config is not a finding
 about a bar derived from the minute tape.
+
+The `file` row reads "the batch contributed a record to that session" in the obvious phrasing,
+and that is what it means — but `dq.dq_finding` carries no `batch_id`, and `details` is
+evidence and is never grouped on (`specs/data-model.md` §4). The finding's `[ts_start_utc,
+ts_end_utc]` is the batch's span for that series, so overlapping it against the session's own
+span asks the same question of columns that exist. Fields the finding leaves null are
+wildcards: a rule that names no contract is about every contract inside its span.
 
 `finding_count` counts **`record`- and `session`-scope findings only**. A `series`- or
 `file`-scope finding is one statement about many sessions; adding it to every bar shifts the
