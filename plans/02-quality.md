@@ -7,10 +7,10 @@
 ## Depends on
 
 `specs/dq-rules-and-scoring.md` defers to `specs/analytics-semantics.md` for the session
-grid, bar provenance (`mart.bar_daily.source`) and the MAD method. That spec is **not yet
-promoted** — it is done-when 1 of [03-insights.md](03-insights.md). Slice 1 already supplies
-the grid this slice needs (`ref.session_calendar.expected_slots_1m`, halt windows,
-holidays), so the grid dependency is discharged. Provenance and MAD are not.
+grid, bar provenance (`mart.bar_daily.source`) and the MAD method. That spec is now
+promoted (done-when 1 of [03-insights.md](03-insights.md)). Slice 1 already supplied
+the grid this slice needed (`ref.session_calendar.expected_slots_1m`, halt windows,
+holidays). Provenance and MAD wait on slice 3's bar writer and `OUT.*` runners.
 
 **Deferral decision.** `CON.DERIVED_BAR_INVALID` and `OUT.RETURN_MAD` / `OUT.VOLUME_MAD`
 move to slice 3, after the promotion. `CON.DERIVED_BAR_INVALID` severity is a function of

@@ -46,7 +46,7 @@ def fixture_path():
     return _path
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def samples_dir() -> Path:
     """The fetched vendor corpus, or a skip when it is absent.
 

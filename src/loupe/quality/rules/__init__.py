@@ -6,6 +6,14 @@ the catalogue and the spec's in-scope list as three sets. A rule family added wi
 here would seed rows that never fire, which is exactly what that test exists to catch.
 """
 
-from . import completeness, consistency, roll, timeliness, uniqueness, validity
+from . import completeness, consistency, outliers, roll, timeliness, uniqueness, validity
 
-__all__ = ["completeness", "consistency", "roll", "timeliness", "uniqueness", "validity"]
+__all__ = [
+    "completeness",
+    "consistency",
+    "outliers",
+    "roll",
+    "timeliness",
+    "uniqueness",
+    "validity",
+]

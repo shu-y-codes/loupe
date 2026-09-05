@@ -360,6 +360,20 @@ CATALOGUE: tuple[RuleSpec, ...] = (
         scope="record",
         params={"threshold": {"minute": 0.05, "daily": 0.25}},
     ),
+    RuleSpec(
+        rule_id="CON.DERIVED_BAR_INVALID",
+        dimension="consistency",
+        name="Daily bar violates OHLC invariants",
+        description=(
+            "A daily bar has open or close outside [low, high], or high < low. Severity "
+            "follows bar provenance: critical when Loupe derived the bar, because a defect "
+            "escaped record validation; warning when a vendor supplied it, because a "
+            "settlement close is not obliged to sit inside the traded range."
+        ),
+        severity="critical",
+        scope="session",
+        params={"vendor_severity": "warning", "basis": "clean"},
+    ),
     # --------------------------------------------------------------------- timeliness
     RuleSpec(
         rule_id="TIM.OUT_OF_ORDER",
@@ -440,18 +454,46 @@ CATALOGUE: tuple[RuleSpec, ...] = (
         scope="series",
         params={"days": 30},
     ),
+    # ----------------------------------------------------------------------- outliers
+    # v1 optional (spec §10). Always info, never auto-excluded: an outlier is a question,
+    # never a verdict, and any volatile window in 2021-2026 is full of legitimate extreme
+    # returns. The Iglewicz-Hoaglin constants live here so they are tunable in the row.
+    RuleSpec(
+        rule_id="OUT.RETURN_MAD",
+        dimension="validity",
+        name="Outlying log return",
+        description=(
+            "Modified z-score on log returns exceeds the threshold. Robust to fat tails: a "
+            "single extreme print inflates a standard deviation enough to hide itself, but "
+            "not a median absolute deviation."
+        ),
+        severity="info",
+        scope="record",
+        params={"threshold": 3.5, "constant": 0.6745, "min_records": 30},
+    ),
+    RuleSpec(
+        rule_id="OUT.VOLUME_MAD",
+        dimension="validity",
+        name="Outlying volume",
+        description="The same modified z-score, on log volume rather than on log returns.",
+        severity="info",
+        scope="record",
+        params={"threshold": 3.5, "constant": 0.6745, "min_records": 30},
+    ),
 )
 
 CATALOGUE_BY_ID: Mapping[str, RuleSpec] = MappingProxyType({r.rule_id: r for r in CATALOGUE})
 
 #: Rule IDs this slice's engine evaluates. `UNQ.DUPLICATE_FILE` is excluded because ingest
-#: enforces it; `CON.DERIVED_BAR_INVALID` and `OUT.*` are deferred to slice 3 by
-#: `plans/02-quality.md` (bar provenance and the MAD method are not specified until then).
+#: enforces it: the batch is refused outright, so no finding is ever written.
 RULES_ENFORCED_BY_ENGINE: frozenset[str] = frozenset(
     spec.rule_id for spec in CATALOGUE if spec.enforced_at == "rules"
 )
 
 #: Cleaning consequences, spec §14. `error` and `critical` map to `exclude` by the §1
 #: severity table; this names the two rules whose action is not that default.
+#: `CON.DERIVED_BAR_INVALID` needs no entry: it is session-scope and carries no `record_id`,
+#: so there is nothing for cleaning to exclude. Its critical branch blocks the series instead,
+#: which `loupe.insights.gate` enforces.
 DEDUPE_DROP_RULES: frozenset[str] = frozenset({"UNQ.EXACT_DUPLICATE"})
 NEVER_EXCLUDE_RULES: frozenset[str] = frozenset({"VAL.OFF_TICK_PRICE"})

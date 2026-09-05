@@ -41,27 +41,22 @@ EXCLUDING_RULES = (
 
 
 @pytest.fixture(scope="module")
-def corpus_exclusions():
+def corpus_exclusions(samples_dir):
     """Load the fetched corpus once and run every rule that can exclude a record.
 
-    Module-scoped, and so it resolves the corpus itself rather than through the shared
-    function-scoped `samples_dir`: loading 48 files takes the better part of a minute and
-    doing it five times would make the measurement not worth having.
+    Module-scoped because loading 48 files takes the better part of a minute and doing it
+    five times would make the measurement not worth having. `samples_dir` is session-scoped
+    so this fixture can depend on it without importing `tests.conftest` as a package.
     """
-    from tests.conftest import SAMPLES  # noqa: PLC0415
-
     from loupe.data import apply_schema, connect, seed_reference
     from loupe.quality import seed_quality
 
-    if not (SAMPLES / "files.csv").exists():
-        pytest.skip("data/samples/ not fetched; run python tools/fetch_samples.py")
-
     con = connect(":memory:")
     apply_schema(con)
-    seed_reference(con, manifest=SAMPLES / "files.csv")
+    seed_reference(con, manifest=samples_dir / "files.csv")
     seed_quality(con)
 
-    for path in sorted((SAMPLES / "data").rglob("*.parquet")):
+    for path in sorted((samples_dir / "data").rglob("*.parquet")):
         load_file(con, path)
 
     result = run_rules(con, rule_ids=EXCLUDING_RULES)

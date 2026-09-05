@@ -25,10 +25,11 @@ from loupe.quality import (
 )
 from loupe.quality.catalogue import CATALOGUE_BY_ID, TRIAGE_WEIGHT_BY_SEVERITY
 
-# specs/dq-rules-and-scoring.md §15.1, less the two rules plans/02-quality.md defers to
-# slice 3 (`CON.DERIVED_BAR_INVALID` and `OUT.*`, which need bar provenance and the MAD
-# method), and less `UNQ.DUPLICATE_FILE`, which ingest enforces. Written out rather than
-# imported so that this test compares the code against the spec and not against itself.
+# specs/dq-rules-and-scoring.md §15.1, less `UNQ.DUPLICATE_FILE`, which ingest enforces.
+# Written out rather than imported so that this test compares the code against the spec and
+# not against itself. The three rules plans/02-quality.md deferred to slice 3
+# (`CON.DERIVED_BAR_INVALID` and the `OUT.*` pair) landed with the bar writer and the MAD
+# method, so they are in scope here now.
 SPEC_IN_SCOPE = frozenset(
     {
         "CMP.NULL_FIELD",
@@ -61,10 +62,16 @@ SPEC_IN_SCOPE = frozenset(
         "TIM.TIMEZONE_MISALIGNED",
         "ROL.THIN_NEAR_EXPIRY",
         "ROL.NO_SUCCESSOR",
+        "CON.DERIVED_BAR_INVALID",
+        "OUT.RETURN_MAD",
+        "OUT.VOLUME_MAD",
     }
 )
 
-DEFERRED_TO_SLICE_3 = frozenset({"CON.DERIVED_BAR_INVALID", "OUT.RETURN_MAD", "OUT.VOLUME_MAD"})
+#: Slice 2 deferred these three for want of `specs/analytics-semantics.md`; slice 3 promoted
+#: the spec and landed them. Kept as a named empty set rather than deleted: it is the seam the
+#: parity test watches, and a future deferral should reuse it rather than reinvent it.
+DEFERRED_TO_SLICE_3: frozenset[str] = frozenset()
 
 
 # ------------------------------------------------------------------------------- parity
@@ -81,8 +88,10 @@ def test_duplicate_file_is_the_only_rule_without_a_runner():
     assert CATALOGUE_BY_ID["UNQ.DUPLICATE_FILE"].enforced_at == "ingest"
 
 
-def test_deferred_rules_are_not_in_the_catalogue():
-    assert DEFERRED_TO_SLICE_3.isdisjoint({spec.rule_id for spec in CATALOGUE})
+def test_nothing_is_deferred_any_more():
+    """The slice-2 deferral is spent: every in-scope rule now has a row and a runner."""
+    assert not DEFERRED_TO_SLICE_3
+    assert {"CON.DERIVED_BAR_INVALID", "OUT.RETURN_MAD", "OUT.VOLUME_MAD"} <= set(REGISTRY)
 
 
 def test_every_in_scope_rule_has_a_fixture(fixture_path):

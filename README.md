@@ -14,6 +14,7 @@ research scrapbook (gitignored; not in clones). Founding notes are locked histor
 - **[specs/loupe-ui-design.md](specs/loupe-ui-design.md)** — UI / personas / wireframes
 - **[plans/](plans/)** — slice sequence and done-when
 - **[specs/data-model.md](specs/data-model.md)** — DuckDB schema and its invariants
+- **[specs/analytics-semantics.md](specs/analytics-semantics.md)** — trade date, grid, OHLCV, VWAP
 - **[specs/dq-rules-and-scoring.md](specs/dq-rules-and-scoring.md)** — rule catalogue and DQ score
 - **[specs/sample-corpus.md](specs/sample-corpus.md)** — what the sample holds, and the oracle
 
@@ -23,7 +24,7 @@ Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                              # create the venv and install
-git config core.hooksPath .githooks  # ruff check on every commit (matches CI)
+git config core.hooksPath .githooks  # ruff + pytest on every commit (matches CI)
 uv run python tools/fetch_samples.py # ~15.5 MB of vendor sample data, gitignored
 uv run pytest                        # tests that need the corpus skip without it
 uv run ruff check .
