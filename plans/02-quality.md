@@ -98,6 +98,16 @@ belongs to plans.
 Done-when 12, run over the fetched corpus (48 files, 711,484 records — 681,382 minute,
 30,102 daily). Guarded by `tests/quality/test_exclusion_rate.py`.
 
+> **Superseded 2026-09-05, and kept because it is a measurement.** The numbers below are what
+> the system did when this slice shipped, and the last paragraph is the reason they changed:
+> slice 3's `CON.DERIVED_BAR_INVALID` arrived, and `CON.CLOSE_OUT_OF_RANGE` now drops to
+> `warning` on a daily bar interval (`specs/dq-rules-and-scoring.md` §6). **41 of the 43 rows
+> came back.** The current measurement is 2 records of 711,484 — 0.000281% — both
+> `CON.OPEN_OUT_OF_RANGE`, one ES daily and one SR3 daily; the 42 `CON.CLOSE_OUT_OF_RANGE`
+> findings are still written, now at `warning`, and the ESZ25 row that trips both rules is
+> one of the two still excluded. Read what follows as the snapshot it was, not as the
+> system's behaviour today.
+
 **43 records of 711,484 excluded: 0.0060%.** 44 cleaning decisions, because one `ESZ25`
 daily row trips both range rules. Four of the seven `error` rules the plan names fire **zero**
 times across the whole corpus — no nulls, no key conflicts, no non-positive prices, no
@@ -130,6 +140,16 @@ obliged to sit inside the traded range. That rule is deferred to slice 3, so unt
 these 43 rows leave `dq.market_record_clean` on the record-scope check instead. Slice 3 should
 expect the vendor daily bars to come back when provenance arrives, and should not read a
 43-row difference between the raw and clean daily bases as an aggregation bug.
+
+**What actually happened** (2026-09-05, and the reason for the banner above). Provenance
+arrived and 41 of the 43 rows came back — not by weakening `CON.DERIVED_BAR_INVALID`, but by
+giving `CON.CLOSE_OUT_OF_RANGE` the same interval-sensitive severity
+`VAL.ZERO_VOLUME_WITH_RANGE` already had. A daily close is a settlement; only an intraday
+close is a trade obliged to sit inside its own range. The rows now reach `mart.bar_daily` and
+the vendor branch of `CON.DERIVED_BAR_INVALID` explains them there, so a user sees *why* a
+contract-day is unusual instead of not seeing the contract-day. The two rows still excluded
+are `CON.OPEN_OUT_OF_RANGE`, which has no settlement story: an open is a trade at either
+granularity.
 
 ## Tests
 

@@ -73,24 +73,65 @@ def open_out_of_range(ctx: RuleContext) -> list[Finding]:
 
 @rule("CON.CLOSE_OUT_OF_RANGE")
 def close_out_of_range(ctx: RuleContext) -> list[Finding]:
-    """`close` outside `[low, high]`.
+    """`close` outside `[low, high]`, at a severity that follows the bar interval.
 
-    On a vendor daily row this is often a settlement struck outside the traded range rather
-    than a corrupt value — the 43 invalid-OHLC daily rows in this corpus are all of that kind.
-    Distinguishing the two needs bar provenance, which arrives with `CON.DERIVED_BAR_INVALID`
-    in slice 3; until then the record-scope check reports what it sees.
+    An intraday close is a trade: it happened inside the session and must sit inside the
+    session's own range, so a violation is a defect and the record is excluded. A daily close
+    is a **settlement**, struck by the exchange near 15:00 local and under no obligation to
+    sit inside the traded range — every one of the 43 such rows in this corpus is an untraded
+    deferred contract carrying its prior mark (`specs/sample-corpus.md` §7.5). Excluding those
+    is accurate about the arithmetic and wrong about the data: it drops 43 contract-days from
+    the published series and leaves no visible reason.
+
+    So the daily branch drops to `params.daily_severity`. Below `error` the default cleaning
+    policy no longer excludes, the vendor bar reaches `mart.bar_daily`, and
+    `CON.DERIVED_BAR_INVALID` fires there with the settlement explanation and the link to
+    `REC.CLOSE_CONVENTION` — the user sees why the day is unusual instead of not seeing the
+    day. Asked of `stage.ingest_batch.bar_interval` rather than of `frequency = 'daily'`,
+    for the reason spec §5 gives for `VAL.ZERO_VOLUME_WITH_RANGE`: the interval is what makes
+    the close a settlement, and the frequency name is only a label for the file.
+
+    Unlike `VAL.ZERO_VOLUME_WITH_RANGE`, a null `daily_severity` does **not** disable the
+    daily branch — it falls back to the rule's declared severity. A close outside its range
+    is always worth reporting; what is configurable is whether it is worth excluding.
     """
-    return _record_findings(
-        ctx,
+    daily_severity = ctx.param("daily_severity")
+    rows = ctx.con.execute(
         f"""
         SELECT r.record_id, r.contract_id, r.frequency, r.trade_date, r.ts_utc,
-               {{'field': 'close', 'value': r.close, 'low': r.low, 'high': r.high}} AS details
+               r.close, r.low, r.high,
+               r.bar_interval IS DISTINCT FROM '1 day' AS is_intraday
         FROM {RECORDS} r
         WHERE {ctx.frequency_filter()} AND {RANGE_IS_MEANINGFUL}
           AND r.close IS NOT NULL AND (r.close < r.low OR r.close > r.high)
         ORDER BY r.record_id
-        """,
-    )
+        """
+    ).fetchall()
+
+    return [
+        ctx.finding(
+            severity=(
+                ctx.severity
+                if intraday or daily_severity is None
+                else str(daily_severity)
+            ),
+            contract_id=contract_id,
+            frequency=frequency,
+            trade_date=trade_date,
+            ts_start_utc=ts_utc,
+            ts_end_utc=ts_utc,
+            record_id=record_id,
+            details={
+                "field": "close",
+                "value": close,
+                "low": low,
+                "high": high,
+                "basis": "intraday" if intraday else "daily",
+            },
+        )
+        for record_id, contract_id, frequency, trade_date, ts_utc, close, low, high, intraday
+        in rows
+    ]
 
 
 @rule("CON.WEEKEND_RECORD")

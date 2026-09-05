@@ -68,10 +68,12 @@ def test_a_series_finding_raises_severity_without_being_counted(icon, fixture_pa
 
 
 def test_a_finding_on_one_frequency_does_not_touch_the_other(icon, fixture_path):
-    """Slice 2 measured that all 43 excluded records are vendor daily rows.
+    """Every record-scope exclusion this corpus produces is a vendor daily row.
 
     Without the frequency predicate, those record-scope errors would attach to minute bars
-    that share nothing with them but a date.
+    that share nothing with them but a date. `CON.OPEN_OUT_OF_RANGE` is the rule that still
+    excludes a daily row: an open is a trade at either granularity, unlike the close, whose
+    daily branch is a settlement and only a warning.
     """
     _assess(icon, fixture_path, "insights_vwap_window.csv")
     _assess(icon, fixture_path, "con_derived_bar_invalid_vendor.csv")
@@ -79,7 +81,7 @@ def test_a_finding_on_one_frequency_does_not_touch_the_other(icon, fixture_path)
         """
         INSERT INTO dq.dq_finding
           (run_id, rule_id, contract_id, frequency, trade_date, severity, status)
-        SELECT run_id, 'CON.CLOSE_OUT_OF_RANGE', 'ESZ25', 'daily', DATE '2025-09-15',
+        SELECT run_id, 'CON.OPEN_OUT_OF_RANGE', 'ESZ25', 'daily', DATE '2025-09-15',
                'error', 'open'
         FROM dq.dq_run LIMIT 1
         """
