@@ -48,34 +48,6 @@ def corpus_exclusions(samples_dir):
     five times would make the measurement not worth having. `samples_dir` is session-scoped
     so this fixture can depend on it without importing `tests.conftest` as a package.
     """
-    # #region agent log
-    import json
-    import sys
-    import time
-    from pathlib import Path as _DbgPath
-
-    _repo = _DbgPath(__file__).resolve().parents[2]
-    _on_path = str(_repo) in {str(_DbgPath(p).resolve()) for p in sys.path if p}
-    _payload = {
-        "sessionId": "b987ef",
-        "runId": "post-fix",
-        "hypothesisId": "H2",
-        "location": "tests/quality/test_exclusion_rate.py:corpus_exclusions",
-        "message": "corpus_exclusions fixture using samples_dir",
-        "timestamp": int(time.time() * 1000),
-        "data": {
-            "cwd": str(_DbgPath.cwd()),
-            "argv0": sys.argv[0],
-            "samples_dir": str(samples_dir),
-            "files_csv_exists": (samples_dir / "files.csv").exists(),
-            "repo_root_on_sys_path": _on_path,
-            "module_name": __name__,
-        },
-    }
-    with open("/Users/shu/Documents/loupe/.cursor/debug-b987ef.log", "a") as _df:
-        _df.write(json.dumps(_payload) + "\n")
-    # #endregion
-
     from loupe.data import apply_schema, connect, seed_reference
     from loupe.quality import seed_quality
 
