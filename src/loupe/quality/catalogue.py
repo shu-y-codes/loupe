@@ -307,9 +307,16 @@ CATALOGUE: tuple[RuleSpec, ...] = (
         rule_id="CON.CLOSE_OUT_OF_RANGE",
         dimension="consistency",
         name="Close outside the bar range",
-        description="close is outside [low, high]. Evaluated only where high >= low.",
+        description=(
+            "close is outside [low, high]. Evaluated only where high >= low. Asked of the "
+            "bar interval, not of the frequency name: an intraday close is a trade and must "
+            "sit inside the range, while a daily close is a settlement and is under no such "
+            "obligation, so it drops to params.daily_severity and is explained by "
+            "CON.DERIVED_BAR_INVALID on the bar instead of being excluded."
+        ),
         severity="error",
         scope="record",
+        params={"daily_severity": "warning"},
     ),
     RuleSpec(
         rule_id="CON.WEEKEND_RECORD",
@@ -495,5 +502,9 @@ RULES_ENFORCED_BY_ENGINE: frozenset[str] = frozenset(
 #: `CON.DERIVED_BAR_INVALID` needs no entry: it is session-scope and carries no `record_id`,
 #: so there is nothing for cleaning to exclude. Its critical branch blocks the series instead,
 #: which `loupe.insights.gate` enforces.
+#: `CON.CLOSE_OUT_OF_RANGE` needs no entry either, and deliberately so: its daily rows are
+#: kept because the finding's own severity is `params.daily_severity`, not because a list
+#: here exempts the rule. Cleaning stays a function of severity, and a deployment that wants
+#: the exclusion back re-seeds the param rather than editing this set.
 DEDUPE_DROP_RULES: frozenset[str] = frozenset({"UNQ.EXACT_DUPLICATE"})
 NEVER_EXCLUDE_RULES: frozenset[str] = frozenset({"VAL.OFF_TICK_PRICE"})

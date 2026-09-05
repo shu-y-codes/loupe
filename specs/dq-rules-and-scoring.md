@@ -9,7 +9,10 @@ Session grid, bar provenance and MAD method: `specs/analytics-semantics.md`.
 Revised 2026-09-05: promoted from research; first normative version. Same day: `dq.dq_rule.weight`
 renamed `triage_weight` and defined as worklist ordering only (§11.4) — it had no role in any
 score formula and the name invited one. Same day: §15 notes that `CON.DERIVED_BAR_INVALID` and
-`OUT.*` remain v1 core IDs while plans defer their fixtures to slice 3.
+`OUT.*` remain v1 core IDs while plans defer their fixtures to slice 3. Same day:
+`CON.CLOSE_OUT_OF_RANGE` severity follows the bar interval (§6, §14) — a daily close is a
+settlement, so it drops to `params.daily_severity` and is explained on the bar rather than
+excluded from it.
 
 **Scope of authority.** This spec owns *rule IDs, triggers, params, cleaning consequences, the
 score, and the fixture map*. It does not own DDL, sample measurements, or HTTP envelopes
@@ -50,7 +53,9 @@ only when the user has supplied both `daily` and `minute` covering the same cont
 | `critical` | Structural; blocks the series (no analytics published for that slice) | exclude + block |
 
 Exceptions are named on the rule (`VAL.OFF_TICK_PRICE` stays warning / flag-only even when
-systematic; `CON.DERIVED_BAR_INVALID` severity follows bar provenance). Policy lives in
+systematic; `CON.DERIVED_BAR_INVALID` severity follows bar provenance;
+`CON.CLOSE_OUT_OF_RANGE` severity follows the bar interval, because a daily close is a
+settlement). Policy lives in
 `dq.dq_rule` and `dq.cleaning_action`, not in code branches. Raw records stay immutable
 (locked decision 1).
 
@@ -179,7 +184,7 @@ Relationships between fields, and between records and the calendar.
 |---|---|---|---|
 | `CON.HIGH_LT_LOW` | error | record | `high < low`. |
 | `CON.OPEN_OUT_OF_RANGE` | error | record | `open` outside `[low, high]`. |
-| `CON.CLOSE_OUT_OF_RANGE` | error | record | `close` outside `[low, high]`. |
+| `CON.CLOSE_OUT_OF_RANGE` | error intraday, `params.daily_severity` daily | record | `close` outside `[low, high]`. |
 | `CON.WEEKEND_RECORD` | error | record | Derived **session** date falls on Saturday or Sunday. Never evaluated on a vendor-supplied date column. |
 | `CON.RECORD_IN_HALT` | warning | record | Timestamp inside a maintenance break or trading halt. |
 | `CON.RECORD_ON_HOLIDAY` | warning | record | Record on a calendar holiday session. |
@@ -199,6 +204,18 @@ is ordinary on an illiquid rate contract and a feed failure on ES. Global defaul
 allow `params.n_by_root`. Prefer scaling to observed liquidity (flat-bar rate or median
 inter-trade interval for `(root, frequency)`). Seeded per-root values are calibration for
 this corpus. Rates that forced `n = 30`: sample-corpus §7.1.
+
+**`CON.CLOSE_OUT_OF_RANGE` severity follows the bar interval,** for the same reason
+`VAL.ZERO_VOLUME_WITH_RANGE` does and asked the same way — of
+`stage.ingest_batch.bar_interval`, not of `frequency = 'daily'`. An intraday close is a
+trade and must sit inside the session's range. A daily close is a **settlement**, struck by
+the exchange and under no obligation to sit inside the traded range: on this corpus all 43
+such rows are untraded deferred contracts carrying a prior mark (sample-corpus §7.5).
+Default params `{"daily_severity": "warning"}` — below `error`, so default cleaning does not
+exclude, the vendor bar reaches `mart.bar_daily`, and `CON.DERIVED_BAR_INVALID` explains it
+there. A null `daily_severity` falls back to the declared `error` rather than disabling the
+daily branch: a close outside its range is always reportable, and what the param configures
+is whether it is excludable.
 
 **`CON.DERIVED_BAR_INVALID` severity follows bar provenance** (`mart.bar_daily.source`;
 semantics in `specs/analytics-semantics.md`):
@@ -614,7 +631,8 @@ table names the coded actions.
 | `UNQ.KEY_CONFLICT` | `exclude` all conflicting rows |
 | `CON.HIGH_LT_LOW` | `exclude` |
 | `CON.OPEN_OUT_OF_RANGE` | `exclude` |
-| `CON.CLOSE_OUT_OF_RANGE` | `exclude` |
+| `CON.CLOSE_OUT_OF_RANGE` (intraday) | `exclude` |
+| `CON.CLOSE_OUT_OF_RANGE` (daily) | flag only at the default `params.daily_severity` — the settlement is explained on the bar by `CON.DERIVED_BAR_INVALID` |
 | `VAL.NON_POSITIVE_PRICE` | `exclude` |
 | `VAL.NEGATIVE_VOLUME` | `exclude` |
 | `CMP.NULL_FIELD` | `exclude` |

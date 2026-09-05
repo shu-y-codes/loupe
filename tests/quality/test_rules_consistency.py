@@ -8,6 +8,26 @@ import pytest
 from helpers import findings, set_param, source_rows
 
 
+def _cleaning_actions(con, record_id: int) -> list[str]:
+    """Which rules, if any, cleaned one record. Scoped to the record so an unrelated rule
+    firing on the fixture cannot turn this into a count nobody can read."""
+    return [
+        row[0]
+        for row in con.execute(
+            "SELECT rule_id FROM dq.cleaning_action WHERE record_id = ? ORDER BY rule_id",
+            [record_id],
+        ).fetchall()
+    ]
+
+
+def _in_clean_view(con, record_id: int) -> bool:
+    return bool(
+        con.execute(
+            "SELECT count(*) FROM dq.market_record_clean WHERE record_id = ?", [record_id]
+        ).fetchone()[0]
+    )
+
+
 def test_high_below_low_is_reported_once(qcon, run_fixture):
     _, result = run_fixture("con_high_lt_low.csv")
     rows = findings(qcon, result.run_id, "CON.HIGH_LT_LOW")
@@ -38,12 +58,70 @@ def test_open_outside_the_range(qcon, run_fixture):
 
 
 def test_close_outside_the_range(qcon, run_fixture):
+    """On a minute bar the close is a trade, so it must sit inside the session's own range."""
     _, result = run_fixture("con_close_out_of_range.csv")
     rows = findings(qcon, result.run_id, "CON.CLOSE_OUT_OF_RANGE")
 
     assert len(rows) == 1
     assert rows[0]["details"]["value"] == pytest.approx(6599.0)
     assert rows[0]["details"]["low"] == pytest.approx(6600.5)
+    assert rows[0]["details"]["basis"] == "intraday"
+    assert rows[0]["severity"] == "error"
+
+
+def test_a_daily_close_outside_the_range_is_only_a_warning(qcon, run_fixture):
+    """A daily close is a settlement, and a settlement is not obliged to sit in the range.
+
+    The discriminator is `bar_interval`, not `frequency`: the interval is what makes the
+    close a settlement, and the frequency name is only a label the file carries.
+    """
+    _, result = run_fixture("con_derived_bar_invalid_vendor.csv")
+    rows = findings(qcon, result.run_id, "CON.CLOSE_OUT_OF_RANGE")
+
+    assert len(rows) == 1
+    assert rows[0]["severity"] == "warning"
+    assert rows[0]["details"]["basis"] == "daily"
+    assert rows[0]["details"]["value"] == pytest.approx(59.75)
+
+
+def test_the_settlement_row_survives_cleaning(qcon, run_fixture):
+    """Below `error` the default policy does not exclude, so the contract-day is published.
+
+    This is the whole point of the split. Excluding these rows is accurate about the
+    arithmetic and wrong about the data: 43 contract-days vanish from the daily series with
+    the reason visible only to someone diffing the raw basis against the clean one.
+    """
+    _, result = run_fixture("con_derived_bar_invalid_vendor.csv", clean=True)
+    rows = findings(qcon, result.run_id, "CON.CLOSE_OUT_OF_RANGE")
+
+    assert len(rows) == 1
+    assert _cleaning_actions(qcon, rows[0]["record_id"]) == []
+    assert _in_clean_view(qcon, rows[0]["record_id"])
+
+
+def test_the_daily_severity_comes_from_the_row_not_a_branch(qcon, run_fixture):
+    """Seeded, so a deployment that wants the old exclusion back re-seeds rather than deploys."""
+    set_param(qcon, "CON.CLOSE_OUT_OF_RANGE", "daily_severity", "error")
+    _, result = run_fixture("con_derived_bar_invalid_vendor.csv", clean=True)
+    rows = findings(qcon, result.run_id, "CON.CLOSE_OUT_OF_RANGE")
+
+    assert [row["severity"] for row in rows] == ["error"]
+    assert _cleaning_actions(qcon, rows[0]["record_id"]) == ["CON.CLOSE_OUT_OF_RANGE"]
+    assert not _in_clean_view(qcon, rows[0]["record_id"])
+
+
+def test_a_null_daily_severity_falls_back_rather_than_disabling_the_branch(qcon, run_fixture):
+    """Unlike `VAL.ZERO_VOLUME_WITH_RANGE`, dropping the param must not silence the check.
+
+    A close outside its range is always worth reporting; what the param configures is whether
+    it is worth *excluding*.
+    """
+    set_param(qcon, "CON.CLOSE_OUT_OF_RANGE", "daily_severity", None)
+    _, result = run_fixture("con_derived_bar_invalid_vendor.csv", clean=False)
+
+    assert [row["severity"] for row in findings(qcon, result.run_id, "CON.CLOSE_OUT_OF_RANGE")] == [
+        "error"
+    ]
 
 
 def test_weekend_record_fires_on_the_derived_session_date(qcon, run_fixture):
@@ -176,3 +254,20 @@ def test_cleaning_the_bad_record_leaves_the_bar_valid(qcon, run_fixture_with_bar
 
     assert findings(qcon, result.run_id, "CON.DERIVED_BAR_INVALID") == []
     assert findings(qcon, result.run_id, "CON.CLOSE_OUT_OF_RANGE") != []
+
+
+def test_the_vendor_bar_reaches_the_clean_basis_and_is_explained_there(qcon, run_fixture_with_bars):
+    """The settlement row is not excluded, so the bar exists and the warning explains it.
+
+    The two halves of the convention, end to end: `CON.CLOSE_OUT_OF_RANGE` drops to `warning`
+    on the record, cleaning leaves it alone, `mart.bar_daily` carries the vendor bar on the
+    clean basis, and `CON.DERIVED_BAR_INVALID` names the phenomenon there. Contrast the test
+    above, where a *derived* bar's defect is cleaned away at the record and the bar is valid.
+    """
+    _, result = run_fixture_with_bars("con_derived_bar_invalid_vendor.csv", clean=True)
+    rows = findings(qcon, result.run_id, "CON.DERIVED_BAR_INVALID")
+
+    assert [row["severity"] for row in rows] == ["warning"]
+    assert rows[0]["details"]["basis"] == "clean"
+    assert rows[0]["details"]["source"] == "vendor"
+    assert "settlement" in rows[0]["details"]["explanation"]

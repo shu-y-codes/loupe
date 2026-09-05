@@ -66,7 +66,12 @@ def corpus_exclusions(samples_dir):
 
 @pytest.mark.samples
 def test_the_exclusion_rate_is_a_rounding_error(corpus_exclusions):
-    """43 of 711,484 records, 0.006%. Measured, not assumed."""
+    """2 of 711,484 records, 0.00028%. Measured, not assumed.
+
+    It was 43 when this slice shipped. The 41 vendor daily settlement rows came back once
+    `CON.CLOSE_OUT_OF_RANGE` learned that a daily close is a settlement rather than a trade
+    (`plans/02-quality.md`, superseding banner).
+    """
     _con, _result, report = corpus_exclusions
 
     assert report["records"] > 700_000
@@ -75,8 +80,8 @@ def test_the_exclusion_rate_is_a_rounding_error(corpus_exclusions):
 
 
 @pytest.mark.samples
-def test_only_three_rules_exclude_anything(corpus_exclusions):
-    """Four of the seven `error` rules find nothing at all across 711,484 records.
+def test_only_two_rules_find_anything_at_all(corpus_exclusions):
+    """Five of the seven `error` rules find nothing at all across 711,484 records.
 
     Zero nulls, zero key conflicts, zero non-positive prices, zero negative volumes and zero
     inverted ranges: the corpus is genuinely clean, which is why the demo needs labelled
@@ -92,20 +97,12 @@ def test_only_three_rules_exclude_anything(corpus_exclusions):
 
 @pytest.mark.samples
 def test_every_exclusion_is_a_daily_row(corpus_exclusions):
-    """The concentration is systematic, not incidental, and it has a market explanation.
+    """Not one of the 681,382 minute records is excluded; both survivors are daily.
 
-    Every excluded record is a **vendor daily** row, and 39 of the 44 decisions land on a row
-    that both has zero volume and has `open = high = low` — an untraded deferred contract
-    carrying its prior range with a settlement struck elsewhere. The remaining handful are the
-    same phenomenon at low volume, mostly SR3 settling a half-tick outside a one-lot range.
-    Not one of the 681,382 minute records is excluded.
-
-    Spec §6 says this severity should follow bar provenance: on the vendor branch
-    `CON.DERIVED_BAR_INVALID` flags and explains rather than blocking. That rule is deferred
-    to slice 3, so until it arrives these rows leave `dq.market_record_clean` on the
-    record-scope check instead. Slice 3 should expect the vendor daily bars to come back.
+    They are `CON.OPEN_OUT_OF_RANGE` — one ES, one SR3 — and that rule has no settlement
+    story to tell: an open is a trade at either granularity, so it stays `error`.
     """
-    con, _result, _report = corpus_exclusions
+    con, _result, report = corpus_exclusions
 
     by_frequency = dict(
         con.execute(
@@ -119,26 +116,65 @@ def test_every_exclusion_is_a_daily_row(corpus_exclusions):
     )
     assert by_frequency["minute"] == 0
     assert by_frequency["daily"] > 0
+    assert {row["rule_id"] for row in report["by_rule"]} == {"CON.OPEN_OUT_OF_RANGE"}
+
+
+@pytest.mark.samples
+def test_the_settlement_rows_are_reported_and_kept(corpus_exclusions):
+    """The convention, measured on the real corpus.
+
+    42 vendor daily rows carry a close outside their own range, and 39 of them both have zero
+    volume and have `open = high = low` — an untraded deferred contract carrying its prior
+    range with a settlement struck elsewhere (`specs/sample-corpus.md` §7.5). Every one is
+    reported at `warning` and none is excluded, so the contract-day reaches
+    `mart.bar_daily` and `CON.DERIVED_BAR_INVALID` explains it on the bar. Excluding them
+    was accurate about the arithmetic and wrong about the data.
+    """
+    con, _result, _report = corpus_exclusions
+
+    severities = dict(
+        con.execute(
+            """
+            SELECT severity, count(*) FROM dq.dq_finding
+            WHERE rule_id = 'CON.CLOSE_OUT_OF_RANGE' GROUP BY 1
+            """
+        ).fetchall()
+    )
+    assert set(severities) == {"warning"}
+    assert severities["warning"] > 30
 
     untraded, flat, total = con.execute(
         """
         SELECT sum(CASE WHEN coalesce(r.volume, 0) = 0 THEN 1 ELSE 0 END),
                sum(CASE WHEN r.open = r.high AND r.high = r.low THEN 1 ELSE 0 END),
                count(*)
-        FROM dq.cleaning_action a
-        JOIN stage.market_record r ON r.record_id = a.record_id
+        FROM dq.dq_finding f
+        JOIN stage.market_record r ON r.record_id = f.record_id
+        WHERE f.rule_id = 'CON.CLOSE_OUT_OF_RANGE'
         """
     ).fetchone()
     assert untraded / total > 0.85
     assert flat / total > 0.85
+
+    kept = con.execute(
+        """
+        SELECT count(*) FROM dq.dq_finding f
+        WHERE f.rule_id = 'CON.CLOSE_OUT_OF_RANGE'
+          AND NOT EXISTS (
+            SELECT 1 FROM dq.cleaning_action a WHERE a.record_id = f.record_id
+          )
+        """
+    ).fetchone()[0]
+    assert kept >= total - 1  # the one ESZ25 row that also trips CON.OPEN_OUT_OF_RANGE
 
 
 @pytest.mark.samples
 def test_no_root_loses_a_meaningful_share_of_its_records(corpus_exclusions):
     """The failure mode this measurement exists to catch: one root quietly losing percent.
 
-    The worst root here is CL daily at 0.27%, which is 28 rows across five contracts. A
-    threshold change that pushed any root into whole percentages would break this.
+    The worst root here is ES daily at 0.029%, a single row. It was CL daily at 0.27% before
+    the settlement rows stopped being excluded. A threshold change that pushed any root into
+    whole percentages would break this.
     """
     _con, _result, report = corpus_exclusions
 
