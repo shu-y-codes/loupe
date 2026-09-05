@@ -2,9 +2,10 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
+Revised 2026-09-06: `specs/api-contract.md` promoted (slice 4 done-when 1).
 Revised 2026-09-05: `specs/analytics-semantics.md` promoted (slice 3 done-when 1).
 `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs (`data-model.md`,
-`sample-corpus.md`) already promoted. Remaining siblings are promoted by their own slice.
+`sample-corpus.md`) already promoted. Remaining sibling: UI only (slice 5).
 
 This document is the implementation brief. **`specs/` is normative.** Calculation, schema,
 rule catalogues, API payloads, and UI belong in `specs/` (this brief plus sibling specs).
@@ -19,7 +20,7 @@ as binding. Execution sequence: `plans/`.
 | Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` |
 | Data model / DDL | `specs/data-model.md` |
 | DQ rules and scoring | `specs/dq-rules-and-scoring.md` |
-| API contract | `specs/api-contract.md` (not yet; research `_notes/cursor/05-api-contract.md`) |
+| API contract | `specs/api-contract.md` |
 | Sample corpus / oracle claims | `specs/sample-corpus.md` |
 | Futures domain primer | Research only: `_notes/cursor/01-futures-data-primer.md` (not a v1 product spec) |
 | Founding journeys (locked historical) | `_notes/founding/loupe-solution-design.md` |
@@ -324,7 +325,7 @@ Base path `/v1`. Synchronous writes return finished results. Conventions: UTC on
 VWAP on daily-only contracts returns a structured frequency-unavailable error. Comparison
 supports `compare=basis` (raw vs clean) and `compare=frequency` (supplied daily vs derived).
 
-Full contract: `specs/api-contract.md` (not yet; research `_notes/cursor/05-api-contract.md`).
+Full contract: `specs/api-contract.md`.
 
 ---
 
@@ -437,7 +438,7 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 1. `data` — DuckDB schema, ingest preview/load, reference seed from sample  
 2. `quality` — core rule families + score; fixtures first  
 3. `insights` — daily bars + VWAP; wire oracle test  
-4. `api` — routes matching `specs/api-contract.md` (promote from research `05` first)  
+4. `api` — routes matching `specs/api-contract.md`  
 5. `ui` — Summary/Specifics, persona selector, upload with capability disclosure, tooltips  
 6. Reconciliation + **report-only** suggestions + demo injection (apply/override later)  
 7. README walkthrough against real `ESZ25` (or chosen volatile window)

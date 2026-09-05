@@ -16,7 +16,7 @@ excluded from it.
 
 **Scope of authority.** This spec owns *rule IDs, triggers, params, cleaning consequences, the
 score, and the fixture map*. It does not own DDL, sample measurements, or HTTP envelopes
-(`specs/api-contract.md` when promoted). Every v1 core rule ID seeds a row in `dq.dq_rule`
+(`specs/api-contract.md`). Every v1 core rule ID seeds a row in `dq.dq_rule`
 except `STR.*`, which are parse rejects in `stage.record_reject`.
 
 **Build sequence** (plans, not a second spec):
@@ -445,8 +445,8 @@ why any were not, the weight actually applied, and the denominator it was renorm
 }
 ```
 
-HTTP envelopes for this object are owned by `specs/api-contract.md` when promoted; the
-fields above are the semantic contract.
+HTTP envelopes for this object are owned by `specs/api-contract.md`; the fields above are
+the semantic contract.
 
 **The UI must not rank across scopes without saying so.** Any list that sorts by overall
 score marks which rows were scored over which dimension set, and offers a "compare like

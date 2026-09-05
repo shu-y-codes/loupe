@@ -122,14 +122,22 @@ def test_the_shipped_view_is_the_default_published_line(load_and_build, icon):
     ]
 
 
-def test_a_daily_only_corpus_yields_no_line_at_all(load_and_build, icon):
-    """A daily row cannot contribute to a rolling fifteen-minute window."""
+def test_a_daily_only_corpus_is_refused_rather_than_empty(load_and_build, icon):
+    """A daily row cannot contribute to a rolling fifteen-minute window.
+
+    Slice 3 recorded that as `unavailable` for want of a better state. Slice 4 gave it one:
+    "no rows came back" and "no rows *can* come back at this grain" are different answers
+    and different HTTP responses (`plans/04-api.md` done-when 7), so this asserts the
+    refusal and, explicitly, that it is *not* reported as an empty series.
+    """
     load_and_build("con_derived_bar_invalid_vendor.csv")
     series = published_vwap(icon, contract_id="CLZ25")
 
     assert series.rows == ()
-    assert series.unavailable
+    assert series.frequency_unavailable
+    assert not series.unavailable
     assert not series.blocked
+    assert series.unsupported.frequencies_available == ("daily",)
 
 
 def test_compare_vwap_aligns_the_two_bases(load_and_build, icon):

@@ -14,16 +14,25 @@ from .errors import (
 )
 from .load import LoadResult, load_file
 from .preview import Preview, preview_file
+from .purge import (
+    BatchAlreadyPurged,
+    BatchNotFound,
+    PurgeResult,
+    purge_batch,
+)
 from .reference import SeedSummary, seed_reference
 from .schema import apply_schema, schema_is_applied
 
 __all__ = [
+    "BatchAlreadyPurged",
+    "BatchNotFound",
     "DuplicateFileError",
     "LoadResult",
     "LoupeDataError",
     "MissingRequiredColumn",
     "Preview",
     "PreviewError",
+    "PurgeResult",
     "SeedSummary",
     "UnsupportedFileFormat",
     "apply_schema",
@@ -31,6 +40,7 @@ __all__ = [
     "database_path",
     "load_file",
     "preview_file",
+    "purge_batch",
     "schema_is_applied",
     "seed_reference",
 ]
