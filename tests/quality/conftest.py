@@ -1,0 +1,38 @@
+"""Fixtures for the quality tests.
+
+Every test loads a real fixture through the real ingest path and then runs the real engine
+against a real in-memory DuckDB. The SQL *is* the logic in this layer, so a mocked connection
+would only assert that we wrote the query we wrote.
+"""
+
+from __future__ import annotations
+
+import duckdb
+import pytest
+
+from loupe.data import LoadResult, load_file
+from loupe.quality import RunResult, run_rules, seed_quality
+
+
+@pytest.fixture
+def qcon(con: duckdb.DuckDBPyConnection) -> duckdb.DuckDBPyConnection:
+    """A seeded database: schema, reference profiles, rule catalogue and score weights."""
+    seed_quality(con)
+    return con
+
+
+@pytest.fixture
+def run_fixture(qcon: duckdb.DuckDBPyConnection, fixture_path):
+    """Load one fixture CSV and run the rule engine over exactly that batch."""
+
+    def _run(
+        name: str,
+        *,
+        rule_ids: tuple[str, ...] | None = None,
+        clean: bool = True,
+    ) -> tuple[LoadResult, RunResult]:
+        batch = load_file(qcon, fixture_path(name))
+        result = run_rules(qcon, batch_id=batch.batch_id, rule_ids=rule_ids, clean=clean)
+        return batch, result
+
+    return _run

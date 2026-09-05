@@ -264,6 +264,7 @@ CREATE TABLE stage.market_record (
   low           DOUBLE,
   close         DOUBLE,
   volume        BIGINT,
+  volume_source VARCHAR,             -- verbatim volume label, ONLY when it is not an integer
   open_interest BIGINT,
   ingested_at   TIMESTAMPTZ DEFAULT now()
 );
@@ -286,6 +287,15 @@ scored or overridden. Both indexes lead with the three-column key, because every
 session aggregation and the duplicate rule itself are three-column operations. An index on
 `(contract_id, ts_utc)` would answer no question the application asks: nothing legitimately wants
 both granularities of one contract interleaved on one timeline.
+
+**`volume_source` exists so that `VAL.NON_INTEGER_VOLUME` can fire.** Volume is a count of
+contracts, so the column stays `BIGINT` — but DuckDB casts the string `'10.5'` to `11` rather
+than refusing it, so a fractional volume is numeric enough to load and the fraction is gone by
+the time any rule could see it. `'10.5'` is also not `STR.NON_NUMERIC_VOLUME`: that code is for
+a value that is not a number at all, and conflating the two would reject the whole row and lose
+its OHLC as well. Ingest therefore keeps the verbatim label **only when it does not parse as an
+integer**, so the column is null for every one of the 5.3 million clean rows and non-null exactly
+where there is something to report.
 
 **`source_row` is carried on every record.** This is the traceability spine: every finding can
 say "row 41,207 of `ESZ25.parquet`". Without it, drill-down stops at the database boundary and

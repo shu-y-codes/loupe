@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS stage.market_record (
   low           DOUBLE,
   close         DOUBLE,
   volume        BIGINT,
+  volume_source VARCHAR,             -- verbatim volume label, ONLY when it is not an integer
   open_interest BIGINT,
   ingested_at   TIMESTAMPTZ DEFAULT now()
 );
