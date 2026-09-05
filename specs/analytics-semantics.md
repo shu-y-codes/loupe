@@ -6,7 +6,10 @@ rolling 15-minute VWAP, and the MAD method for `OUT.*`. Promoted from research
 §8. Storage: `specs/data-model.md`. Sample and oracle claims cited here are owned by
 `specs/sample-corpus.md`. Rule IDs and severities: `specs/dq-rules-and-scoring.md`.
 
-Revised 2026-09-05: promoted from research; first normative version.
+Revised 2026-09-05: promoted from research; first normative version. Same day: §3.1 defines
+`open_interest` on a derived bar (last reported, never summed) — `mart.bar_daily` carried the
+column with no definition behind it. Same day: §3.3 defines which findings intersect a
+bar, by `dq.dq_rule.scope`.
 
 Validated against DuckDB 1.4.5 with the `icu` extension. Every SQL snippet below was executed
 before being written down. These calculations belong in the `insights` layer (bars, VWAP) and
@@ -397,9 +400,17 @@ For each `(contract_id, trade_date)` over the chosen record basis and a single `
 | `low` | `min(low)` |
 | `close` | the `close` value of the record with the **latest** `ts_utc` |
 | `volume` | `sum(volume)` |
+| `open_interest` | the `open_interest` value of the record with the **latest** `ts_utc` |
 
 Open and close are positional; high and low are extremal. `min(open)` and `max(close)` are the
 canonical bug.
+
+**`open_interest` is never summed.** It is a stock, not a flow — the count of contracts
+outstanding at a point in time — so adding the minute readings together produces a number with
+no meaning. Take the last reported value for the session, by the same positional path as
+`close` (`arg_max` on the same tie-break struct), and leave it null when the source does not
+carry the column. `mart.bar_daily` states the same rule in a column comment
+(`specs/data-model.md` §5); the definition is here.
 
 **Tie-breaking.** If two records share the earliest timestamp, break on `source_row`
 ascending, so the bar is a pure function of the input file.
@@ -488,6 +499,26 @@ volume_null_count  -- so a sum that skipped nulls is not silent
 counts and different prices; `basis` does not answer "which definition produced this number".
 This vendor's minute `trading_date` is a calendar date; its daily `date` is a session date.
 Record the resolved boundary in the form `session_calendar` holds it, not a bare `"CME"`.
+
+**"Findings intersecting this session" is resolved by `dq.dq_rule.scope`**, which is a
+four-value enum, so the join is a branch and not a judgement:
+
+| Scope | Intersects a bar when |
+|---|---|
+| `record` | the finding's `record_id` belongs to that `(contract_id, trade_date)` |
+| `session` | `contract_id`, `frequency` and `trade_date` match |
+| `series` | `contract_id` matches — every session in the series |
+| `file` | the finding's batch contributed any record to that session |
+
+Match `frequency` as well as `contract_id`: a finding about the daily config is not a finding
+about a bar derived from the minute tape.
+
+`finding_count` counts **`record`- and `session`-scope findings only**. A `series`- or
+`file`-scope finding is one statement about many sessions; adding it to every bar shifts the
+whole trend by a constant and tells the reader nothing about which session is worse. Both
+still contribute to `max_severity`, because a bar sitting inside a broken series is not
+trustworthy just because the breakage was described once. One resolver serves this and the
+publish gate — they ask the same question and must not answer it differently.
 
 A daily bar built from 40% of its ticks is not wrong, but it is not trustworthy; shade
 low-completeness candles at the point of use. Materialise under **both** bases. Vendor daily

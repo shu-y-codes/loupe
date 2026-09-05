@@ -8,7 +8,8 @@ Session grid, bar provenance and MAD method: `specs/analytics-semantics.md`.
 
 Revised 2026-09-05: promoted from research; first normative version. Same day: `dq.dq_rule.weight`
 renamed `triage_weight` and defined as worklist ordering only (§11.4) — it had no role in any
-score formula and the name invited one.
+score formula and the name invited one. Same day: §15 notes that `CON.DERIVED_BAR_INVALID` and
+`OUT.*` remain v1 core IDs while plans defer their fixtures to slice 3.
 
 **Scope of authority.** This spec owns *rule IDs, triggers, params, cleaning consequences, the
 score, and the fixture map*. It does not own DDL, sample measurements, or HTTP envelopes
@@ -635,11 +636,13 @@ Negative cases (must not fire) use a suffix: `con_weekend_record_sunday_evening.
 Slice 1 already owns ingest fixtures (`unparseable.csv` → `STR.UNPARSEABLE_ROW` /
 `STR.BAD_TIMESTAMP`; `null_fields.csv` is a *load* of nullable OHLCV, not `CMP.NULL_FIELD`
 until slice 2 writes findings; `weekend_sunday_evening.csv` is the negative case for
-`CON.WEEKEND_RECORD`). Slice 2 adds one fixture and unit test per core rule ID below.
-`REC.*` fixtures wait for slice 6. `TIM.TIMEZONE_MISALIGNED` and remaining `STR.*` use
-deliberately corrupted derivatives, not the pristine sample.
+`CON.WEEKEND_RECORD`). Slice 2 adds one fixture and unit test per core rule ID below, except
+`CON.DERIVED_BAR_INVALID` and the optional `OUT.*` pair, which stay on this list as v1 core
+IDs while plans defer their fixtures and runners to slice 3. `REC.*` fixtures wait for slice 6.
+`TIM.TIMEZONE_MISALIGNED` and remaining `STR.*` use deliberately corrupted derivatives, not the
+pristine sample.
 
-### 15.1 v1 core rule IDs (slice 2)
+### 15.1 v1 core rule IDs
 
 `CMP.NULL_FIELD`, `CMP.MISSING_TIMESTAMP`, `CMP.SESSION_MISSING`, `CMP.PARTIAL_SESSION`,
 `CMP.SPARSE_SERIES`, `UNQ.EXACT_DUPLICATE`, `UNQ.KEY_CONFLICT`, `VAL.NON_POSITIVE_PRICE`,
@@ -700,7 +703,8 @@ extensions that would change this (`specs/loupe-solution-design.md` §14).
    and never from literals.
 4. **Fixture and unit test** — `tests/fixtures/<rule_id_lower>.csv`, one planted defect (§15).
    A parity test asserts catalogue IDs, registered runners and the §15.1 in-scope list are the
-   same set, so a half-added rule fails the suite rather than seeding a rule that never fires.
+   same set — less any IDs §15 records as deferred to a later slice — so a half-added rule
+   fails the suite rather than seeding a rule that never fires.
 5. **Deploy.** The seeder inserts the absent `rule_id`. No DDL change and no migration — a rule
    is a row.
 6. **Re-run** over the existing corpus (`dq_run.batch_id` is null for a re-run; no re-ingest).
