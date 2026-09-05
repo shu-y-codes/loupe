@@ -21,7 +21,7 @@ Four schemas, mapping onto the layer separation in the solution design:
 ```
 ref     reference data          contract, product, tick, session_calendar
 stage   as-loaded, immutable    ingest_batch, market_record, record_reject
-dq      quality                 dq_rule, dq_run, dq_finding, cleaning_action
+dq      quality                 dq_rule, score_weight, dq_run, dq_finding, cleaning_action
 mart    derived analytics       bar_daily, vwap_15m (view), dq_metric_daily
 ```
 
@@ -264,6 +264,7 @@ CREATE TABLE stage.market_record (
   low           DOUBLE,
   close         DOUBLE,
   volume        BIGINT,
+  volume_source VARCHAR,             -- verbatim volume label, ONLY when it is not an integer
   open_interest BIGINT,
   ingested_at   TIMESTAMPTZ DEFAULT now()
 );
@@ -286,6 +287,15 @@ scored or overridden. Both indexes lead with the three-column key, because every
 session aggregation and the duplicate rule itself are three-column operations. An index on
 `(contract_id, ts_utc)` would answer no question the application asks: nothing legitimately wants
 both granularities of one contract interleaved on one timeline.
+
+**`volume_source` exists so that `VAL.NON_INTEGER_VOLUME` can fire.** Volume is a count of
+contracts, so the column stays `BIGINT` — but DuckDB casts the string `'10.5'` to `11` rather
+than refusing it, so a fractional volume is numeric enough to load and the fraction is gone by
+the time any rule could see it. `'10.5'` is also not `STR.NON_NUMERIC_VOLUME`: that code is for
+a value that is not a number at all, and conflating the two would reject the whole row and lose
+its OHLC as well. Ingest therefore keeps the verbatim label **only when it does not parse as an
+integer**, so the column is null for every one of the 5.3 million clean rows and non-null exactly
+where there is something to report.
 
 **`source_row` is carried on every record.** This is the traceability spine: every finding can
 say "row 41,207 of `ESZ25.parquet`". Without it, drill-down stops at the database boundary and
@@ -389,7 +399,7 @@ CREATE TABLE dq.dq_rule (
   applies_to_frequency VARCHAR,                -- null = every granularity
   params      JSON,                            -- thresholds, tunable without a code change
   enabled     BOOLEAN DEFAULT TRUE,
-  weight      DOUBLE  DEFAULT 1.0,
+  triage_weight DOUBLE DEFAULT 1.0,           -- worklist ordering ONLY; never a score input
   origin      VARCHAR DEFAULT 'builtin' CHECK (origin IN ('builtin','suggested','user')),
   created_at  TIMESTAMPTZ DEFAULT now()
 );
@@ -414,6 +424,14 @@ price satisfies is violated by almost every daily settlement. Null means the rul
 everywhere, keeping the common case free of ceremony.
 
 ```sql
+CREATE TABLE dq.score_weight (
+  dimension VARCHAR PRIMARY KEY CHECK (dimension IN
+              ('completeness','uniqueness','validity','consistency','timeliness',
+               'reconciliation')),
+  weight    DOUBLE NOT NULL,      -- the ONLY weights in the score (dq-rules-and-scoring 11.2)
+  enabled   BOOLEAN DEFAULT TRUE
+);
+
 CREATE TABLE dq.dq_run (
   run_id        UUID PRIMARY KEY DEFAULT uuid(),
   batch_id      UUID,                  -- null for a re-run over an existing corpus

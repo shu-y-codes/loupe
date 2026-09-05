@@ -34,6 +34,19 @@ from .symbols import parse_symbol
 PRICE_TARGETS = ("open", "high", "low", "close")
 DEFAULT_SESSION_OPEN = "17:00:00"
 
+# `stage.market_record.volume` is a BIGINT because volume is a count of contracts, and DuckDB
+# casts '10.5' to 11 rather than refusing it — so a fractional volume loads and its fraction is
+# gone before any rule could see it. It is also not STR.NON_NUMERIC_VOLUME: that code is for a
+# value that is not a number at all, and rejecting the row would lose its OHLC too. The verbatim
+# label is kept only when it does not parse as an integer, which is null for every clean row and
+# is what VAL.NON_INTEGER_VOLUME reads (`specs/data-model.md` §3.1).
+_FRACTIONAL_VOLUME = """
+  CASE WHEN TRY_CAST(volume_txt AS DOUBLE) IS NOT NULL
+        AND TRY_CAST(volume_txt AS DOUBLE)
+            <> floor(TRY_CAST(volume_txt AS DOUBLE))
+       THEN volume_txt END
+"""
+
 
 @dataclass(frozen=True)
 class LoadResult:
@@ -360,12 +373,13 @@ def _insert_records(
         f"""
         INSERT INTO stage.market_record
           (batch_id, source_row, contract_id, frequency, ts_source, ts_exchange, ts_utc,
-           trade_date, open, high, low, close, volume, open_interest)
+           trade_date, open, high, low, close, volume, volume_source, open_interest)
         SELECT ?, {source_row}, contract_txt, ?, ts_source_txt, ts_exchange,
                ts_exchange AT TIME ZONE ?, {trade_date},
                TRY_CAST(open_txt AS DOUBLE), TRY_CAST(high_txt AS DOUBLE),
                TRY_CAST(low_txt AS DOUBLE),  TRY_CAST(close_txt AS DOUBLE),
-               TRY_CAST(volume_txt AS BIGINT), TRY_CAST(oi_txt AS BIGINT)
+               TRY_CAST(volume_txt AS BIGINT), {_FRACTIONAL_VOLUME},
+               TRY_CAST(oi_txt AS BIGINT)
         FROM (
           SELECT *, TRY_CAST(ts_txt AS TIMESTAMP) AS ts_exchange FROM _loupe_scan
         ) s {join}
