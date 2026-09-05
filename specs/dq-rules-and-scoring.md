@@ -6,7 +6,9 @@ the fixture-to-rule mapping. Promoted from research `_notes/cursor/04-dq-rules-a
 `specs/data-model.md` §4. Sample rates used as calibration: `specs/sample-corpus.md` §7.
 Session grid, bar provenance and MAD method: `specs/analytics-semantics.md`.
 
-Revised 2026-09-05: promoted from research; first normative version.
+Revised 2026-09-05: promoted from research; first normative version. Same day: `dq.dq_rule.weight`
+renamed `triage_weight` and defined as worklist ordering only (§11.4) — it had no role in any
+score formula and the name invited one.
 
 **Scope of authority.** This spec owns *rule IDs, triggers, params, cleaning consequences, the
 score, and the fixture map*. It does not own DDL, sample measurements, or HTTP envelopes
@@ -376,7 +378,9 @@ Weighted mean of the dimensions **in scope**:
 overall = Σ(wᵈ × scoreᵈ) / Σ(wᵈ)     for d in dimensions_in_scope
 ```
 
-Default weights, stored in config, not code:
+Default weights, seeded into `dq.score_weight` (one row per dimension) and read at scoring
+time — never literals in the scorer. This is the only weights table in the score;
+`dq.dq_rule.triage_weight` is not an input (§11.4):
 
 | Dimension | Weight | Reason |
 |---|---|---|
@@ -436,14 +440,66 @@ than either (external rather than self-referential) but available for a minority
 contracts and scored per session; a dominant weight would swing one contract on a dimension
 its neighbour does not have.
 
-### 11.4 Honest use
+### 11.4 Rule triage weight — ordering, not scoring
+
+`dq.dq_rule.triage_weight` answers a different question from the score. The score says *how
+good is this data*; triage weight helps answer *what should I fix first*. It **never enters
+any score formula** — §11.1 counts records, at most once per dimension, and a per-rule
+multiplier there would double-count a record two rules both fired on.
+
+Seeded from severity, so the ordering is sensible before anyone tunes it and the number
+means something a business user can state out loud ("one critical outranks two errors"):
+
+| Severity | `triage_weight` |
+|---|---|
+| `critical` | 8.0 |
+| `error` | 4.0 |
+| `warning` | 2.0 |
+| `info` | 0.5 |
+
+Overridable per rule, per deployment. A desk that cannot act on off-tick prices sets
+`VAL.OFF_TICK_PRICE` low and stops seeing it at the top of the list; the score does not move,
+because nothing about the data changed.
+
+**Worklist rank** = `triage_weight × affected_records`, within a slice. Show the two factors
+alongside the product — a business user must be able to see whether a row is high because the
+defect is bad or because it is everywhere.
+
+**The headline guide is computed, not configured.** For each rule with open findings, state
+what resolving it would do to the score it feeds:
+
+```json
+{
+  "rule_id": "CMP.MISSING_TIMESTAMP",
+  "dimension": "completeness",
+  "affected_records": 412,
+  "triage_weight": 2.0,
+  "rank": 824.0,
+  "score_if_resolved": { "completeness": 97.8, "overall": 96.4, "from": { "completeness": 94.2, "overall": 95.1 } }
+}
+```
+
+`score_if_resolved` is §11.1 recomputed with that rule's defect count set to zero — the same
+dry-run mechanism as `expected_effect` on a suggestion (§13). It is the number to lead with:
+it is derived from the data rather than from a dial someone set, and it is denominated in the
+units the dashboard already shows. Triage weight breaks ties and orders rules whose score
+impact is comparable.
+
+Do not present rank as a severity, a probability, or a currency amount.
+
+### 11.5 Honest use
+
+**Interpretation:** The overall score is a 0–100 quality index where higher is better. A score
+of 96.4 means high data quality; a score of 50 means moderate issues and significant
+attention is warranted; 0 is worst possible. The score is a **navigation tool**, not a
+grade — it points the user to which dimensions need work, so show the breakdown first.
 
 - Always show the breakdown. The composite is navigation; the per-dimension scores are the answer.
 - Show the formula in a tooltip.
 - State the denominator ("94.2 over 1,380 expected records").
 - State the scope.
 - Below `params.min_records` (default 100), show "insufficient data" instead of a score.
-- Call it an index, not a probability.
+- Call it an index, not a probability or a grade.
 
 ---
 
@@ -625,3 +681,49 @@ double-count a record; overall is the renormalised weighted mean of dimensions i
 Measured baselines that justify seeded defaults live in `specs/sample-corpus.md` §7. They
 are **baselines, not live alert thresholds**. They describe one vendor. A zero is a result
 (tick inference and epsilon held on 5.3 million minute rows), not an absence of a run.
+
+---
+
+## 17. Adding a rule
+
+The v1 workflow, and the reason it is a code change rather than a form. Rules are report-only
+(§13): nothing at run time authors a rule, so the catalogue in `src/loupe/quality/` is the only
+author and adding one is a deploy. Suggestion **apply** and finding **override** are the
+extensions that would change this (`specs/loupe-solution-design.md` §14).
+
+1. **Amend this spec.** A new rule ID, its trigger, severity, scope and params belong in the
+   family table (§3–§10), and in §15.1 if it is v1 core. This spec owns rule IDs; deciding the
+   trigger here rather than in code is what keeps the two from drifting.
+2. **Catalogue entry** — `rule_id`, `dimension`, `name`, `description`, `severity`, `scope`,
+   `applies_to_frequency`, `params`, `triage_weight` seeded from severity (§11.4).
+3. **Runner**, registered against the `rule_id`, reading its thresholds from the seeded row
+   and never from literals.
+4. **Fixture and unit test** — `tests/fixtures/<rule_id_lower>.csv`, one planted defect (§15).
+   A parity test asserts catalogue IDs, registered runners and the §15.1 in-scope list are the
+   same set, so a half-added rule fails the suite rather than seeding a rule that never fires.
+5. **Deploy.** The seeder inserts the absent `rule_id`. No DDL change and no migration — a rule
+   is a row.
+6. **Re-run** over the existing corpus (`dq_run.batch_id` is null for a re-run; no re-ingest).
+   The new `ruleset_hash` is what makes the resulting score movement attributable to the rule
+   rather than to the data.
+
+**Severity is the high-stakes field, and it is decided at step 1.** §14 maps `error` to
+`exclude`, so a new `error` rule does not merely annotate — it removes records from
+`dq.market_record_clean` and changes every derived bar and VWAP downstream. Prefer shipping a
+new rule as `warning`, observing what it catches on real data, and promoting it to `error` as a
+separate, deliberate change. Under this design that promotion is a one-field edit.
+
+This warning-first advice governs rules added **after** the v1 catalogue. The severities in
+§3–§10 are already settled and calibrated against the corpus (§16); do not demote one to
+`warning` on the strength of this paragraph. The equivalent discipline for the v1 catalogue is
+to *measure* what its `error` rules exclude from the real corpus before anything downstream is
+built on the clean view — the first exclusion is the one nobody has seen the consequences of.
+
+**A new rule always joins an existing dimension** — the six are fixed. It therefore enters that
+dimension's defect count immediately, and adding rules will move a sub-score on unchanged data.
+That is correct behaviour, not a bug, and §11.4's `score_if_resolved` plus the run's
+`ruleset_hash` are what make it explicable to someone watching the number.
+
+A **threshold change** to an existing rule is the same workflow without steps 3 and 4: edit the
+catalogue, deploy, re-seed. The seeder refreshes `origin = 'builtin'` rows, so the corrected
+default reaches existing databases.

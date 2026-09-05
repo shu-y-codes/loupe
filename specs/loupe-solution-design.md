@@ -378,7 +378,8 @@ Sunday-evening trade date, three-character root (`SR3`), off-tick settlement, ti
 ## 14. Extensibility and non-goals
 
 **In scope to extend without rewriting:** new file layouts (column mapping), new roots/sessions
-(seed `ref.product` / calendar), new rules (rows in `dq_rule`), async ingest above size threshold,
+(seed `ref.product` / calendar), new rules (catalogue entry + runner + fixture, seeded into
+`dq_rule`; workflow in `specs/dq-rules-and-scoring.md` §17), async ingest above size threshold,
 RBAC as router dependency, AI narratives over aggregated pattern stats only, finding **override**,
 suggestion **apply / dismiss** (mutate catalogue and re-run).
 

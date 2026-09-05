@@ -140,9 +140,17 @@ CREATE TABLE IF NOT EXISTS dq.dq_rule (
   applies_to_frequency VARCHAR,                -- null = every granularity
   params      JSON,
   enabled     BOOLEAN DEFAULT TRUE,
-  weight      DOUBLE  DEFAULT 1.0,
+  triage_weight DOUBLE DEFAULT 1.0,           -- worklist ordering ONLY; never a score input
   origin      VARCHAR DEFAULT 'builtin' CHECK (origin IN ('builtin','suggested','user')),
   created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS dq.score_weight (
+  dimension VARCHAR PRIMARY KEY CHECK (dimension IN
+              ('completeness','uniqueness','validity','consistency','timeliness',
+               'reconciliation')),
+  weight    DOUBLE NOT NULL,      -- the ONLY weights in the score (specs/dq-rules-and-scoring.md 11.2)
+  enabled   BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS dq.dq_run (

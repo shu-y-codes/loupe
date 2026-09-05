@@ -21,7 +21,7 @@ Four schemas, mapping onto the layer separation in the solution design:
 ```
 ref     reference data          contract, product, tick, session_calendar
 stage   as-loaded, immutable    ingest_batch, market_record, record_reject
-dq      quality                 dq_rule, dq_run, dq_finding, cleaning_action
+dq      quality                 dq_rule, score_weight, dq_run, dq_finding, cleaning_action
 mart    derived analytics       bar_daily, vwap_15m (view), dq_metric_daily
 ```
 
@@ -389,7 +389,7 @@ CREATE TABLE dq.dq_rule (
   applies_to_frequency VARCHAR,                -- null = every granularity
   params      JSON,                            -- thresholds, tunable without a code change
   enabled     BOOLEAN DEFAULT TRUE,
-  weight      DOUBLE  DEFAULT 1.0,
+  triage_weight DOUBLE DEFAULT 1.0,           -- worklist ordering ONLY; never a score input
   origin      VARCHAR DEFAULT 'builtin' CHECK (origin IN ('builtin','suggested','user')),
   created_at  TIMESTAMPTZ DEFAULT now()
 );
@@ -414,6 +414,14 @@ price satisfies is violated by almost every daily settlement. Null means the rul
 everywhere, keeping the common case free of ceremony.
 
 ```sql
+CREATE TABLE dq.score_weight (
+  dimension VARCHAR PRIMARY KEY CHECK (dimension IN
+              ('completeness','uniqueness','validity','consistency','timeliness',
+               'reconciliation')),
+  weight    DOUBLE NOT NULL,      -- the ONLY weights in the score (dq-rules-and-scoring 11.2)
+  enabled   BOOLEAN DEFAULT TRUE
+);
+
 CREATE TABLE dq.dq_run (
   run_id        UUID PRIMARY KEY DEFAULT uuid(),
   batch_id      UUID,                  -- null for a re-run over an existing corpus
