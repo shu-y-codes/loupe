@@ -2,9 +2,9 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-05: `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs
-(`data-model.md`, `sample-corpus.md`) already promoted. Remaining siblings are promoted
-by their own slice.
+Revised 2026-09-05: `specs/analytics-semantics.md` promoted (slice 3 done-when 1).
+`specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs (`data-model.md`,
+`sample-corpus.md`) already promoted. Remaining siblings are promoted by their own slice.
 
 This document is the implementation brief. **`specs/` is normative.** Calculation, schema,
 rule catalogues, API payloads, and UI belong in `specs/` (this brief plus sibling specs).
@@ -16,7 +16,7 @@ as binding. Execution sequence: `plans/`.
 | Detail | Document |
 |---|---|
 | Persona UI, Summary / Specifics, wireframes, tooltips | `specs/loupe-ui-design.md` |
-| Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` (not yet; research `_notes/cursor/02-analytics-semantics.md`) |
+| Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` |
 | Data model / DDL | `specs/data-model.md` |
 | DQ rules and scoring | `specs/dq-rules-and-scoring.md` |
 | API contract | `specs/api-contract.md` (not yet; research `_notes/cursor/05-api-contract.md`) |
@@ -211,6 +211,8 @@ vendor daily bars," not "verified correct."
 ---
 
 ## 8. Analytics semantics (summary)
+
+Full definitions: `specs/analytics-semantics.md`.
 
 ### Trade date
 

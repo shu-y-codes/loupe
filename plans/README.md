@@ -9,7 +9,8 @@ See `.cursor/rules/docs-authority.mdc`.
 **Promote first.** The first done-when of each slice is: promote the matching
 `_notes/cursor/` research file into `specs/`. Empty stubs are worse than notes. Do not
 implement solely from `_notes/`. Promoted so far: `specs/data-model.md` and
-`specs/sample-corpus.md` (slice 1); `specs/dq-rules-and-scoring.md` (slice 2).
+`specs/sample-corpus.md` (slice 1); `specs/dq-rules-and-scoring.md` (slice 2);
+`specs/analytics-semantics.md` (slice 3 done-when 1).
 
 Sequence matches `specs/loupe-solution-design.md` §17.
 
