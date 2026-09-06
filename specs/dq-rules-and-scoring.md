@@ -536,9 +536,26 @@ any kind, and nothing on `dq.dq_rule` distinguishes the two. The named set is:
 Membership test: the rule's subject can be the session's settlement record. Slice 6 adds the
 `REC.*` close-convention rule (§8.4) under the same test.
 
-**Filtered to `frequency = 'daily'` findings.** Two of the four are only settlement-shaped at
-daily grain — `VAL.OFF_TICK_PRICE` on a minute record says "off-tick price", not "off-tick
-close" — so without the frequency clause the column fills with intraday noise.
+**Filtered to `frequency = 'daily'` findings**, which is load-bearing rather than tidying.
+`VAL.OFF_TICK_PRICE` on a minute record says "off-tick price", not "off-tick close" — §5
+makes the lattice a property of `(root, frequency, field)` precisely because a settlement is
+under no obligation to sit on the tick. `CMP.SESSION_MISSING` is a settlement statement only
+at daily grain: one daily record per session *is* the settlement, so its absence is a missing
+settlement, whereas the same finding at minute grain means "no tape at all". Without the
+clause the column fills with intraday noise that is not about the close.
+
+**Consequence, and accepted:** a contract held only at minute grain gets no closing-day
+callout when its close is missing. That shortfall surfaces as `CMP.MISSING_TIMESTAMP` or
+`CMP.PARTIAL_SESSION`, neither of which is in the set. This is the intended reading, not a
+gap to patch — settlement comes from the daily file, and the Risk persona's question is
+whether *settlement* is trustworthy. The contract still appears in the inventory with its
+score and its `top_issue`; only the Closing-day cell is an em dash.
+
+**`UNQ.EXACT_DUPLICATE` is deliberately out**, though at daily grain it is also literally a
+duplicated settlement row. It is auto-resolved by `dedupe_drop` keeping the lowest
+`source_row` (§14), so it is a changelog entry rather than open settlement risk. A key
+conflict is the opposite: two *different* settlement prices for one session with no
+principled winner inside the file, which is exactly what a risk manager must be told.
 
 The set lives beside `DEDUPE_DROP_RULES` and `NEVER_EXCLUDE_RULES` in
 `src/loupe/quality/catalogue.py`, which is already where a named set of rule IDs with a
