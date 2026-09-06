@@ -22,7 +22,9 @@ dataframe column `help`, chart caption. Not a glossary overlay.
 
 Examples: Risk completeness — “Share of expected settlement sessions that arrived.”
 Analyst lift — “How much more often this issue shows up in this bucket than overall.”
-Settlement trend — sparkline of settlement reliability over trade dates (not a price histogram).
+Settlement trend — sparkline of settlement reliability over trade dates (not a price
+histogram). "Settlement reliability" is defined under Risk → Summary below; it is daily
+completeness, not a new metric.
 
 **Skip**
 
@@ -75,7 +77,7 @@ contents per the motivations table.
 │ Persona          │  what is available · what is ok · what needs attention   │
 │  ( ) Risk        │                                                          │
 │  ( ) Trader      │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────────────┐  │
-│  ( ) Analyst     │  │ Score   │ │ Book    │ │ Completeness│ │ DQ trend   │  │
+│  ( ) Analyst     │  │ Score   │ │ Book    │ │ Completeness│ │ Settlement │  │
 │                  │  │ 72      │ │ 4 / 18  │ │ 94%         │ │ ▁▂▃▅▄▃▂   │  │
 │ Trade dates      │  └─────────┘ └─────────┘ └─────────┘ └────────────────┘  │
 │  [2025-01-02]    │                                                          │
@@ -200,6 +202,30 @@ Primary question: is settlement trustworthy, and how much of the book is hit?
 │  └────────┴────────┴─────────┴───────┴────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Status is severity, not a score cut.** A contract is `ATTN` when it has **any open finding
+of severity `error` or `critical`**, and `OK` otherwise. **Book hit** counts the `ATTN` rows.
+
+No score threshold is used, deliberately. `specs/dq-rules-and-scoring.md` §11.5 has the score
+as a navigation index and not a grade, and a cut at 70-or-80-or-90 turns it into one while
+answering a question the severities already answer exactly. `error` and `critical` are also
+the severities default cleaning acts on (§14), so `ATTN` means "something here was excluded
+or blocked", which is what a risk manager is asking. A contract can therefore sit at a
+middling score and read `OK` — many low-severity findings — and that is the honest answer,
+not a rounding error.
+
+**Settlement trend is daily completeness per trade date.** "Settlement reliability" is not a
+new metric: for a daily-frequency contract one expected record *is* one expected settlement
+session, so the Risk completeness tooltip above ("share of expected settlement sessions that
+arrived") and the `completeness` dimension of §11.1 are the same quantity. The sparkline is
+that dimension over `trade_date`, restricted to `frequency = 'daily'` —
+`mart.dq_metric_daily` already stores it per contract × date × frequency × dimension, and
+`GET /v1/dq/metrics?group_by=day` gains a `dimension` filter to select it (the unfiltered
+call averages the dimensions together).
+
+A contract held only at minute grain has no daily records and so no settlement trend. That is
+the same boundary as §11.6's closing-day callout and holds for the same reason: settlement
+lives in the daily file.
 
 **Specifics** — multi-select allowed; no tick log, no outlier hunting.
 
