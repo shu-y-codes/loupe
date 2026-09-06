@@ -25,6 +25,9 @@ V1_PATHS = {
     "/v1/dq/metrics",
     "/v1/dq/findings",
     "/v1/dq/findings/{finding_id}",
+    # Slice 5 (plans/05-ui.md, done-when 1): the Trader and Analyst changelog panels had no
+    # read path over `dq.cleaning_action`.
+    "/v1/dq/changelog",
     "/v1/dq/rules",
     "/v1/dq/runs",
     "/v1/dq/runs/{run_id}",

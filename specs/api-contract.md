@@ -29,7 +29,7 @@ layers those sibling specs already define.
 | Reference | `GET /health`, `/contracts`, `/calendar` | — |
 | Ingest | preview, batches (201 / `file_hash` 409), list, detail, rejects, soft-delete purge | Async job table + 202 (only if ingest exceeds ~30s) |
 | Analytics | bars/daily, vwap, compare | — |
-| DQ | summary, metrics, findings **GET** (read-only), rules **GET**, runs POST/GET | `POST .../findings/{id}/review`; `POST` / `PATCH` `/dq/rules` |
+| DQ | summary, metrics, findings **GET** (read-only), changelog **GET** (read-only), rules **GET**, runs POST/GET | `POST .../findings/{id}/review`; `POST` / `PATCH` `/dq/rules` |
 | Insights | patterns **GET**, suggestions **GET** | `POST .../suggestions/{id}/apply`, `.../dismiss` |
 | Auth | none | Router-level RBAC; no signature changes |
 
@@ -448,9 +448,10 @@ frequencies; returns the same `CAP.FREQUENCY_UNAVAILABLE` refusal when only one 
 
 ```
 GET  /v1/dq/summary?contract=&start=&end=&basis=&frequency=
-GET  /v1/dq/metrics?contract=&start=&end=&frequency=&group_by=day|contract|rule|dimension|frequency
+GET  /v1/dq/metrics?contract=&start=&end=&frequency=&group_by=day|contract|rule|dimension|frequency&dimension=
 GET  /v1/dq/findings?contract=&start=&end=&frequency=&rule_id=&severity=&status=&limit=&offset=
 GET  /v1/dq/findings/{finding_id}
+GET  /v1/dq/changelog?contract=&start=&end=&run_id=&limit=&offset=
 GET  /v1/dq/rules
 POST /v1/dq/runs
 GET  /v1/dq/runs/{run_id}
@@ -549,6 +550,55 @@ Minute-only shape:
 the API surfaces the effect as per-bar `reconciliation.status` of `compared` or
 `not_comparable`.
 
+**`contracts[]` — the inventory row, alongside `slices[]`.** `slices` is per contract ×
+frequency; every persona's Summary table is one row per *contract*
+(`specs/loupe-ui-design.md`). The rollup is composed in `quality`, not by the client:
+
+```json
+{
+  "contracts": [
+    {"contract_id": "ZCZ25", "score": 41.0, "status": "ATTN",
+     "frequencies": ["daily", "minute"], "finding_count": 9,
+     "top_issue": {"rule_id": "CON.CLOSE_OUT_OF_RANGE", "label": "Close outside the bar range",
+                   "severity": "error", "findings": 6},
+     "settlement_issue": {"rule_id": "CON.CLOSE_OUT_OF_RANGE",
+                          "label": "Close outside the bar range",
+                          "severity": "warning", "findings": 2}}
+  ],
+  "worst_field": {"field": "close", "findings": 6, "considered": 7, "total": 23}
+}
+```
+
+`score` is the **minimum** across the contract's slices — as trustworthy as its worst
+frequency. A record-weighted mean would let a large clean minute tape bury a broken daily
+file. The page-level `overall_score` is unchanged and remains the unweighted mean of slices.
+
+`status` is `ATTN` when the contract holds any open `error` or `critical` finding, `OK`
+otherwise. Severity, never a score threshold: §11.5 of `specs/dq-rules-and-scoring.md` has
+the score as a navigation index rather than a grade.
+
+**Two callouts ship on every row, not one behind a parameter.** `top_issue` is the worst
+issue of any kind; `settlement_issue` is drawn from `SETTLEMENT_RULES` at daily grain only
+(§11.6) and is null for a contract held solely at minute grain. Personas are a UI view
+selector and nothing in this contract is persona-aware (§8), so a `?callout=` parameter would
+make the endpoint persona-shaped to save one string per row. Both carry the rule's own
+`label` from `dq.dq_rule.name`, so wording lives with the rule rather than in a widget.
+
+`worst_field` is derived from rule identity (§11.7) and is `null` — the tile reads "not
+applicable" — when a scope's findings are all from unmapped rules. It is never a group-by
+over `dq.dq_finding.details`, which is evidence and not a key.
+
+**It carries its denominator**, for the reason §11.5 makes a score carry one. `findings` is
+the winning field's count, `considered` is how many open findings name a field at all, and
+`total` is every open finding in scope. The three are routinely far apart — §11.7 excludes
+field-parametric, record-shaped and diagnostic rules — so a client that showed the field
+alone would imply it summarised everything on the screen.
+
+**`dimension` on `/dq/metrics`.** `group_by=day` averages the dimensions together, which
+cannot express a single-dimension trend. The Risk **Settlement trend** sparkline is
+`completeness` at `frequency=daily` over trade dates, so the filter selects one dimension and
+is echoed as `dimension` on the response. Omitted, behaviour is exactly as before.
+
 ### 6.2 Findings (v1 read-only)
 
 Paginated. A corrupt file can still produce tens of thousands of rows:
@@ -590,6 +640,44 @@ past run — not a pending job handle.
 
 `POST` / `PATCH` `/dq/rules` (catalogue mutation so an accepted suggestion can take effect)
 are **extensions**, paired with suggestion apply.
+
+### 6.5 Changelog (v1 read-only)
+
+What default cleaning decided, so a clean series can show its working. `dq.cleaning_action`
+is the store; this is its only read path.
+
+```json
+{
+  "scope": {"contracts": ["ESZ25"], "start": "2025-06-02", "end": "2025-06-30"},
+  "run_id": "01H...",
+  "data": [
+    {"contract_id": "ESZ25", "trade_date": "2025-06-12", "frequency": "minute",
+     "rule_id": "CMP.MISSING_TIMESTAMP", "label": "Missing timestamps",
+     "action": "exclude", "records": 4},
+    {"contract_id": "ESZ25", "trade_date": "2025-06-18", "frequency": "minute",
+     "rule_id": "UNQ.EXACT_DUPLICATE", "label": "Exact duplicate",
+     "action": "dedupe_drop", "records": 1}
+  ],
+  "total": 2, "limit": 100, "offset": 0
+}
+```
+
+**Aggregated by rule x trade date x action, never one row per record.** The panel row is a
+count ("excluded 4 open slots"), so a per-record route would leave the client summing them,
+and aggregation is outside `ui` (`specs/loupe-solution-design.md` §6).
+
+`dq.cleaning_action` carries neither `contract_id` nor `trade_date` — it keys on `record_id` —
+so both come from joining `stage.market_record`, which is where they are authoritative.
+
+`run_id` defaults to the latest succeeded run, resolved as §6.1 resolves it, and may be passed
+explicitly so a past run stays inspectable after a later one supersedes it. A decision with a
+null `rule_id` is labelled null rather than dropped: an action nobody can attribute is exactly
+what an audit trail must still show.
+
+**Read-only, and not because v1 is cautious.** Default cleaning is automatic policy driven by
+severity, not a user action (`specs/dq-rules-and-scoring.md` §14), so there is no request a
+client could make here. Overriding a finding is the extension (§6.3), and it changes findings
+rather than these rows.
 
 ---
 

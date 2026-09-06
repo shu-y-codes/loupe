@@ -12,9 +12,24 @@ weights back from those rows.
 MAD method are specified (`plans/02-quality.md`). `REC.*`, patterns and suggestions are slice 6.
 """
 
-from .catalogue import CATALOGUE, RULES_ENFORCED_BY_ENGINE, SCORE_WEIGHTS, RuleSpec
+from .catalogue import (
+    CATALOGUE,
+    RULE_SUBJECT_FIELD,
+    RULES_ENFORCED_BY_ENGINE,
+    SCORE_WEIGHTS,
+    SETTLEMENT_RULES,
+    RuleSpec,
+)
+from .changelog import ChangelogEntry, changelog, latest_run
 from .cleaning import CleaningReport, apply_default_cleaning, exclusion_rate
 from .errors import LoupeQualityError, RulesNotSeeded
+from .inventory import (
+    ATTENTION_SEVERITIES,
+    ContractRow,
+    Issue,
+    contract_rows,
+    worst_field,
+)
 from .registry import REGISTRY, Finding, RuleContext, RuleRefusal, RunScope
 from .runner import RunResult, assess, run_rules, scoped
 from .scoring import (
@@ -31,14 +46,20 @@ from .seed import RuleSeedReport, ruleset_hash, seed_quality, seed_rules, seed_s
 from .windows import CoverageWindow, RollWindow, RunInputs
 
 __all__ = [
+    "ATTENTION_SEVERITIES",
     "CATALOGUE",
     "REGISTRY",
     "RULES_ENFORCED_BY_ENGINE",
+    "RULE_SUBJECT_FIELD",
     "SCORE_WEIGHTS",
+    "SETTLEMENT_RULES",
+    "ChangelogEntry",
     "CleaningReport",
+    "ContractRow",
     "CoverageWindow",
     "DimensionScore",
     "Finding",
+    "Issue",
     "LoupeQualityError",
     "RollWindow",
     "RuleContext",
@@ -53,7 +74,10 @@ __all__ = [
     "WorklistEntry",
     "apply_default_cleaning",
     "assess",
+    "changelog",
+    "contract_rows",
     "exclusion_rate",
+    "latest_run",
     "persist_daily_metrics",
     "ruleset_hash",
     "run_rules",
@@ -65,4 +89,5 @@ __all__ = [
     "seed_rules",
     "seed_score_weights",
     "worklist",
+    "worst_field",
 ]

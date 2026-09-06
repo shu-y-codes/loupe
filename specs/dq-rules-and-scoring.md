@@ -519,6 +519,108 @@ grade — it points the user to which dimensions need work, so show the breakdow
 - Below `params.min_records` (default 100), show "insufficient data" instead of a score.
 - Call it an index, not a probability or a grade.
 
+### 11.6 Settlement rules — a callout filter, not a score input
+
+Like §11.4's triage weight, this classifies rules for a presentation purpose and enters no
+score formula. The Risk inventory's **Closing-day** column (`specs/loupe-ui-design.md`) is a
+one-line callout about the session's *settlement* record, not the contract's worst issue of
+any kind, and nothing on `dq.dq_rule` distinguishes the two. The named set is:
+
+| Rule | The closing-day statement it makes |
+|---|---|
+| `CON.CLOSE_OUT_OF_RANGE` | close outside H–L |
+| `CMP.SESSION_MISSING` | missing EOD bar |
+| `UNQ.KEY_CONFLICT` | duplicate settlement |
+| `VAL.OFF_TICK_PRICE` | off-tick close |
+
+Membership test: the rule's subject can be the session's settlement record. Slice 6 adds the
+`REC.*` close-convention rule (§8.4) under the same test.
+
+**Filtered to `frequency = 'daily'` findings**, which is load-bearing rather than tidying.
+`VAL.OFF_TICK_PRICE` on a minute record says "off-tick price", not "off-tick close" — §5
+makes the lattice a property of `(root, frequency, field)` precisely because a settlement is
+under no obligation to sit on the tick. `CMP.SESSION_MISSING` is a settlement statement only
+at daily grain: one daily record per session *is* the settlement, so its absence is a missing
+settlement, whereas the same finding at minute grain means "no tape at all". Without the
+clause the column fills with intraday noise that is not about the close.
+
+**Consequence, and accepted:** a contract held only at minute grain gets no closing-day
+callout when its close is missing. That shortfall surfaces as `CMP.MISSING_TIMESTAMP` or
+`CMP.PARTIAL_SESSION`, neither of which is in the set. This is the intended reading, not a
+gap to patch — settlement comes from the daily file, and the Risk persona's question is
+whether *settlement* is trustworthy. The contract still appears in the inventory with its
+score and its `top_issue`; only the Closing-day cell is an em dash.
+
+**`UNQ.EXACT_DUPLICATE` is deliberately out**, though at daily grain it is also literally a
+duplicated settlement row. It is auto-resolved by `dedupe_drop` keeping the lowest
+`source_row` (§14), so it is a changelog entry rather than open settlement risk. A key
+conflict is the opposite: two *different* settlement prices for one session with no
+principled winner inside the file, which is exactly what a risk manager must be told.
+
+The set lives beside `DEDUPE_DROP_RULES` and `NEVER_EXCLUDE_RULES` in
+`src/loupe/quality/catalogue.py`, which is already where a named set of rule IDs with a
+documented reason belongs.
+
+### 11.7 Rule subject field — for the worst-field tile, from rule identity
+
+The Analyst headline tile **Worst field** (`specs/loupe-ui-design.md`) names the field most
+findings implicate — "close", "timestamp". It is derived from **rule identity**, never by
+grouping `dq.dq_finding.details`: that column is evidence and is explicitly never grouped on
+(`specs/data-model.md`), and a JSON payload is the wrong key for an aggregate. Like §11.4 and
+§11.6, this enters no score formula.
+
+**Membership is a two-part test**, because the tile answers *what is broken*: the rule must
+**assert a defect**, and must **fix the field that defect is in**. "Fixes a field" alone is
+too loose — it admits rules that name a field while claiming nothing is wrong with it.
+
+`RULE_SUBJECT_FIELD`:
+
+| Field | Rules |
+|---|---|
+| `close` | `CON.CLOSE_OUT_OF_RANGE` |
+| `open` | `CON.OPEN_OUT_OF_RANGE` |
+| `volume` | `VAL.NEGATIVE_VOLUME`, `VAL.NON_INTEGER_VOLUME`, `VAL.ZERO_VOLUME_WITH_RANGE`, `VAL.EXTREME_VOLUME` |
+| `timestamp` | all `TIM.*`, `CON.WEEKEND_RECORD`, `CON.RECORD_IN_HALT`, `CON.RECORD_ON_HOLIDAY` |
+
+The `timestamp` row is the one to read carefully: every rule in it fires on a record that
+**exists** and whose timestamp is wrong — off the grid, out of order, misaligned, or placing
+the record on a weekend, holiday or halt. That is what separates it from the absence rules
+below.
+
+**Rules absent from the map do not contribute to the tile, and that is the point.** Three
+kinds are absent:
+
+- **Field-parametric** — `CMP.NULL_FIELD`, `VAL.NON_POSITIVE_PRICE`, `VAL.OFF_TICK_PRICE`,
+  `VAL.PRICE_MAGNITUDE`, `CON.HIGH_LT_LOW`, `CON.PRICE_JUMP`. Which field they implicate is
+  known only per finding, in `details`. Reading it there to feed an aggregate is the thing
+  this section exists to prevent, so they are excluded rather than guessed at.
+- **Record-, session- or series-shaped** — all `UNQ.*`, `CMP.MISSING_TIMESTAMP`,
+  `CMP.SESSION_MISSING`, `CMP.PARTIAL_SESSION`, `CMP.SPARSE_SERIES`, `CON.STALE_REPEAT`,
+  `CON.DERIVED_BAR_INVALID`, all `ROL.*`. Their subject is a row, a session or a contract,
+  not a field; "worst field" is not a question they answer.
+
+  `CMP.MISSING_TIMESTAMP` belongs **here, not under `timestamp`**, and the whole family
+  makes the point: its trigger is a run of expected slots with *no record*, so there is no
+  timestamp value that is wrong — the defect is absence. It is `CMP.SESSION_MISSING` and
+  `CMP.PARTIAL_SESSION` at a different span, and the three are treated alike.
+- **Diagnostic rather than defect** — `OUT.RETURN_MAD`, `OUT.VOLUME_MAD`. §10 makes `OUT.*`
+  always `info` and never auto-excluded: they say a value is *unusual*, not that it is
+  *wrong*, and the tile would be counting findings that assert nothing is broken. The field
+  attribution is also weaker than it looks — a log return spans two closes, so no individual
+  close is accused. Outliers are the most numerous thing in a volatile window, so admitting
+  them would let a diagnostic dominate a defect tile.
+
+Slice 6's `REC.*` join under the same two-part test: volume shortfall is `volume` and
+asserts a defect; session-only-in-one is record-shaped and therefore absent; the
+close-convention rule is **absent** — §8.4 keeps `REC.CLOSE_CONVENTION` at `info` and out of
+the score numerator, so it is a diagnostic and fails the first half of the test even though
+its field is plainly `close`.
+
+The tile shows the field with the most findings among mapped rules, and reads "not
+applicable" — not a fabricated field — when a scope's findings are entirely from unmapped
+rules. `RULE_SUBJECT_FIELD` lives in `src/loupe/quality/catalogue.py` beside
+`SETTLEMENT_RULES`.
+
 ---
 
 ## 12. Recurring patterns

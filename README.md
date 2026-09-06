@@ -33,11 +33,35 @@ uv run ruff check .
 The sample corpus carries **no redistribution licence**, so it is fetched, never committed
 (`specs/sample-corpus.md` §1). Nothing in the application fetches at runtime.
 
+## Running the app
+
+Two processes: the API serves `/v1`, the UI talks to it over HTTP. Keeping them apart is
+what makes the thin-client boundary real rather than asserted
+(`specs/loupe-solution-design.md` §6).
+
+```bash
+uv run uvicorn loupe.api.app:create_app --factory   # http://127.0.0.1:8000/v1
+uv run streamlit run src/loupe/ui/app.py            # http://localhost:8501
+```
+
+The UI reads `LOUPE_API_URL` and falls back to `http://127.0.0.1:8000/v1`, so pointing it at
+another host needs no code change:
+
+```bash
+LOUPE_API_URL=http://localhost:9000/v1 uv run streamlit run src/loupe/ui/app.py
+```
+
+`GET /v1/docs` serves the OpenAPI the app generates. On an empty store the page invites an
+upload; the sidebar previews the file, discloses what it cannot support (a daily-only file
+gets bars and quality but no 15-minute VWAP), and only then commits it.
+
 ## Status
 
-Slices 1 and 2 are done: DuckDB schema, reference seed, upload preview and synchronous
-ingest; then the quality engine — 30 rules seeded as rows, default cleaning, and the DQ
-score. Insights, API and UI follow — see **[plans/](plans/)**.
+Slices 1-5 are done: DuckDB schema, reference seed, upload preview and synchronous ingest;
+the quality engine — 30 rules seeded as rows, default cleaning, and the DQ score; daily bars,
+VWAP and the raw/clean compare; the FastAPI `/v1` surface; and the Streamlit UI with its
+three personas. Reconciliation, suggestions and the demo walkthrough follow — see
+**[plans/](plans/)**.
 
 ```python
 from pathlib import Path

@@ -371,6 +371,7 @@ dataframe column `help`, chart caption.
 | Contract | FastAPI `TestClient` against OpenAPI shapes | `tests/api/` |
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
+| UI | Persona view assembly; absence of apply/override controls | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
 
 Edge cases to fixture explicitly: exact dup, key conflict, mid-session gap, missing day,
 negative volume, `high < low`, close outside range, unparseable timestamp, empty file,
