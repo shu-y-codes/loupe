@@ -30,7 +30,6 @@ import uvicorn
 
 from loupe.api import create_app
 from loupe.data import connect
-from loupe.quality import seed_quality
 from loupe.ui import runtime
 from loupe.ui.client import LoupeClient
 
@@ -97,11 +96,9 @@ def live_api(store_path: Path, monkeypatch) -> Iterator[str]:
     `bootstrap=True` is the documented way to start against an empty store, so this is the
     path the README's `uvicorn` command takes rather than a setup the tests invented.
 
-    `seed_quality` is called separately, and that separation is the app's rather than this
-    fixture's: `bootstrap` applies the schema and seeds *reference* data, and the rule
-    catalogue is a deliberate second step (`tests/integration/test_cold_start.py` pins that).
-    A store without it cannot validate an upload at all, so every journey below would fail at
-    the first file — which is the sequence a first-time user has to be walked through too.
+    One flag and nothing else, which is the point: `bootstrap` now seeds the rule catalogue as
+    well, so this fixture sets up a store exactly the way the README tells a reader to. A test
+    that had to seed something the documented command does not would be testing a private path.
 
     `LOUPE_API_URL` is set for the duration, so a `LoupeClient()` built with no arguments finds
     this server — which exercises `client.base_url()` as well, the indirection the UI relies on
@@ -109,7 +106,6 @@ def live_api(store_path: Path, monkeypatch) -> Iterator[str]:
     """
     con = connect(store_path)
     app = create_app(con, bootstrap=True)
-    seed_quality(con)
     try:
         for url in _serve(app):
             monkeypatch.setenv("LOUPE_API_URL", url)

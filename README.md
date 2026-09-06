@@ -40,9 +40,19 @@ what makes the thin-client boundary real rather than asserted
 (`specs/loupe-solution-design.md` §6).
 
 ```bash
-uv run uvicorn loupe.api.app:create_app --factory   # http://127.0.0.1:8000/v1
-uv run streamlit run src/loupe/ui/app.py            # http://localhost:8501
+uv run uvicorn loupe.api.app:bootstrapped_app --factory   # http://127.0.0.1:8000/v1
+uv run streamlit run src/loupe/ui/app.py                  # http://localhost:8501
 ```
+
+**That is the whole setup.** On a store that does not exist yet, the first start creates it,
+applies the schema, and seeds both the reference data and the rule catalogue — so the two
+commands above take a fresh clone to a page you can upload a file to. Nothing to run in a REPL
+first.
+
+`loupe.api.app:create_app` is the same app without that: it opens the store and creates
+nothing, which is what you want when a store already exists and an empty one should be reported
+rather than silently manufactured. `GET /v1/health` says which state you are in through
+`schema_applied` and `rules_seeded`, and the UI reads it before offering you anything.
 
 The UI reads `LOUPE_API_URL` and falls back to `http://127.0.0.1:8000/v1`, so pointing it at
 another host needs no code change:
@@ -50,12 +60,6 @@ another host needs no code change:
 ```bash
 LOUPE_API_URL=http://localhost:9000/v1 uv run streamlit run src/loupe/ui/app.py
 ```
-
-**A new store needs two steps, not one.** `bootstrap` applies the schema and seeds reference
-data; the rule catalogue is seeded separately, because rules are rows and which rules a
-deployment wants is its decision. Until `seed_quality` has run, an upload is refused and
-`GET /v1/health` says `rules_seeded: false` — which is what the UI reads before it offers you
-anything. The snippet below does both.
 
 `GET /v1/docs` serves the OpenAPI the app generates. On an empty store the page invites an
 upload; the sidebar previews the file, discloses what it cannot support (a daily-only file

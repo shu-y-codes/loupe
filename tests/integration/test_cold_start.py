@@ -17,7 +17,6 @@ import pytest
 
 from loupe.api import create_app
 from loupe.data import connect
-from loupe.quality import seed_quality
 
 
 def test_a_brand_new_store_is_a_file_with_no_tables(cold_store, store_path: Path):
@@ -88,12 +87,7 @@ def test_the_refusal_disappears_once_the_store_is_bootstrapped(store_path: Path)
 
     con = connect(store_path)
     try:
-        # Order matters and is the app's own: `bootstrap=True` applies the schema, and
-        # `seed_quality` writes rows into tables it created. Seeding first raises the very
-        # catalog error this test is about.
-        app = create_app(con, bootstrap=True)
-        seed_quality(con)
-        with TestClient(app) as client:
+        with TestClient(create_app(con, bootstrap=True)) as client:
             for path in ("/v1/contracts", "/v1/dq/summary", "/v1/insights/patterns"):
                 assert client.get(path).status_code == 200, path
     finally:
@@ -114,12 +108,10 @@ def test_bootstrap_produces_a_store_the_app_can_serve(store_path: Path):
             body = client.get("/v1/health").json()
             assert body["status"] == "ok"
             assert body["schema_applied"] is True
-            # Reference data is seeded by bootstrap; the rule catalogue deliberately is not,
-            # so this states the seam rather than glossing it.
-            assert body["rules_seeded"] is False
-
-            seed_quality(con)
-            assert client.get("/v1/health").json()["rules_seeded"] is True
+            # One flag, a store that can actually be used. The rule catalogue used to be a
+            # second step, which meant the documented start produced an app that answered
+            # `/v1/health` cheerfully and refused every upload with `RulesNotSeeded`.
+            assert body["rules_seeded"] is True
     finally:
         con.close()
 
@@ -133,7 +125,6 @@ def test_the_bootstrapped_schema_survives_reopening_the_file(store_path: Path):
     """
     con = connect(store_path)
     create_app(con, bootstrap=True)
-    seed_quality(con)
     con.close()
 
     reopened = connect(store_path)

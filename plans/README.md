@@ -29,11 +29,10 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 4 | api | **done** | [04-api.md](04-api.md) |
 | 5 | ui | **done** | [05-ui.md](05-ui.md) |
 | 6 | rec / suggestions / demo | **done** | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
-| 7 | README walkthrough | pending | this index (no slice file) |
+| 7 | README walkthrough | pending | [07-readme-walkthrough.md](07-readme-walkthrough.md) |
 
-Slice 7: walkthrough in the delivered README against real `ESZ25` (or a chosen volatile
-window). Philosophy, architecture, trade-offs, limitations, extensibility — see solution
-brief §16.
+Slice 7 has a file now: the walkthrough carries three findings from slice 6's integration tier
+and a limitations list that is already decided, so it is assembly rather than discovery.
 
 ## Archive
 

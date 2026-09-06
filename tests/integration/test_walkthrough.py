@@ -95,9 +95,8 @@ def test_the_walkthrough_from_an_empty_store_to_a_reconciled_book(api_client, up
     `POST /v1/dq/runs` for the two grains to be compared, and a user who uploads a second file
     and expects the score to change is right to be surprised.
     """
-    # `bootstrap=True` applies the schema and seeds reference data; the rule catalogue is a
-    # separate step, and an unseeded store cannot validate an upload at all. The fixture does
-    # it because a user has to as well — see `test_cold_start.py`.
+    # One `bootstrap=True` and the store is ready to ingest: schema, reference data and the
+    # rule catalogue. Asserted first so the journey below starts from the documented state.
     assert api_client.health()["rules_seeded"] is True
 
     upload_file(MINUTE)
@@ -193,12 +192,9 @@ def test_what_an_upload_wrote_survives_the_process_that_wrote_it(store_path, fix
 
     from loupe.api import create_app
     from loupe.data import connect
-    from loupe.quality import seed_quality
 
     con = connect(store_path)
-    app = create_app(con, bootstrap=True)
-    seed_quality(con)
-    with TestClient(app) as client:
+    with TestClient(create_app(con, bootstrap=True)) as client:
         for name in (MINUTE, DAILY):
             path = fixture_path(name)
             with path.open("rb") as handle:

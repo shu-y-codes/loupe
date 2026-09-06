@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 from loupe.data import LoupeDataError, apply_schema, connect, seed_reference
 from loupe.data.errors import UnsupportedFileFormat
+from loupe.quality import seed_quality
 from loupe.quality.errors import LoupeQualityError
 
 from .deps import Database
@@ -46,14 +47,24 @@ def create_app(
 ) -> FastAPI:
     """Build the app over `connection`, or over the default store when none is given.
 
-    `bootstrap` applies the schema and seeds reference data on the way up. It is off by
-    default: creating tables as a side effect of starting a server would hide a
-    misconfigured `LOUPE_DB` behind an empty but healthy-looking store.
+    `bootstrap` applies the schema and seeds reference data **and the rule catalogue**, so one
+    flag produces a store the app can actually serve. It is off by default: creating tables as
+    a side effect of starting a server would hide a misconfigured `LOUPE_DB` behind an empty
+    but healthy-looking store.
+
+    The rule catalogue used to be a separate step, on the grounds that rules are rows and which
+    rules a deployment wants is its decision. That is true and it is still true — `seed_rules`
+    is idempotent and re-seedable, and nothing here stops a deployment disabling or retuning a
+    row afterwards. What it is not is a reason to ship a half-open store: without it every
+    upload is refused with `RulesNotSeeded`, so the documented `uvicorn` command produced an app
+    that answered `/v1/health` cheerfully and could not ingest a file. Seeding the declared
+    catalogue is the honest default for a bootstrap that claims to make a store usable.
     """
     con = connection if connection is not None else connect()
     if bootstrap:
         apply_schema(con)
         seed_reference(con)
+        seed_quality(con)
 
     app = FastAPI(
         title="Loupe API",
@@ -70,6 +81,17 @@ def create_app(
 
     _register_error_handlers(app)
     return app
+
+
+def bootstrapped_app() -> FastAPI:
+    """`create_app(bootstrap=True)`, named so `uvicorn --factory` can reach it.
+
+    `--factory` calls the target with no arguments, so the one-liner in the README needs a
+    zero-argument entry point rather than a `lambda` a reader cannot type. This is the
+    difference between "clone and run" and "clone, open a REPL, seed three things, then run",
+    which is the whole reason the flag exists.
+    """
+    return create_app(bootstrap=True)
 
 
 def _register_error_handlers(app: FastAPI) -> None:
