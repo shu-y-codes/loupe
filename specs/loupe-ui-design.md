@@ -334,7 +334,17 @@ Click a findings-log row to open a **raw neighbourhood** of that finding:
 offending rows highlighted, not editable. `VAL.close` is a daily row plus
 neighbours; `CMP.gap` shows expected slots that are missing; `REC.vol` shows
 both frequencies. Charts stay a separate check (“is this a market move?”).
-Panel is collapsed until a finding is selected. Address is a suggested rule
+Panel is collapsed until a finding is selected.
+
+**v1 serves the neighbourhood at daily grain only.** `GET /v1/analytics/bars/daily`
+on `basis=raw` over a window around the finding is the whole mechanism, which covers
+`VAL.close` — the worked example above — and every other daily-grain finding. The
+minute-grain cases are **not** served: `CMP.gap` needs the expected slot grid against
+actual records and `REC.vol` needs both frequencies row by row, and no v1 route returns
+raw market records. Those findings show their own evidence (the What column, from
+`dq.dq_finding.details`) plus the charts, and the panel says which grain it is showing
+rather than rendering empty. A raw-records route is the extension that lifts this; the
+panel’s purpose — locate and explain, never edit — is met at daily grain today. Address is a suggested rule
 as text (what / why / expected effect) — no apply. Findings and suggestions
 are report-only this release.
 Future: Override on the log; apply / dismiss on suggestions.
