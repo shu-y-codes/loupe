@@ -500,10 +500,12 @@ which field disagreed, both values, the absolute difference, the volume ratio, t
 rows behind the derived bar. Keys get columns; evidence gets JSON.
 
 A `(contract_id, trade_date)` comparison across granularities is recorded as one row per
-disagreeing field with `frequency = 'minute'`, `compare_frequency = 'daily'` and the evidence in
-`details`, which `idx_finding_freq` serves directly. `REC.SESSION_ONLY_IN_ONE` reverses the pair,
-since a session present in the daily file with no minute rows behind it is a finding *about* the
-daily side.
+disagreeing field, with the evidence in `details` and the pair oriented by the rule's own claim,
+which `idx_finding_freq` serves directly. `REC.OHLC_DISAGREE` says the vendor's stated high is
+wrong, so it is `frequency = 'daily'`, `compare_frequency = 'minute'`; `REC.VOLUME_SHORTFALL`
+says the *tape* is short and reverses the pair. `REC.SESSION_ONLY_IN_ONE` takes the side that
+holds the session, so a session present in the daily file with no minute rows behind it is a
+finding *about* the daily side. The table is §8's, not this section's.
 
 The `status` / `reviewed_*` columns are storage for the analyst review journey. **v1 writes
 `open` and reads it back**; override is an extension (locked decision 10).

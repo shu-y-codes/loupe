@@ -43,6 +43,8 @@ class FakeClient:
             "bars_daily": {"data": BARS},
             "vwap": {"data": VWAP},
             "compare": {"data": COMPARE},
+            "insights_patterns": PATTERNS,
+            "insights_suggestions": SUGGESTIONS,
         }
         self._responses.update(overrides)
 
@@ -83,7 +85,13 @@ class FakeClient:
         return self._answer("compare", **p)
 
     def suggestions(self, **p: Any):
-        return self._answer("suggestions", **p)
+        """One key, because the real client has one route.
+
+        `LoupeClient.suggestions` is `get("/insights/suggestions")`, so answering a separate
+        `suggestions` key here would let a stub set up a world where the Address cell and the
+        Suggestions panel disagree about the same request — which the API cannot produce.
+        """
+        return self.get("/insights/suggestions", **p)
 
     def preview(self, filename: str, content: bytes):
         return self._answer("preview", filename=filename)
@@ -95,7 +103,9 @@ class FakeClient:
         return self._answer(path.strip("/").replace("/", "_"), **p)
 
 
-#: A route that does not exist yet — patterns and suggestions land in slice 6.
+#: A route the build does not carry. Kept after slice 6 shipped the insights routes, because
+#: both sides of that branch still matter: a UI pointed at an older API must explain itself
+#: rather than render an empty panel that reads as "nothing to report".
 NOT_BUILT = ApiProblem(status=404, code=None, title="Not Found", detail="No such route")
 
 #: `CAP.FREQUENCY_UNAVAILABLE`: a refusal that is *not* an empty series (§6, contract line 428).
@@ -204,6 +214,11 @@ FINDINGS = [
         "affected_rows": 1,
         "status": "open",
         "details": {"message": "close 412 > high 410"},
+        "corroboration": {
+            "state": "disputed",
+            "reason": "The minute tape found prints above the stated high.",
+            "detail": {"field": "high", "ticks": 3, "finding_ids": ["f9"]},
+        },
     },
     {
         "finding_id": "f2",
@@ -214,8 +229,26 @@ FINDINGS = [
         "severity": "warning",
         "affected_rows": 18,
         "status": "open",
+        # No `corroboration` key at all — the fourth answer. A minute-grain completeness
+        # finding is not a claim the daily file can speak to, and absence is how the API says
+        # so (`specs/api-contract.md` §6.2).
         "details": {"message": "18 missing minute slots"},
     },
+]
+
+#: The same book with the tape agreeing, so the opposite reading can be asserted apart. Two
+#: findings that render identically but instruct a reader to do opposite things is the failure
+#: §8.7 exists to prevent, and a stub carrying only one state could not catch it.
+CONFIRMED_FINDINGS: list[dict[str, Any]] = [
+    {
+        **FINDINGS[0],
+        "corroboration": {
+            "state": "confirmed",
+            "reason": "Vendor high and low agree with the minute tape for this session.",
+            "detail": {"minute_coverage_pct": 99.1},
+        },
+    },
+    FINDINGS[1],
 ]
 
 CHANGELOG = [
@@ -297,4 +330,61 @@ MIXED_SCOPE: dict[str, Any] = {
             "dimensions_not_in_scope": [],
         },
     ],
+}
+
+
+#: `GET /v1/insights/patterns`, copied from a real response rather than written to match the
+#: page (`specs/loupe-solution-design.md` §13). `dimension` here is a *bucket* dimension —
+#: where the findings concentrate — and not one of the six quality dimensions.
+PATTERNS: dict[str, Any] = {
+    "scope": {"contracts": ["ZCZ25"], "frequency_defaulted": False},
+    "data": [
+        {
+            "pattern_id": "p_9f2c1a4b6d8e0f11",
+            "rule_id": "CMP.MISSING_TIMESTAMP",
+            "dimension": "hour_of_day",
+            "bucket": "16:00-17:00 America/Chicago",
+            "share_of_findings": 0.82,
+            "share_of_records": 0.04,
+            "lift": 20.5,
+            "support": 412,
+            "distinct_days": 61,
+            "narrative": (
+                "82% of missing timestamp findings fall in the 16:00-17:00 America/Chicago "
+                "hour, across 61 sessions."
+            ),
+            "confidence": "high",
+        }
+    ],
+    "total": 1,
+    "meta": {"min_lift": 3.0, "min_support": 20, "min_periods": 3},
+}
+
+#: `GET /v1/insights/suggestions`. Note what is **not** here: no `actions`, no apply link and
+#: no dismiss link. v1 identifies and suggests; it does not mutate (locked decision 10), and a
+#: stub that invented an action key would let the report-only page tests pass against a payload
+#: the API never sends.
+SUGGESTIONS: dict[str, Any] = {
+    "scope": {"contracts": ["ZCZ25"], "frequency_defaulted": False},
+    "data": [
+        {
+            "suggestion_id": "s_31d7b0c95ea2f846",
+            "from_pattern": "p_9f2c1a4b6d8e0f11",
+            "kind": "calendar",
+            "title": "Suppress the 16:00-17:00 CT maintenance break for ZC",
+            "rationale": (
+                "412 missing-timestamp findings across 61 sessions fall entirely within the "
+                "CME daily maintenance break, when no trading occurs."
+            ),
+            "evidence": {"findings": 412, "sessions": 61, "lift": 20.5},
+            "proposed_change": {
+                "target": "ref.session_calendar",
+                "operation": "add_halt_window",
+                "params": {"root": "ZC", "start_local": "16:00:00", "end_local": "17:00:00"},
+            },
+            "expected_effect": {"findings_suppressed": 412, "completeness_delta_pct": 4.1},
+            "confidence": 0.95,
+        }
+    ],
+    "total": 1,
 }

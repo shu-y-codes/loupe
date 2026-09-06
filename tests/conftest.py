@@ -12,6 +12,7 @@ import duckdb
 import pytest
 
 from loupe.data import apply_schema, connect, seed_reference
+from loupe.quality import seed_quality
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -26,6 +27,18 @@ def con() -> duckdb.DuckDBPyConnection:
     seed_reference(connection)
     yield connection
     connection.close()
+
+
+@pytest.fixture
+def qcon(con: duckdb.DuckDBPyConnection) -> duckdb.DuckDBPyConnection:
+    """A seeded database: schema, reference profiles, rule catalogue and score weights.
+
+    Shared rather than per-directory since slice 6: `tests/demo/` runs the real engine over an
+    injected file to check the manifest's labels, and a second copy of this fixture could seed
+    a different catalogue from the one the quality tests assert against.
+    """
+    seed_quality(con)
+    return con
 
 
 @pytest.fixture

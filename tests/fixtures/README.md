@@ -30,6 +30,35 @@ the fixture being wrong: a zero price is also outside its root's plausible band,
 tiny fixture is a partial session with an incomplete grid. Tests assert on the rule they are
 about.
 
+## `REC.*` comes in pairs
+
+A cross-frequency defect cannot live in one file. Each reconciliation rule therefore has
+`<rule_id_lower>_minute.csv` and `<rule_id_lower>_daily.csv`, loaded together, and the defect
+is the *disagreement between them* rather than anything wrong with either on its own — which
+is the whole point of the family (spec §8).
+
+Each pair carries a session that fires and a session that does not, because a filter needs an
+input it admits and an input it rejects to be tested at all (`specs/loupe-solution-design.md`
+§13). `rec_volume_shortfall_*` is the clearest: one session where the tape is short and one
+where it legitimately exceeds the vendor, which must stay silent (§8.3).
+
+Session volumes are above the 1,000 liquidity floor on purpose. Below it the coverage window
+falls back to the listed span, the reconcilable window stops being the intersection of the two
+observed spans, and `rec_session_only_in_one_*`'s out-of-window session would fire.
+
+Four fixtures here are not rule fixtures at all and are named for what they feed rather than
+for a rule ID. `insights_pattern_hourly.csv` spreads 96 records evenly over four hours and puts
+every off-tick close in one of them, so the lift is exactly 4.0 and a reader can check the
+arithmetic by hand. `insights_pattern_settlement_*.csv` is the corpus's own shape — 24 sessions
+whose vendor close sits at the settlement mark rather than at the last trade — and drives the
+suggestion generator. `injection_base.csv` is deliberately *clean*: it is what
+`loupe.demo.injection` derives a labelled defective copy from, and a base that already tripped
+those rules would let every injection test pass against an injector that did nothing.
+
+The coverage gate is the one precondition these CSVs cannot carry: `min_coverage_pct` is 0.98
+of 1,380 calendar slots and no committed fixture is going to hold 1,353 rows. The tests lower
+it in the seeded row, the way a deployment would, and assert both sides of the gate separately.
+
 Three rules need a precondition the CSV cannot carry, so the test sets it: `TIM.BEFORE_LISTING`
 and `TIM.AFTER_EXPIRY` need `ref.contract` date bounds (inferred, and null for this corpus),
 and `TIM.TIMEZONE_MISALIGNED`'s negative case shifts the loaded timestamps back by the offset

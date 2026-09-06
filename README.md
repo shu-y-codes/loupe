@@ -55,13 +55,35 @@ LOUPE_API_URL=http://localhost:9000/v1 uv run streamlit run src/loupe/ui/app.py
 upload; the sidebar previews the file, discloses what it cannot support (a daily-only file
 gets bars and quality but no 15-minute VWAP), and only then commits it.
 
+## Demo defects
+
+The minute corpus is effectively defect-free (`specs/sample-corpus.md` §7.1), so a demo leads
+with the **real** findings it does contain — the timezone trap, settlements outside the traded
+range, off-tick settlements. For the defect types it happens not to contain there is a
+labelled injector, which writes a defective *copy* and a ground-truth manifest beside it:
+
+```bash
+uv run python -m loupe.demo.injection tests/fixtures/injection_base.csv --out /tmp/demo.csv
+```
+
+It refuses to write over its source and records the SHA-256 of both files. A corrupted sample
+nobody labelled is indistinguishable from a vendor defect, and it would end up quoted in a
+spec. `tests/demo/` runs the real engine over an injected file and asserts the findings agree
+with the manifest, which is what makes it a test asset rather than a prop.
+
 ## Status
 
-Slices 1-5 are done: DuckDB schema, reference seed, upload preview and synchronous ingest;
-the quality engine — 30 rules seeded as rows, default cleaning, and the DQ score; daily bars,
-VWAP and the raw/clean compare; the FastAPI `/v1` surface; and the Streamlit UI with its
-three personas. Reconciliation, suggestions and the demo walkthrough follow — see
-**[plans/](plans/)**.
+Slices 1-6 are done: DuckDB schema, reference seed, upload preview and synchronous ingest;
+the quality engine — 38 rules seeded as rows, default cleaning, and the DQ score; daily bars,
+VWAP and the raw/clean compare; the FastAPI `/v1` surface; the Streamlit UI with its three
+personas; and cross-frequency reconciliation with the pattern and suggestion reports. The
+README walkthrough follows — see **[plans/](plans/)**.
+
+**Reconciliation needs both grains.** `REC.*` compares vendor daily bars against bars derived
+from the minute tape, so it runs only where a contract holds both — and where it does, the
+score is a weighted mean over six dimensions rather than five. Every score states which
+dimensions were in scope and what it was renormalised by, because the two are not the same
+measurement (`specs/dq-rules-and-scoring.md` §11.3).
 
 ```python
 from pathlib import Path

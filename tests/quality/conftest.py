@@ -11,14 +11,7 @@ import duckdb
 import pytest
 
 from loupe.data import LoadResult, load_file
-from loupe.quality import RunResult, run_rules, seed_quality
-
-
-@pytest.fixture
-def qcon(con: duckdb.DuckDBPyConnection) -> duckdb.DuckDBPyConnection:
-    """A seeded database: schema, reference profiles, rule catalogue and score weights."""
-    seed_quality(con)
-    return con
+from loupe.quality import RunResult, run_rules
 
 
 @pytest.fixture

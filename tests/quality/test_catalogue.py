@@ -25,7 +25,8 @@ from loupe.quality import (
 )
 from loupe.quality.catalogue import CATALOGUE_BY_ID, TRIAGE_WEIGHT_BY_SEVERITY
 
-# specs/dq-rules-and-scoring.md §15.1, less `UNQ.DUPLICATE_FILE`, which ingest enforces.
+# specs/dq-rules-and-scoring.md §15.1 plus §8's `REC.*` table, less `UNQ.DUPLICATE_FILE`,
+# which ingest enforces.
 # Written out rather than imported so that this test compares the code against the spec and
 # not against itself. The three rules plans/02-quality.md deferred to slice 3
 # (`CON.DERIVED_BAR_INVALID` and the `OUT.*` pair) landed with the bar writer and the MAD
@@ -62,6 +63,13 @@ SPEC_IN_SCOPE = frozenset(
         "TIM.TIMEZONE_MISALIGNED",
         "ROL.THIN_NEAR_EXPIRY",
         "ROL.NO_SUCCESSOR",
+        # Slice 6. §15.1 is slice 2's list and does not name them; the four IDs are §8's own
+        # table, which is where the `REC.*` family is specified, and §15 defers only their
+        # *fixtures* to this slice ("`REC.*` fixtures wait for slice 6").
+        "REC.OHLC_DISAGREE",
+        "REC.VOLUME_SHORTFALL",
+        "REC.SESSION_ONLY_IN_ONE",
+        "REC.CLOSE_CONVENTION",
         "CON.DERIVED_BAR_INVALID",
         "OUT.RETURN_MAD",
         "OUT.VOLUME_MAD",
@@ -99,11 +107,20 @@ def test_every_in_scope_rule_has_a_fixture(fixture_path):
 
     Two rules reuse the ingest fixtures the spec already assigns them: `CMP.NULL_FIELD` reads
     `null_fields.csv`, and `CON.WEEKEND_RECORD`'s negative case is `weekend_sunday_evening.csv`.
+
+    `REC.*` takes a **pair**, and it has to. One file cannot carry a cross-frequency defect:
+    the rule compares a minute tape against the daily file that claims to summarise it, so the
+    fixture is `<rule>_minute.csv` and `<rule>_daily.csv` and a single file would be a fixture
+    for a rule that cannot fire.
     """
     reused = {"CMP.NULL_FIELD": "null_fields.csv"}
     for rule_id in sorted(SPEC_IN_SCOPE):
-        name = reused.get(rule_id, rule_id.lower().replace(".", "_") + ".csv")
-        fixture_path(name)
+        stem = rule_id.lower().replace(".", "_")
+        if rule_id.startswith("REC."):
+            fixture_path(f"{stem}_minute.csv")
+            fixture_path(f"{stem}_daily.csv")
+            continue
+        fixture_path(reused.get(rule_id, stem + ".csv"))
 
 
 def test_every_rule_id_is_unique():

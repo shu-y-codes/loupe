@@ -28,7 +28,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 3 | insights | **done** | [03-insights.md](03-insights.md) |
 | 4 | api | **done** | [04-api.md](04-api.md) |
 | 5 | ui | **done** | [05-ui.md](05-ui.md) |
-| 6 | rec / suggestions / demo | pending | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
+| 6 | rec / suggestions / demo | **done** | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
 | 7 | README walkthrough | pending | this index (no slice file) |
 
 Slice 7: walkthrough in the delivered README against real `ESZ25` (or a chosen volatile

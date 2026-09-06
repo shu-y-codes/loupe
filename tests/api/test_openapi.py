@@ -31,6 +31,11 @@ V1_PATHS = {
     "/v1/dq/rules",
     "/v1/dq/runs",
     "/v1/dq/runs/{run_id}",
+    # Slice 6 (plans/06-rec-suggestions-demo.md, done-when 4): v1 in the contract since §7,
+    # held back from slice 4 because nothing backed them until the pattern and suggestion
+    # reports existed.
+    "/v1/insights/patterns",
+    "/v1/insights/suggestions",
 }
 
 
@@ -61,9 +66,32 @@ def test_findings_are_read_only_in_the_document(spec):
     assert set(spec["paths"]["/v1/dq/findings/{finding_id}"]) == {"get"}
 
 
-def test_insights_routes_are_absent_until_slice_6(spec):
-    """Patterns and suggestions are v1 in the contract but built in slice 6."""
-    assert not [p for p in spec["paths"] if p.startswith("/v1/insights")]
+def test_insights_routes_are_present_and_read_only(spec):
+    """Patterns and suggestions are v1; apply and dismiss are not, and stay absent.
+
+    Both halves are asserted. The presence half is new in slice 6 and would pass vacuously
+    against an empty router if only the absence half were checked — which is exactly how the
+    routes sat through slice 5.
+    """
+    insights = {p for p in spec["paths"] if p.startswith("/v1/insights")}
+    assert insights == {"/v1/insights/patterns", "/v1/insights/suggestions"}
+    for path in insights:
+        assert set(spec["paths"][path]) == {"get"}
+
+
+def test_the_lift_and_support_filters_are_documented(spec):
+    """A threshold a caller can move has to say what moving it does (§7)."""
+    params = spec["paths"]["/v1/insights/patterns"]["get"]["parameters"]
+    by_name = {p["name"]: p for p in params}
+    assert "ratio" in by_name["min_lift"]["description"].lower()
+    assert by_name["min_support"]["description"]
+
+
+def test_suggestions_take_no_threshold_parameters(spec):
+    """A suggestion is only as good as the pattern behind it, so the thresholds are not
+    re-openable on this route (`src/loupe/api/routes/insights.py`)."""
+    params = spec["paths"]["/v1/insights/suggestions"]["get"]["parameters"]
+    assert {p["name"] for p in params} == {"contract", "start", "end"}
 
 
 def test_trade_date_parameters_say_they_are_session_dates(spec):

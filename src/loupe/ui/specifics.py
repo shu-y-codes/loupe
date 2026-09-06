@@ -29,6 +29,19 @@ _ADDRESS_PENDING = (
     "this release reports and does not apply."
 )
 
+#: How the three corroboration states of `specs/dq-rules-and-scoring.md` §8.7 are introduced in
+#: the **Why** cell (`specs/loupe-ui-design.md`). Labels only — the sentence after the dash is
+#: the API's `reason`, rendered exactly as given, because the finding's qualification is decided
+#: in `quality` and a widget that reworded it could soften what it says.
+#:
+#: A finding with no `corroboration` object gets no second line at all. That is the fourth
+#: answer: corroboration does not apply here, which is not the same as "we could not check".
+_CORROBORATION_LABEL = {
+    "confirmed": "range confirmed against the tape",
+    "disputed": "range disputed",
+    "not_comparable": "not corroborated",
+}
+
 
 # --------------------------------------------------------------------- shared
 
@@ -83,18 +96,40 @@ def why_impact_address(
 
     One row per open finding, worst first. **Impact** is the finding's own `affected_rows`
     plus the share of records cleaning excluded for the contract — both measured upstream.
+
+    **Why** carries the corroboration state where the finding has one. Two findings that look
+    identical can call for opposite responses — a settlement outside a range the tape confirms
+    is ordinary, while one outside a range the tape *disputes* means the range is the broken
+    field — so the qualification belongs beside the finding rather than a click away.
     """
     address = _address(client, contract)
     rows = []
     for finding in findings[:10]:
         rows.append(
             {
-                "Why": f"{finding['rule_id']} · {finding.get('trade_date') or EM_DASH}",
+                "Why": _why(finding),
                 "Impact": _impact(finding, excluded_pct),
                 "Address": address,
             }
         )
     return pd.DataFrame(rows)
+
+
+def _why(finding: dict[str, Any]) -> str:
+    """The finding, and what the tape makes of it (`specs/loupe-ui-design.md`, Specifics).
+
+    The state arrives on the finding itself (`specs/api-contract.md` §6.2), so this cell renders
+    what it was given and computes nothing — which is the point: a widget deriving the state
+    from `REC.*` findings itself would be a second, quietly different reading of them.
+    """
+    headline = f"{finding['rule_id']} · {finding.get('trade_date') or EM_DASH}"
+    corroboration = finding.get("corroboration")
+    if not isinstance(corroboration, dict):
+        return headline
+    label = _CORROBORATION_LABEL.get(corroboration.get("state", ""))
+    if not label:
+        return headline
+    return f"{headline}\n{label} — {corroboration.get('reason', '')}".rstrip(" —")
 
 
 def _impact(finding: dict[str, Any], excluded_pct: float | None) -> str:

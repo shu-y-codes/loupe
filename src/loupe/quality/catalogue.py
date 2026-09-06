@@ -103,6 +103,16 @@ PRICE_BANDS: Mapping[str, list[float]] = MappingProxyType(
     }
 )
 
+# specs/dq-rules-and-scoring.md §8.4. The mark is the clock time an exchange settlement is
+# struck at, and it is what separates a settlement from a last trade: the vendor's daily close
+# sits 1.00 point from the 15:00 CT bar and 4.25 from the session end on the 208 complete ES
+# sessions (`specs/sample-corpus.md` §6.3). 15:00 is the measured CME-family default and the
+# only figure this corpus establishes; a root whose session does not reach it is left absent
+# rather than given an invented time, and its close comparison stands down (§8.4 here means
+# neither a convention finding nor a disagreement, which under-reports rather than accusing a
+# settlement of being wrong). Per-root marks are configuration: seed a row, do not edit code.
+SETTLEMENT_MARK_LOCAL: Mapping[str, str] = MappingProxyType({"default": "15:00"})
+
 # `CON.STALE_REPEAT` default n is not global (spec §6): a flat price for many consecutive
 # minutes is ordinary on an illiquid rate contract and a feed failure on ES. At n = 10 the
 # corpus fires 14,830 times, 13,285 of them SR3 (sample-corpus §7.1).
@@ -436,6 +446,88 @@ CATALOGUE: tuple[RuleSpec, ...] = (
         applies_to_frequency="minute",
         params={"min_records": 100, "min_active_hours": 20},
     ),
+    # ----------------------------------------------------------------- reconciliation
+    # spec §8. The only family that can catch data which is internally perfect and still
+    # wrong, and the only one that cannot run at all unless both granularities were supplied.
+    # `frequency` is the side the finding is a *statement about* and `compare_frequency` the
+    # side it was checked against (§8, "Which side goes in `frequency`"); the closing-day
+    # callout filters `SETTLEMENT_RULES` at `frequency = 'daily'`, so the convention is
+    # load-bearing rather than cosmetic.
+    RuleSpec(
+        rule_id="REC.OHLC_DISAGREE",
+        dimension="reconciliation",
+        name="Derived bar disagrees with the vendor daily bar",
+        description=(
+            "open, high or low derived from the minute tape differs from the vendor's daily "
+            "row by more than tolerance_ticks. Gated on min_coverage_pct of the calendar "
+            "expected slots: an incomplete session cannot reproduce a high or a low, and the "
+            "invariant that the vendor range is never the narrower one holds only on complete "
+            "sessions. close joins the comparison only where the settlement signature of §8.4 "
+            "is absent."
+        ),
+        severity="error",
+        scope="session",
+        # Tolerance in ticks, never absolute price (§8.2): open/high/low are selections from
+        # the same prints, so exact equality is the expectation and 0 is the honest default.
+        params={
+            "tolerance_ticks": 0,
+            "min_coverage_pct": 0.98,
+            "fields": ["open", "high", "low"],
+        },
+    ),
+    RuleSpec(
+        rule_id="REC.VOLUME_SHORTFALL",
+        dimension="reconciliation",
+        name="Minute volume falls short of the vendor daily volume",
+        description=(
+            "The minute sum is below the vendor daily volume by more than max_shortfall_pct. "
+            "Shortfall only: the vendor figure legitimately exceeds the tape, because block "
+            "and privately negotiated trades are reported to the exchange without ever "
+            "appearing as continuous-market minute bars (§8.3). Excess is a statistic on the "
+            "reconciliation summary, not a finding."
+        ),
+        severity="warning",
+        scope="session",
+        # Measured tape share is about 95% (`specs/sample-corpus.md` §6.4); 10% leaves
+        # headroom without hiding a real gap.
+        params={"max_shortfall_pct": 0.10},
+    ),
+    RuleSpec(
+        rule_id="REC.SESSION_ONLY_IN_ONE",
+        dimension="reconciliation",
+        name="Session present at one granularity only",
+        description=(
+            "A session exists at one frequency and not the other, inside the reconcilable "
+            "window. A minute session with no daily row is the interesting direction and is a "
+            "warning; a daily row with no minute session is the deferred-contract case, "
+            "suppressed inside a suppression window and info outside it (§8.5)."
+        ),
+        severity="warning",
+        scope="session",
+        params={"absent_daily_severity": "info"},
+    ),
+    RuleSpec(
+        rule_id="REC.CLOSE_CONVENTION",
+        dimension="reconciliation",
+        name="Vendor close is a settlement, not a last trade",
+        description=(
+            "The two closes differ by more than close_convention_ticks and the vendor close "
+            "sits nearer the settlement mark than the session end. Stays info and never "
+            "enters the score numerator (§8.4): auto-excluding on it would discard the daily "
+            "config for a convention difference that is not an error."
+        ),
+        severity="info",
+        scope="session",
+        params={
+            "close_convention_ticks": 1,
+            "settlement_mark_local": dict(SETTLEMENT_MARK_LOCAL),
+            # How near a minute bar must fall to the mark for the mark to be resolved. A
+            # session trading within the hour of the mark can speak to it; one that never
+            # reaches it cannot, and then neither this rule nor the close branch of
+            # REC.OHLC_DISAGREE fires.
+            "mark_tolerance_minutes": 60,
+        },
+    ),
     # --------------------------------------------------------------- roll and expiry
     RuleSpec(
         rule_id="ROL.THIN_NEAR_EXPIRY",
@@ -549,12 +641,14 @@ SETTLEMENT_RULES: frozenset[str] = frozenset(
 #:     is known only per finding, in `details`.
 #:   * record-, session- or series-shaped — all `UNQ.*`, `CMP.MISSING_TIMESTAMP`,
 #:     `CMP.SESSION_MISSING`, `CMP.PARTIAL_SESSION`, `CMP.SPARSE_SERIES`, `CON.STALE_REPEAT`,
-#:     `CON.DERIVED_BAR_INVALID`, all `ROL.*`. `CMP.MISSING_TIMESTAMP` belongs here and not
+#:     `CON.DERIVED_BAR_INVALID`, all `ROL.*`, `REC.SESSION_ONLY_IN_ONE`.
+#:     `CMP.MISSING_TIMESTAMP` belongs here and not
 #:     under `timestamp`: its trigger is a run of expected slots with *no record*, so no
 #:     timestamp value is wrong — the defect is absence, exactly as for the other two `CMP`
 #:     session rules.
-#:   * diagnostic rather than defect — `OUT.*`, always `info` and never auto-excluded (§10).
-#:     A log return also spans two closes, so no individual close is accused.
+#:   * diagnostic rather than defect — `OUT.*`, always `info` and never auto-excluded (§10),
+#:     and `REC.CLOSE_CONVENTION`, `info` by §8.4 and out of the score numerator. A log return
+#:     also spans two closes, so no individual close is accused.
 RULE_SUBJECT_FIELD: Mapping[str, str] = MappingProxyType(
     {
         "CON.CLOSE_OUT_OF_RANGE": "close",
@@ -575,5 +669,13 @@ RULE_SUBJECT_FIELD: Mapping[str, str] = MappingProxyType(
         "CON.WEEKEND_RECORD": "timestamp",
         "CON.RECORD_IN_HALT": "timestamp",
         "CON.RECORD_ON_HOLIDAY": "timestamp",
+        # Slice 6's `REC.*` under the same two-part test (§11.7). The shortfall says the tape
+        # is short of the vendor's stated volume, so it asserts a defect and its field is
+        # `volume`. Its two siblings stay absent: `REC.SESSION_ONLY_IN_ONE` is record-shaped —
+        # a whole session is present or absent, and no field of it is wrong — and
+        # `REC.CLOSE_CONVENTION` is diagnostic, `info` by §8.4 and out of the numerator, so it
+        # fails the *asserts a defect* half of the test even though its field is plainly
+        # `close`. Admitting it would let the tile count a difference that is expected.
+        "REC.VOLUME_SHORTFALL": "volume",
     }
 )
