@@ -565,7 +565,7 @@ frequency; every persona's Summary table is one row per *contract*
                           "label": "Close outside the bar range",
                           "severity": "warning", "findings": 2}}
   ],
-  "worst_field": {"field": "close", "findings": 6}
+  "worst_field": {"field": "close", "findings": 6, "considered": 7, "total": 23}
 }
 ```
 
@@ -587,6 +587,12 @@ make the endpoint persona-shaped to save one string per row. Both carry the rule
 `worst_field` is derived from rule identity (§11.7) and is `null` — the tile reads "not
 applicable" — when a scope's findings are all from unmapped rules. It is never a group-by
 over `dq.dq_finding.details`, which is evidence and not a key.
+
+**It carries its denominator**, for the reason §11.5 makes a score carry one. `findings` is
+the winning field's count, `considered` is how many open findings name a field at all, and
+`total` is every open finding in scope. The three are routinely far apart — §11.7 excludes
+field-parametric, record-shaped and diagnostic rules — so a client that showed the field
+alone would imply it summarised everything on the screen.
 
 **`dimension` on `/dq/metrics`.** `group_by=day` averages the dimensions together, which
 cannot express a single-dimension trend. The Risk **Settlement trend** sparkline is

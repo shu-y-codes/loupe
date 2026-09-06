@@ -167,7 +167,7 @@ SUMMARY: dict[str, Any] = {
             "settlement_issue": None,
         },
     ],
-    "worst_field": {"field": "close", "findings": 6},
+    "worst_field": {"field": "close", "findings": 6, "considered": 6, "total": 10},
     "records": {"total": 1000, "excluded": 12},
     "top_issues": [{"rule_id": "CON.CLOSE_OUT_OF_RANGE", "findings": 6, "severity": "error"}],
     "meta": {"run_id": "run-1"},

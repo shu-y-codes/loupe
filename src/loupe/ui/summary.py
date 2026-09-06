@@ -108,6 +108,7 @@ def render_headline(
     if persona == "Risk":
         attention = [row for row in contracts if row["status"] == "ATTN"]
         completeness = _completeness(summary)
+        daily = any("daily" in row.get("frequencies", []) for row in contracts)
         columns = st.columns(4)
         with columns[0]:
             _tile("DQ score", score_text(summary.get("overall_score")))
@@ -117,7 +118,7 @@ def render_headline(
             _tile("Completeness", percentage(completeness))
         with columns[3]:
             st.caption(f"Settlement trend — {helptext.TILES['Settlement trend']}")
-            _render_trend(trend)
+            _render_trend(trend, has_daily=daily)
         return
 
     if persona == "Trader":
@@ -143,6 +144,16 @@ def render_headline(
         # §11.7: absent is a real answer, not a rendering failure. `OUT.*` and missing-slot
         # runs are unmapped by design, so a corpus can honestly have no worst field.
         _tile("Worst field", worst["field"] if worst else "not applicable")
+        # State the denominator, as §11.5 requires of a score: the map excludes three groups
+        # of rules, so a bare field name invites the reader to think it summarises every
+        # finding on the screen when it can rest on a small minority of them.
+        if not worst:
+            st.caption("No open finding names a field.")
+        elif worst.get("total") is not None:
+            st.caption(
+                f"{worst['findings']} finding(s) · {worst.get('considered')} of "
+                f"{worst['total']} open findings name a field"
+            )
 
 
 def _completeness(summary: dict[str, Any]) -> float | None:
@@ -151,8 +162,17 @@ def _completeness(summary: dict[str, Any]) -> float | None:
     return dimension_score(summary, "completeness")
 
 
-def _render_trend(trend: list[dict[str, Any]]) -> None:
-    """Daily completeness over trade dates — the settlement-reliability sparkline."""
+def _render_trend(trend: list[dict[str, Any]], *, has_daily: bool = True) -> None:
+    """Daily completeness over trade dates — the settlement-reliability sparkline.
+
+    When nothing daily is loaded the panel says so rather than showing an empty axis, the
+    same treatment the VWAP panel gets for a daily-only contract: the two absences have
+    different causes and a blank chart would render them identically.
+    """
+    if not has_daily:
+        st.info("**No daily records loaded.** Settlement reliability is measured on the "
+                "daily file, so there is nothing to trend yet.")
+        return
     if not trend:
         st.caption("No trend yet — run validation over a window with daily records.")
         return
@@ -200,6 +220,16 @@ def render_summary(
         "Analyst": "Loaded contracts · score then name",
     }[persona]
     st.caption(caption)
+    if persona == "Risk" and not any(
+        "daily" in row.get("frequencies", []) for row in contracts
+    ):
+        # A column of em dashes is ambiguous between "nothing wrong with the close" and "we
+        # cannot see the close from here". Only the second is true when no daily file is
+        # loaded, so say which it is.
+        st.info(
+            "**No daily records loaded.** Closing-day is empty because settlement lives in "
+            "the daily file, not because these contracts' settlements are clean."
+        )
 
     event = st.dataframe(
         frame,

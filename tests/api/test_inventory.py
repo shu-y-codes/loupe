@@ -10,6 +10,9 @@ from __future__ import annotations
 
 DEFECT_FIXTURE = "con_close_out_of_range.csv"
 MINUTE_FIXTURE = "insights_vwap_window.csv"
+#: A vendor **daily** file whose close sits outside the bar range — the only fixture that
+#: reaches the Closing-day column, and so the only one that can prove it is populated.
+SETTLEMENT_FIXTURE = "con_derived_bar_invalid_vendor.csv"
 
 
 def _summary(client):
@@ -74,18 +77,43 @@ def test_status_follows_severity_and_not_a_score_cut(client, upload):
         assert row["status"] == ("ATTN" if severe else "OK")
 
 
+def test_a_daily_settlement_defect_produces_a_closing_day_callout(client, upload):
+    """The positive case, and the one that proves the column is populated at all.
+
+    Without this, every other settlement assertion in this file passes vacuously: a feature
+    that returned `None` unconditionally would satisfy "only draws from the named set" and
+    "minute-only has no callout" both. `CLZ25` in this fixture is a vendor **daily** file
+    whose close sits outside the bar range, which is exactly the Risk wireframe's first row.
+    """
+    from loupe.quality import SETTLEMENT_RULES
+
+    upload(SETTLEMENT_FIXTURE)
+    body = _summary(client)
+
+    called_out = [row for row in body["contracts"] if row["settlement_issue"]]
+    assert called_out, "a daily close-out-of-range must reach the Closing-day column"
+
+    callout = called_out[0]["settlement_issue"]
+    assert callout["rule_id"] in SETTLEMENT_RULES
+    assert callout["label"], "the callout reads from dq_rule.name, not widget copy"
+    assert "daily" in called_out[0]["frequencies"]
+
+
 def test_the_settlement_callout_draws_only_from_the_named_set(client, upload):
     """Risk's Closing-day column, `SETTLEMENT_RULES` at daily grain (§11.6)."""
     from loupe.quality import SETTLEMENT_RULES
 
-    upload(DEFECT_FIXTURE)
+    upload(SETTLEMENT_FIXTURE)
     body = _summary(client)
 
+    seen = 0
     for row in body["contracts"]:
         callout = row["settlement_issue"]
         if callout is not None:
+            seen += 1
             assert callout["rule_id"] in SETTLEMENT_RULES
             assert callout["label"], "the callout reads from dq_rule.name, not widget copy"
+    assert seen, "this assertion is only worth making against a populated column"
 
 
 def test_a_minute_only_contract_has_no_closing_day_callout(client, upload):
@@ -96,7 +124,10 @@ def test_a_minute_only_contract_has_no_closing_day_callout(client, upload):
     minute_only = [row for row in body["contracts"] if row["frequencies"] == ["minute"]]
     assert minute_only, "fixture should hold a minute-only contract"
     for row in minute_only:
+        # The rule fired — `CON.CLOSE_OUT_OF_RANGE` is in the set — and the callout is still
+        # empty, so it is the daily-grain clause doing the work and not an absent finding.
         assert row["settlement_issue"] is None
+        assert row["finding_count"] > 0
 
 
 def test_top_issue_is_per_contract_and_not_the_scope_wide_list(client, upload):

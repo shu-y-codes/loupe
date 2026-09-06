@@ -227,6 +227,14 @@ A contract held only at minute grain has no daily records and so no settlement t
 the same boundary as §11.6's closing-day callout and holds for the same reason: settlement
 lives in the daily file.
 
+**When no daily records are loaded at all, both panels say so.** The trend tile and the
+inventory each state "No daily records loaded", the way the VWAP panel states "needs minute
+bars" rather than rendering an empty chart. An empty Closing-day column is ambiguous between
+*nothing is wrong with the close* and *we cannot see the close from here*, and on a
+minute-only corpus it is always the second — so the page must not let a column of em dashes
+read as a clean bill of health. Risk loses two of its five columns and one of its four tiles
+on such a corpus, which is correct but needs saying out loud.
+
 **Specifics** — multi-select allowed; no tick log, no outlier hunting.
 
 ```

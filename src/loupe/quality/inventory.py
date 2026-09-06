@@ -192,11 +192,21 @@ def worst_field(
     corpus whose findings are only those has no worst field to report.
     """
     totals: dict[str, int] = {}
+    open_findings = 0
     for tally in _tallies(con, run_id, contracts):
+        open_findings += tally.findings
         field = RULE_SUBJECT_FIELD.get(tally.rule_id)
         if field is not None:
             totals[field] = totals.get(field, 0) + tally.findings
     if not totals:
         return None
     field = max(totals, key=lambda f: (totals[f], f))
-    return {"field": field, "findings": totals[field]}
+    # State the denominator, for the reason §11.5 makes scores state theirs: the map excludes
+    # three groups of rules by design, so the winning field can rest on a small minority of
+    # what is open. A bare "close" invites the reader to assume it summarises everything.
+    return {
+        "field": field,
+        "findings": totals[field],
+        "considered": sum(totals.values()),
+        "total": open_findings,
+    }

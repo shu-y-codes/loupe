@@ -82,6 +82,50 @@ def test_worst_field_reads_not_applicable_when_no_mapped_rule_fired(app):
     assert tile.value == "not applicable"
 
 
+def test_the_worst_field_tile_states_its_denominator(app):
+    """§11.5's rule for scores applied to this tile: say what the number is out of.
+
+    The map excludes three groups of rules by design, so the winning field can rest on a
+    small minority of what is open. Naming the field alone invites the reader to think it
+    summarises every finding on the screen.
+    """
+    test = _no_exception(app("Analyst"))
+    captions = " ".join(c.value for c in test.caption)
+    assert "6 of 10 open findings name a field" in captions
+
+
+def test_the_denominator_caption_is_absent_rather_than_wrong_when_unknown(app):
+    """An older envelope must not take the page down over a caption."""
+    client = FakeClient(summary={**SUMMARY, "worst_field": {"field": "close", "findings": 6}})
+    test = _no_exception(app("Analyst", client=client))
+    tile = next(m for m in test.metric if m.label == "Worst field")
+    assert tile.value == "close"
+
+
+def test_risk_says_when_no_daily_records_are_loaded(app):
+    """An empty Closing-day column is ambiguous; only one of its two meanings is true here.
+
+    "Nothing wrong with the close" and "we cannot see the close from here" render identically
+    as em dashes, and on a minute-only corpus it is always the second.
+    """
+    minute_only = {
+        **SUMMARY,
+        "contracts": [
+            {**row, "frequencies": ["minute"], "settlement_issue": None}
+            for row in SUMMARY["contracts"]
+        ],
+    }
+    test = _no_exception(app("Risk", client=FakeClient(summary=minute_only)))
+    notices = [i.value for i in test.info if "No daily records loaded" in i.value]
+    assert len(notices) == 2, "both the inventory and the trend tile should say so"
+    assert any("settlement lives in the daily file" in n for n in notices)
+
+
+def test_risk_stays_quiet_about_daily_records_when_some_are_loaded(app):
+    test = _no_exception(app("Risk"))
+    assert not [i for i in test.info if "No daily records loaded" in i.value]
+
+
 # ------------------------------------------------------------------ callouts
 
 
