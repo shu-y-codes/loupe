@@ -3,7 +3,7 @@
 **Goal.** `REC.*` when both frequencies exist; report-only suggestions; labelled
 defect injection with a ground-truth manifest.
 
-**Status.** pending
+**Status.** done — 2026-09-07
 
 Amended 2026-09-06 after slice 5 shipped. Slice 5 left three forward references into this
 slice and created one coupling it could not see: `dq.dq_finding.frequency` for a `REC.*`

@@ -26,6 +26,7 @@ from loupe.quality import (
     score_slice,
     worst_field,
 )
+from loupe.quality.corroboration import FindingRef, corroborate
 from loupe.quality.errors import RulesNotSeeded
 
 from ..deps import (
@@ -42,6 +43,7 @@ from ..models import (
     ChangelogEntry,
     ChangelogResponse,
     ContractSummary,
+    Corroboration,
     DimensionScore,
     DqMetricsResponse,
     DqSummaryResponse,
@@ -385,7 +387,7 @@ def findings(
         f"""
         SELECT f.finding_id, f.rule_id, f.contract_id, f.frequency, f.trade_date,
                f.ts_start_utc, f.ts_end_utc, f.severity, f.affected_rows, f.status,
-               f.details, m.batch_id, b.filename, m.source_row
+               f.details, m.batch_id, b.filename, m.source_row, f.run_id
         FROM dq.dq_finding f
         LEFT JOIN stage.market_record m ON m.record_id = f.record_id
         LEFT JOIN stage.ingest_batch  b ON b.batch_id  = m.batch_id
@@ -396,11 +398,34 @@ def findings(
         [*args, limit, offset],
     ).fetchall()
     return FindingsResponse(
-        data=[_as_finding(r) for r in rows], total=int(total), limit=limit, offset=offset
+        data=_as_findings(con, rows), total=int(total), limit=limit, offset=offset
     )
 
 
-def _as_finding(row) -> Finding:
+def _as_findings(con, rows) -> list[Finding]:
+    """One resolution pass over the page, not one per row (`specs/api-contract.md` §6.2).
+
+    Corroboration is three lookups shared across every row, so resolving it per finding would
+    turn a hundred-row page into three hundred queries for an answer that does not change.
+    """
+    resolved = corroborate(
+        con,
+        [
+            FindingRef(
+                finding_id=str(row[0]),
+                rule_id=row[1],
+                frequency=row[3],
+                contract_id=row[2],
+                trade_date=row[4],
+                run_id=str(row[14]) if row[14] is not None else None,
+            )
+            for row in rows
+        ],
+    )
+    return [_as_finding(row, resolved.get(str(row[0]))) for row in rows]
+
+
+def _as_finding(row, corroboration=None) -> Finding:
     source = (
         {
             "batch_id": str(row[11]),
@@ -423,6 +448,11 @@ def _as_finding(row) -> Finding:
         status=row[9],
         details=_json(row[10]),
         source=source,
+        # Absent rather than a placeholder state: null means corroboration does not apply to
+        # this finding, which is a different answer from `not_comparable` (§6.2).
+        corroboration=(
+            Corroboration(**corroboration.as_json()) if corroboration is not None else None
+        ),
     )
 
 
@@ -432,7 +462,7 @@ def get_finding(con: Con, finding_id: str) -> Finding:
         """
         SELECT f.finding_id, f.rule_id, f.contract_id, f.frequency, f.trade_date,
                f.ts_start_utc, f.ts_end_utc, f.severity, f.affected_rows, f.status,
-               f.details, m.batch_id, b.filename, m.source_row
+               f.details, m.batch_id, b.filename, m.source_row, f.run_id
         FROM dq.dq_finding f
         LEFT JOIN stage.market_record m ON m.record_id = f.record_id
         LEFT JOIN stage.ingest_batch  b ON b.batch_id  = m.batch_id
@@ -448,7 +478,9 @@ def get_finding(con: Con, finding_id: str) -> Finding:
             code="STR.UNKNOWN_FINDING",
             type_="/errors/finding-not-found",
         )
-    return _as_finding(row)
+    # Both routes carry it (§6.2). A detail view that dropped the qualification would be the
+    # one place a reader looks hardest at a finding and the one place it is unqualified.
+    return _as_findings(con, [row])[0]
 
 
 @router.get(

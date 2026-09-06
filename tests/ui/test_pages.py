@@ -14,7 +14,9 @@ from ui_helpers import (
     FINDINGS,
     MIXED_SCOPE,
     NOT_BUILT,
+    PATTERNS,
     RECONCILED,
+    SUGGESTIONS,
     SUMMARY,
     VWAP_REFUSED,
     FakeClient,
@@ -44,6 +46,11 @@ def test_every_stub_matches_the_response_model_it_stands_in_for():
         ("CHANGELOG", CHANGELOG[0], models.ChangelogEntry),
         ("CONTRACT_ROW", SUMMARY["contracts"][0], models.ContractSummary),
         ("SLICE", SUMMARY["slices"][0], models.SliceScore),
+        ("CORROBORATION", FINDINGS[0]["corroboration"], models.Corroboration),
+        ("PATTERN", PATTERNS["data"][0], models.Pattern),
+        ("PATTERNS", PATTERNS, models.PatternsResponse),
+        ("SUGGESTION", SUGGESTIONS["data"][0], models.Suggestion),
+        ("SUGGESTIONS", SUGGESTIONS, models.SuggestionsResponse),
     ]
     for name, stub, model in envelopes:
         unknown = set(stub) - set(model.model_fields)
@@ -300,12 +307,90 @@ def test_specifics_leads_with_why_impact_address(app):
     assert ["Why", "Impact", "Address"] in tables
 
 
-def test_address_is_text_and_says_why_there_is_no_suggestion_yet(app):
-    """Done-when 9: build against the slice 6 route, never stub the copy in a widget."""
-    client = FakeClient(suggestions=NOT_BUILT)
+def test_address_carries_real_suggestion_text_when_the_route_answers(app):
+    """The built path. This is the assertion slice 5 could not make and slice 6 must.
+
+    `_address()` needed no new code when the route shipped — which is exactly the risk, because
+    the 404 test below keeps passing whether or not the populated branch works. Asserted
+    against the stub's own rationale so it cannot pass on the pending sentence.
+    """
+    from ui_helpers import SUGGESTIONS
+
+    test = _no_exception(app("Risk", contract="ZCZ25"))
+    table = next(d.value for d in test.dataframe if "Address" in list(d.value.columns))
+    address = table["Address"].iloc[0]
+
+    assert address == SUGGESTIONS["data"][0]["rationale"]
+    assert "this release reports and does not apply" not in address
+
+
+def test_address_says_why_there_is_no_suggestion_when_the_route_is_absent(app):
+    """The other side of the branch, kept: a UI pointed at an older API must explain itself."""
+    client = FakeClient(insights_suggestions=NOT_BUILT)
     test = _no_exception(app("Risk", client=client, contract="ZCZ25"))
     table = next(d.value for d in test.dataframe if "Address" in list(d.value.columns))
     assert "report" in table["Address"].iloc[0].lower()
+
+
+def test_address_distinguishes_no_suggestion_from_no_report(app):
+    """An empty list is a different answer from a missing route, and the cell says which.
+
+    "No suggestion for this contract" means the report ran and found nothing to propose;
+    "not in this build" means it never ran. Collapsing them would tell a reader their data is
+    fine when the truth is that nobody looked.
+    """
+    client = FakeClient(insights_suggestions={"data": [], "total": 0})
+    test = _no_exception(app("Risk", client=client, contract="ZCZ25"))
+    table = next(d.value for d in test.dataframe if "Address" in list(d.value.columns))
+    address = table["Address"].iloc[0]
+    assert "No suggestion" in address
+    assert "build" not in address
+
+
+def test_the_why_cell_states_what_the_tape_makes_of_a_daily_finding(app):
+    """`specs/loupe-ui-design.md`: the corroboration state rides in **Why**, beside the finding.
+
+    Rendered from the envelope, not derived here — the cell prints the API's own sentence, so a
+    widget cannot quietly soften what `quality` decided.
+    """
+    test = _no_exception(app("Risk", contract="ZCZ25"))
+    table = next(d.value for d in test.dataframe if "Why" in list(d.value.columns))
+    why = table["Why"].iloc[0]
+    assert "range disputed" in why
+    assert "found prints above the stated high" in why
+
+
+def test_confirmed_and_disputed_read_as_opposite_instructions(app):
+    """The two states must not render alike: one says trust the range, the other says do not.
+
+    Same rule, same contract, same date — only the state differs, which is exactly the pair a
+    reader has to be able to tell apart at a glance.
+    """
+    from ui_helpers import CONFIRMED_FINDINGS
+
+    client = FakeClient(findings={"data": CONFIRMED_FINDINGS, "total": 2})
+    test = _no_exception(app("Risk", client=client, contract="ZCZ25"))
+    confirmed = next(d.value for d in test.dataframe if "Why" in list(d.value.columns))
+    assert "range confirmed against the tape" in confirmed["Why"].iloc[0]
+    assert "disputed" not in confirmed["Why"].iloc[0]
+
+    default = _no_exception(app("Risk", contract="ZCZ25"))
+    disputed = next(d.value for d in default.dataframe if "Why" in list(d.value.columns))
+    assert confirmed["Why"].iloc[0] != disputed["Why"].iloc[0]
+
+
+def test_a_finding_without_corroboration_gets_no_second_line(app):
+    """Absent is the fourth answer, and it renders as silence rather than as a caveat.
+
+    `not_comparable` would say "we could not check"; nothing at all says the question does not
+    arise. Printing the first where the truth is the second invents a doubt about the daily
+    file that the finding never raised.
+    """
+    test = _no_exception(app("Risk", contract="ZCZ25"))
+    table = next(d.value for d in test.dataframe if "Why" in list(d.value.columns))
+    minute_row = table["Why"].iloc[1]
+    assert "\n" not in minute_row
+    assert "corroborat" not in minute_row.lower()
 
 
 # ------------------------------------------------------------ report-only v1
@@ -362,7 +447,53 @@ def test_the_neighbourhood_is_collapsed_until_a_finding_is_selected(app):
     assert any("Select a finding" in c.value for c in test.caption)
 
 
-def test_patterns_and_suggestions_explain_that_they_ship_later(app):
+def test_the_patterns_panel_renders_the_rows_the_route_returns(app):
+    """Done-when 9's built path. `_report()` needed no new code, so nothing tested it.
+
+    Asserted against the stub's own values — the lift, the bucket and the narrative — so it
+    cannot pass against a panel that renders an empty frame or the "not in this build" caption.
+    """
+    from ui_helpers import PATTERNS
+
+    test = _no_exception(app("Analyst", contract="ZCZ25"))
+    pattern = PATTERNS["data"][0]
+    frames = [d.value for d in test.dataframe if "lift" in list(d.value.columns)]
+    assert frames, "the patterns panel drew no table"
+
+    frame = frames[0]
+    assert pattern["bucket"] in list(frame["bucket"])
+    assert pattern["lift"] in list(frame["lift"])
+    assert pattern["narrative"] in list(frame["narrative"])
+
+
+def test_the_suggestions_panel_renders_the_rows_the_route_returns(app):
+    """The second half of the same panel, asserted on its own: the two reports come from two
+    routes, and one of them working says nothing about the other."""
+    from ui_helpers import SUGGESTIONS
+
+    test = _no_exception(app("Analyst", contract="ZCZ25"))
+    suggestion = SUGGESTIONS["data"][0]
+    frames = [d.value for d in test.dataframe if "rationale" in list(d.value.columns)]
+    assert frames, "the suggestions panel drew no table"
+    assert suggestion["title"] in list(frames[0]["title"])
+
+
+def test_the_rendered_suggestion_offers_nothing_to_press(app):
+    """Report-only reaches the rendered table too, not only the payload.
+
+    A suggestion carries a `proposed_change`, which is a description of a change and not a
+    request to make one. No column and no control in the tree may read as an action.
+    """
+    test = _no_exception(app("Analyst", contract="ZCZ25"))
+    frames = [d.value for d in test.dataframe if "rationale" in list(d.value.columns)]
+    assert frames
+    columns = {c.lower() for c in frames[0].columns}
+    assert not (columns & {"actions", "apply", "dismiss"})
+
+
+def test_patterns_and_suggestions_explain_themselves_when_the_routes_are_absent(app):
+    """The 404 side, kept. Both branches matter: a panel that renders nothing is ambiguous
+    between "no patterns" and "no report"."""
     client = FakeClient(insights_patterns=NOT_BUILT, insights_suggestions=NOT_BUILT)
     test = _no_exception(app("Analyst", client=client, contract="ZCZ25"))
     captions = " ".join(c.value for c in test.caption)

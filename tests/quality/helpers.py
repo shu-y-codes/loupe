@@ -20,7 +20,8 @@ def findings(
     rows = con.execute(
         """
         SELECT rule_id, contract_id, frequency, trade_date, ts_start_utc, ts_end_utc,
-               record_id, affected_rows, severity, CAST(details AS VARCHAR), status
+               record_id, affected_rows, severity, CAST(details AS VARCHAR), status,
+               compare_frequency
         FROM dq.dq_finding
         WHERE run_id = ? AND rule_id = ?
         ORDER BY coalesce(record_id, 0), ts_start_utc, trade_date
@@ -40,6 +41,10 @@ def findings(
             "severity": row[8],
             "details": json.loads(row[9]) if row[9] else {},
             "status": row[10],
+            # Null for every family but `REC.*`, and load-bearing there: `frequency` is the
+            # side the finding is a statement about and this is the side it was checked
+            # against (spec §8), which the closing-day callout filters on.
+            "compare_frequency": row[11],
         }
         for row in rows
     ]

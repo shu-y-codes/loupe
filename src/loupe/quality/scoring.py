@@ -32,6 +32,12 @@ from typing import Any
 import duckdb
 
 from .catalogue import DEFAULT_MIN_RECORDS
+from .reconciliation import (
+    CROSS,
+    ReconciliationScore,
+    reconciliation_evidence,
+    reconciliation_score,
+)
 from .registry import RECORDS, WINDOWS
 
 #: Only these count as defects (spec §11.1). `info` never enters a numerator, which is what
@@ -260,6 +266,7 @@ def _compose(
     findings: dict[str, int],
     weights: dict[str, float],
     not_in_scope: list[dict[str, str]],
+    reconciliation: ReconciliationScore | None = None,
     recovered: int = 0,
     min_records: int,
 ) -> SliceScore:
@@ -301,6 +308,25 @@ def _compose(
             finding_count=findings.get(dimension, 0),
         )
 
+    if reconciliation is not None and reconciliation.score is not None:
+        # §8.6 is session-grained and §11.3 is what makes it safe to add: the weighted mean
+        # divides by the weights actually in scope, so a contract holding both granularities
+        # divides by 1.20 and its neighbour holding one divides by 1.00. Neither is scored up
+        # or down for how many files were uploaded, and `scope_signature` says which happened.
+        dimensions["reconciliation"] = DimensionScore(
+            dimension="reconciliation",
+            score=reconciliation.score,
+            weight=weights.get("reconciliation", 0.0),
+            denominator=reconciliation.reconcilable_sessions,
+            basis="reconcilable_sessions",
+            affected_records=reconciliation.defect_sessions,
+            finding_count=reconciliation.finding_count,
+        )
+    elif reconciliation is not None:
+        out_of_scope.append(
+            {"dimension": "reconciliation", "reason": reconciliation.reason or ""}
+        )
+
     weight_total = sum(d.weight for d in dimensions.values())
     insufficient = actual < min_records
     if insufficient or not dimensions or weight_total <= 0:
@@ -324,37 +350,6 @@ def _compose(
     )
 
 
-def _reconciliation_note(
-    con: duckdb.DuckDBPyConnection, contract_id: str
-) -> dict[str, str]:
-    """Why reconciliation is out of scope. Never "score 100" and never "score 0" (§11.3).
-
-    Both reasons are statements about **the data**, not about the roadmap. They are rendered
-    verbatim — `dimensions_not_in_scope` reaches the API envelope and the UI prints it under
-    the score (`specs/loupe-ui-design.md`) — so a build-sequence note here would be shown to a
-    reader as if it were a fact about their contract.
-
-    The second branch is where reconciliation becomes *scoreable*: §8.6's sub-score over
-    reconcilable sessions, renormalised to a 1.20 denominator by §11.3. Until `REC.*` findings
-    exist there is no evidence to score, and the honest answer is this note rather than a
-    numerator of zero defects — which would read as a perfect 100 and is the failure §11.3
-    rejects by name.
-    """
-    row = con.execute(
-        f"SELECT count(DISTINCT frequency) FROM {RECORDS} WHERE contract_id = ?",
-        [contract_id],
-    ).fetchone()
-    both = bool(row and int(row[0]) > 1)
-    return {
-        "dimension": "reconciliation",
-        "reason": (
-            "no reconciliation evidence has been computed for this contract"
-            if both
-            else "only one frequency uploaded for this contract"
-        ),
-    }
-
-
 def score_slice(
     con: duckdb.DuckDBPyConnection,
     run_id: str,
@@ -363,7 +358,13 @@ def score_slice(
     *,
     min_records: int = DEFAULT_MIN_RECORDS,
 ) -> SliceScore:
-    """Score one contract x frequency slice. Call inside `runner.scoped`."""
+    """Score one contract x frequency slice. Call inside `runner.scoped`.
+
+    Reconciliation is measured here for the **contract**, not for the slice: §8.6 counts
+    sessions the two files both hold, which is not a fact about either granularity on its own.
+    Both slices of a dual-grain contract therefore carry the same reconciliation sub-score and
+    the same `+rec` scope signature, and a contract holding one granularity carries neither.
+    """
     return _compose(
         contract_id=contract_id,
         frequency=frequency,
@@ -372,7 +373,8 @@ def score_slice(
         defects=_defects(con, run_id, contract_id, frequency),
         findings=_finding_counts(con, run_id, contract_id, frequency),
         weights=_weights(con),
-        not_in_scope=[_reconciliation_note(con, contract_id)],
+        not_in_scope=[],
+        reconciliation=reconciliation_score(con, run_id, contract_id),
         min_records=min_records,
     )
 
@@ -396,6 +398,10 @@ def score_if_resolved(
     are not meant to. Two rules often describe one absence — a run of missing slots is both
     `CMP.MISSING_TIMESTAMP` and the `CMP.PARTIAL_SESSION` it causes — and resolving either
     implies the same slots exist, so both show the same recovered score.
+
+    A `REC.*` rule is dried-run the same way: its sessions leave §8.6's numerator, so the
+    worklist can say what resolving the disagreements would recover. Without that the
+    reconciliation rules would every one of them report "resolving this changes nothing".
     """
     return _compose(
         contract_id=contract_id,
@@ -405,7 +411,10 @@ def score_if_resolved(
         defects=_defects(con, run_id, contract_id, frequency, exclude_rule=rule_id),
         findings=_finding_counts(con, run_id, contract_id, frequency),
         weights=_weights(con),
-        not_in_scope=[_reconciliation_note(con, contract_id)],
+        not_in_scope=[],
+        reconciliation=reconciliation_score(
+            con, run_id, contract_id, exclude_rule=rule_id
+        ),
         recovered=_recovered_slots(con, run_id, contract_id, frequency, rule_id),
         min_records=min_records,
     )
@@ -559,6 +568,8 @@ def persist_daily_metrics(con: duckdb.DuckDBPyConnection, run_id: str) -> int:
         [*ALWAYS_IN_SCOPE, run_id, *DEFECT_SEVERITIES, run_id],
     ).fetchall()
 
+    rows += _reconciliation_metric_rows(con, run_id)
+
     if rows:
         con.executemany(
             """
@@ -570,6 +581,42 @@ def persist_daily_metrics(con: duckdb.DuckDBPyConnection, run_id: str) -> int:
             rows,
         )
     return len(rows)
+
+
+def _reconciliation_metric_rows(
+    con: duckdb.DuckDBPyConnection, run_id: str
+) -> list[tuple[Any, ...]]:
+    """One row per reconcilable session at `frequency = 'cross'` (§11.1).
+
+    `'cross'` rather than a granularity because the row is about the **pair**: neither file
+    holds this measurement on its own. `mart.dq_metric_daily` does not constrain `frequency`,
+    so this needs no DDL change.
+
+    The columns are read the way the other dimensions read them, on the session's own terms:
+    `expected_records` is the calendar's slot count and `actual_records` the minute records
+    behind the derived bar, so their ratio is the coverage the comparison rested on — which is
+    what `corroboration.py` needs and the one fact a later reader cannot recover from findings
+    alone, since a session that reconciled cleanly writes no finding at all.
+
+    `dimension_score` is 0 or 100 per session because §8.6 is session-grained: a session either
+    reconciles or it does not. Averaged over a window it is exactly §8.6's sub-score. Rows are
+    **absent**, not zero, where only one granularity was uploaded — the frame produces nothing
+    for such a contract, which is what keeps "we did not check" from rendering as a score.
+    """
+    return [
+        (
+            session.contract_id,
+            session.trade_date,
+            CROSS,
+            "reconciliation",
+            session.expected_slots,
+            session.minute_records,
+            1 if session.is_defect else 0,
+            session.findings,
+            0.0 if session.is_defect else 100.0,
+        )
+        for session in reconciliation_evidence(con, run_id)
+    ]
 
 
 def score_run(

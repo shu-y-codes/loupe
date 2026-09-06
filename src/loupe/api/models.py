@@ -396,6 +396,29 @@ class DqMetricsResponse(BaseModel):
     total: int
 
 
+class Corroboration(BaseModel):
+    """What the minute tape says about a daily finding (`specs/api-contract.md` §6.2).
+
+    It rides on the finding rather than on a route of its own, because it is not a fact about
+    the corpus but a *qualification of this finding*: a client that could fetch the finding
+    without it would render "close outside the range" without saying whether the range can be
+    trusted, which is the reading the state changes.
+    """
+
+    state: str = Field(
+        description="`confirmed`, `disputed` or `not_comparable`. `confirmed` licenses reading "
+        "the finding as being about the value; `disputed` says the stated range is itself "
+        "wrong; `not_comparable` licenses neither and exists so that 'we could not check' is "
+        "never rendered as 'we checked and it holds'."
+    )
+    reason: str = Field(description="One sentence, rendered as given. Never a code.")
+    detail: dict[str, Any] = Field(
+        default_factory=dict,
+        description="The evidence behind the state — coverage, the disputed field and its "
+        "size, and the `REC.OHLC_DISAGREE` finding ids that say so.",
+    )
+
+
 class Finding(BaseModel):
     finding_id: str
     rule_id: str
@@ -410,6 +433,13 @@ class Finding(BaseModel):
     details: Any | None = Field(None, description="Evidence. Never grouped on.")
     source: dict[str, Any] | None = Field(
         None, description="Carries `source_row` so the UI can cite a row of a named file."
+    )
+    corroboration: Corroboration | None = Field(
+        None,
+        description="Absent is a **fourth answer** and means *corroboration does not apply to "
+        "this finding* — a minute-grain timeliness finding is not a claim the daily file can "
+        "speak to. `not_comparable` means it applies and could not be evaluated. Computed, "
+        "never stored: no column, no finding of its own, and no contribution to any score.",
     )
 
 
@@ -474,3 +504,77 @@ class RunSummary(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     scores: list[SliceScore] = Field(default_factory=list)
+
+
+# ------------------------------------------------------------------------------- insights
+
+
+class Pattern(BaseModel):
+    """One over-concentration of findings, corrected for exposure (dq spec §12)."""
+
+    pattern_id: str = Field(
+        description="Stable across requests: derived from the rule, dimension and bucket, so a "
+        "suggestion's `from_pattern` still names something on the next call."
+    )
+    rule_id: str
+    dimension: str = Field(
+        description="The bucket dimension — `hour_of_day`, `day_of_week`, `trade_date`, "
+        "`contract`, `frequency` or `batch`. Not a quality dimension."
+    )
+    bucket: str
+    share_of_findings: float
+    share_of_records: float = Field(
+        description="The exposure this is corrected for. A bucket holding half the findings is "
+        "only interesting if it does not also hold half the records."
+    )
+    lift: float = Field(description="`share_of_findings / share_of_records`. A ratio, not a count.")
+    support: int = Field(description="Findings in the bucket.")
+    distinct_days: int
+    narrative: str = Field(
+        description="Generated from a template, never by a language model. Aggregates only; raw "
+        "market data never leaves the process (locked decision 5)."
+    )
+    confidence: str = Field(description="`high`, `medium` or `low` — words, not a probability.")
+
+
+class PatternsResponse(BaseModel):
+    scope: Scope
+    data: list[Pattern]
+    total: int
+    meta: dict[str, Any] = Field(
+        default_factory=dict,
+        description="The thresholds applied, echoed so a caller can tell an empty list from a "
+        "filter that excluded everything.",
+    )
+
+
+class Suggestion(BaseModel):
+    """A proposed change with its rationale and dry-run effect (dq spec §13).
+
+    **Report-only in v1**, and the shape says so by what it omits: there is no `actions` list,
+    no apply link and no dismiss link. Applying a suggestion — mutate the catalogue or the
+    calendar, re-run the scope, return before and after scores — is the extension of
+    `specs/api-contract.md` §7.1.
+    """
+
+    suggestion_id: str
+    from_pattern: str = Field(description="The `pattern_id` that triggered this generator.")
+    kind: str = Field(description="`calendar`, `rule`, `tick` or `ingest`.")
+    title: str
+    rationale: str = Field(description="Why, in the evidence's own numbers. Text, not a code.")
+    evidence: dict[str, Any]
+    proposed_change: dict[str, Any] = Field(
+        description="`target`, `operation` and `params` — a description of a change, not a "
+        "request to make one."
+    )
+    expected_effect: dict[str, Any] = Field(
+        description="Dry-run before display, over the persisted metrics rather than by "
+        "re-running the rules: a report must not be a write."
+    )
+    confidence: float
+
+
+class SuggestionsResponse(BaseModel):
+    scope: Scope
+    data: list[Suggestion]
+    total: int

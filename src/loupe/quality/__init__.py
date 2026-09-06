@@ -8,8 +8,12 @@ the §11.2 weights into `dq.score_weight`; `assess` then runs the enabled rules 
 records cleaning decisions, and scores what it found — all reading thresholds, severities and
 weights back from those rows.
 
-`CON.DERIVED_BAR_INVALID` and `OUT.*` are deferred to slice 3, where bar provenance and the
-MAD method are specified (`plans/02-quality.md`). `REC.*`, patterns and suggestions are slice 6.
+`REC.*` is the one family that reads two granularities at once, so it is spread over four
+modules on purpose: `reconciliation` holds the session frame the other three share,
+`rules.reconciliation` writes the findings, `scoring` takes §8.6's denominator from the frame,
+and `corroboration` reads the findings back to say what the tape makes of a *daily* finding —
+writing nothing and scoring nothing. `patterns` and `suggestions` sit on top of all of it and
+are reports: they read findings and propose, and they never mutate a rule or a calendar.
 """
 
 from .catalogue import (
@@ -22,6 +26,7 @@ from .catalogue import (
 )
 from .changelog import ChangelogEntry, changelog, latest_run
 from .cleaning import CleaningReport, apply_default_cleaning, exclusion_rate
+from .corroboration import CORROBORATED_RULES, Corroboration, FindingRef, corroborate
 from .errors import LoupeQualityError, RulesNotSeeded
 from .inventory import (
     ATTENTION_SEVERITIES,
@@ -29,6 +34,13 @@ from .inventory import (
     Issue,
     contract_rows,
     worst_field,
+)
+from .patterns import Pattern, find_patterns
+from .reconciliation import (
+    CROSS,
+    ReconciliationScore,
+    reconciliation_evidence,
+    reconciliation_score,
 )
 from .registry import REGISTRY, Finding, RuleContext, RuleRefusal, RunScope
 from .runner import RunResult, assess, run_rules, scoped
@@ -43,24 +55,29 @@ from .scoring import (
     worklist,
 )
 from .seed import RuleSeedReport, ruleset_hash, seed_quality, seed_rules, seed_score_weights
+from .suggestions import Suggestion, suggest
 from .windows import CoverageWindow, RollWindow, RunInputs
 
 __all__ = [
     "ATTENTION_SEVERITIES",
     "CATALOGUE",
-    "REGISTRY",
-    "RULES_ENFORCED_BY_ENGINE",
-    "RULE_SUBJECT_FIELD",
-    "SCORE_WEIGHTS",
-    "SETTLEMENT_RULES",
+    "CORROBORATED_RULES",
+    "CROSS",
     "ChangelogEntry",
     "CleaningReport",
     "ContractRow",
+    "Corroboration",
     "CoverageWindow",
     "DimensionScore",
     "Finding",
+    "FindingRef",
     "Issue",
     "LoupeQualityError",
+    "Pattern",
+    "REGISTRY",
+    "RULES_ENFORCED_BY_ENGINE",
+    "RULE_SUBJECT_FIELD",
+    "ReconciliationScore",
     "RollWindow",
     "RuleContext",
     "RuleRefusal",
@@ -70,24 +87,32 @@ __all__ = [
     "RunInputs",
     "RunResult",
     "RunScope",
+    "SCORE_WEIGHTS",
+    "SETTLEMENT_RULES",
     "SliceScore",
+    "Suggestion",
     "WorklistEntry",
     "apply_default_cleaning",
     "assess",
     "changelog",
     "contract_rows",
+    "corroborate",
     "exclusion_rate",
+    "find_patterns",
     "latest_run",
     "persist_daily_metrics",
+    "reconciliation_evidence",
+    "reconciliation_score",
     "ruleset_hash",
     "run_rules",
+    "scoped",
     "score_if_resolved",
     "score_run",
     "score_slice",
-    "scoped",
     "seed_quality",
     "seed_rules",
     "seed_score_weights",
+    "suggest",
     "worklist",
     "worst_field",
 ]
