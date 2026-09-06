@@ -51,6 +51,12 @@ another host needs no code change:
 LOUPE_API_URL=http://localhost:9000/v1 uv run streamlit run src/loupe/ui/app.py
 ```
 
+**A new store needs two steps, not one.** `bootstrap` applies the schema and seeds reference
+data; the rule catalogue is seeded separately, because rules are rows and which rules a
+deployment wants is its decision. Until `seed_quality` has run, an upload is refused and
+`GET /v1/health` says `rules_seeded: false` — which is what the UI reads before it offers you
+anything. The snippet below does both.
+
 `GET /v1/docs` serves the OpenAPI the app generates. On an empty store the page invites an
 upload; the sidebar previews the file, discloses what it cannot support (a daily-only file
 gets bars and quality but no 15-minute VWAP), and only then commits it.

@@ -12,6 +12,7 @@ translation in one readable list instead of scattered through `try` blocks.
 from __future__ import annotations
 
 import duckdb
+from duckdb import CatalogException
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -106,6 +107,31 @@ def _register_error_handlers(app: FastAPI) -> None:
                 detail=str(exc),
                 code="STR.DATA_ERROR",
                 type_="/errors/data-error",
+            ),
+        )
+
+    @app.exception_handler(CatalogException)
+    def _catalog(request: Request, exc: CatalogException) -> JSONResponse:
+        # A store nobody has bootstrapped. Every table this app reads lives in a schema
+        # `apply_schema` creates, so a missing catalog entry on a fresh file is the ordinary
+        # first-run state rather than a defect — and answering it with a 500 carrying a raw
+        # `Catalog Error` tells a new user the app is broken when the truth is that it has not
+        # been set up. 503 rather than 4xx: the request was fine, the server is not ready yet.
+        #
+        # The underlying message leads the detail rather than being replaced by a guess, so a
+        # genuinely missing relation on a healthy store still reads as what it is.
+        return problem_response(
+            request,
+            ProblemError(
+                status=503,
+                title="Store not initialised",
+                detail=(
+                    f"{exc} Apply the schema and seed reference data once before using the "
+                    "app (see the README, Setup); GET /v1/health reports whether that has "
+                    "happened."
+                ),
+                code="CAP.STORE_NOT_INITIALISED",
+                type_="/errors/store-not-initialised",
             ),
         )
 

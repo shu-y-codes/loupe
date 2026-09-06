@@ -408,6 +408,7 @@ dataframe column `help`, chart caption.
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
 | UI | Persona view assembly; absence of apply/override controls | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| Integration | Cold start, the real client against a real server, durability on disk | uvicorn on an ephemeral port over a file-backed store, `tests/integration/` |
 | Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `tests/ui/test_pages.py` |
 
 Edge cases to fixture explicitly: exact dup, key conflict, mid-session gap, missing day,
@@ -438,6 +439,24 @@ The residue these rules do not cover is a stub that *omits* a field the API send
 absence is legitimate. That is what a built-path test is for: assert the feature does its job
 on data that should trigger it, not merely that it declines gracefully on data that should
 not.
+
+### Every tier stubs a seam, so one tier must stub none
+
+The three defects above were caught by rules about assertions. The next three were not caught
+at all, and reached a first run of the app: the store had no schema, the upload button did
+nothing, and bars were missing until something rebuilt them. They share a cause that no
+assertion rule reaches — **each tier simulates exactly the thing the others test**. `tests/api/`
+runs HTTP in-process and is handed a database somebody already set up; `tests/ui/` drives the
+pages over a client that never builds a request; every tier above runs `:memory:` and closes
+with the test. The seams between them — an unbootstrapped store, a real multipart body on a
+real socket, and state that has to outlive the request that wrote it — were the only places
+left for a defect to hide, and that is where all three were.
+
+`tests/integration/` therefore simulates neither side: uvicorn on a real port, a file-backed
+DuckDB, and the same `LoupeClient` the pages use. It is deliberately small — seams only, since
+behaviour belongs in the faster tiers that own it — and it earned its place immediately, by
+finding that every read route answered a fresh store with a bare 500 and that the client threw
+away the body of §4.3's duplicate-file refusal.
 
 ---
 

@@ -150,12 +150,41 @@ class LoupeClient:
     def create_batch(
         self, filename: str, content: bytes, *, validate: bool = True
     ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/ingest/batches",
-            files={"file": (filename, content)},
-            params={"validate": validate},
-        )
+        """Ingest a file. A re-upload of the same bytes is refused with something to say.
+
+        `specs/api-contract.md` §4.3 answers a duplicate with **409 and the existing batch** —
+        idempotent re-upload, surfaced rather than silently duplicated. That body is a batch
+        summary, not a problem document, so the blanket "4xx means problem" rule in `_request`
+        would turn the most informative refusal in the app into a bare `Conflict` with no
+        detail at all: the user is told no, and not that their file is already loaded.
+
+        So it is translated here, keeping the batch the server named. Found by
+        `tests/integration/`, which is the only tier with a real client on one side of the
+        wire and the real API on the other.
+        """
+        try:
+            return self._request(
+                "POST",
+                "/ingest/batches",
+                files={"file": (filename, content)},
+                params={"validate": validate},
+            )
+        except ApiProblem as problem:
+            if problem.status != 409:
+                raise
+            existing = problem.meta or {}
+            batch_id = existing.get("batch_id")
+            raise ApiProblem(
+                status=409,
+                code="STR.DUPLICATE_FILE",
+                title="Already ingested",
+                detail=(
+                    "These exact bytes were already loaded"
+                    + (f" as batch {batch_id}" if batch_id else "")
+                    + ". Nothing was ingested a second time."
+                ),
+                meta=existing,
+            ) from None
 
 
 def _problem(response: httpx.Response) -> ApiProblem:
@@ -166,10 +195,15 @@ def _problem(response: httpx.Response) -> ApiProblem:
         body = {}
     if not isinstance(body, dict):
         body = {}
+    # A 4xx body is *usually* RFC 7807, but not always: §4.3's duplicate-file refusal answers
+    # 409 with the existing batch summary. Keeping the whole body as `meta` when it carries no
+    # `title` means a caller can still say something specific instead of rendering a status
+    # code — `create_batch` is the one that does.
+    problem_shaped = "title" in body or "detail" in body
     return ApiProblem(
         status=response.status_code,
         code=body.get("code"),
         title=body.get("title") or response.reason_phrase or "Request failed",
         detail=body.get("detail"),
-        meta=body.get("meta"),
+        meta=body.get("meta") if problem_shaped else (body or None),
     )
