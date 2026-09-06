@@ -489,7 +489,9 @@ aggregates findings per granularity, the UI filters by it, and the same rule gen
 different verdicts on the two configs of one contract, so a query that cannot group by it cannot
 produce a correct score. Extracting a grouping key from a JSON document on every aggregation is
 the wrong shape and defeats the index. `compare_frequency` exists because a reconciliation finding
-is about a *pair*, and one column cannot say which two things disagreed; a non-null value is also
+is about a *pair*, and one column cannot say which two things disagreed. Which side lands in
+which column is fixed by `specs/dq-rules-and-scoring.md` §8 — `frequency` is the side the
+finding is a statement about — because downstream selection filters on it; a non-null value is also
 the cheapest predicate for "show me the cross-frequency findings" without pattern-matching on rule
 identifiers. The table-level `CHECK` enforces that the pair is well-formed.
 

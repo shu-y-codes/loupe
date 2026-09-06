@@ -124,12 +124,26 @@ SUMMARY: dict[str, Any] = {
             "frequency": "daily",
             "overall": 41.0,
             "dimensions": {"completeness": {"score": 88.0}},
+            "scope_signature": "cmp+val+con+unq+tim",
+            "dimensions_not_in_scope": [
+                {
+                    "dimension": "reconciliation",
+                    "reason": "only one frequency uploaded for this contract",
+                }
+            ],
         },
         {
             "contract_id": "ESZ25",
             "frequency": "minute",
             "overall": 96.0,
             "dimensions": {"completeness": {"score": 99.0}},
+            "scope_signature": "cmp+val+con+unq+tim",
+            "dimensions_not_in_scope": [
+                {
+                    "dimension": "reconciliation",
+                    "reason": "only one frequency uploaded for this contract",
+                }
+            ],
         },
     ],
     "contracts": [
@@ -245,3 +259,42 @@ COMPARE = [
     {"trade_date": "2025-12-11", "raw": 410.0, "clean": 410.0},
     {"trade_date": "2025-12-12", "raw": 412.0, "clean": 411.0},
 ]
+
+
+#: The same book with both grains loaded: reconciliation is in scope, so nothing is disclosed.
+RECONCILED: dict[str, Any] = {
+    **SUMMARY,
+    "slices": [
+        {
+            **slice_,
+            "scope_signature": "cmp+val+con+unq+tim+rec",
+            "dimensions_not_in_scope": [],
+        }
+        for slice_ in SUMMARY["slices"]
+    ],
+}
+
+
+#: A mixed book: ZCZ25 is daily-only so reconciliation is out of scope for it, while ESZ25
+#: holds both grains. The inventory then sorts a five-dimension score against a six-dimension
+#: one in a single column, which is the comparison §11.3 says must not be made silently.
+MIXED_SCOPE: dict[str, Any] = {
+    **SUMMARY,
+    "slices": [
+        {
+            **SUMMARY["slices"][0],
+            "scope_signature": "cmp+val+con+unq+tim",
+            "dimensions_not_in_scope": [
+                {
+                    "dimension": "reconciliation",
+                    "reason": "only one frequency uploaded for this contract",
+                }
+            ],
+        },
+        {
+            **SUMMARY["slices"][1],
+            "scope_signature": "cmp+val+con+unq+tim+rec",
+            "dimensions_not_in_scope": [],
+        },
+    ],
+}

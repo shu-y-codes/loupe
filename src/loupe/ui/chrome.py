@@ -101,22 +101,79 @@ def render_upload(client: LoupeClient) -> None:
         st.rerun()
 
 
+#: `enables` keys, in the reader's words rather than the wire's.
+_CAPABILITY_NAMES = {
+    "daily_bars": "Daily OHLCV bars",
+    "vwap_15m": "Rolling 15-minute VWAP",
+    "reconciliation": "Cross-frequency reconciliation",
+}
+
+
 def render_preview(preview: dict[str, Any]) -> None:
     """The dry run, capabilities included — what this file will and will not support."""
     st.sidebar.caption("Preview")
+    frequency = (preview.get("inferred_frequency") or {}).get("value") or "?"
     st.sidebar.write(
-        f"{preview.get('rows_total', 0):,} rows · {preview.get('file_format', '?')}"
+        f"{preview.get('rows_total', 0):,} rows · {preview.get('file_format', '?')} · "
+        f"{frequency}"
     )
-    for capability in preview.get("capabilities", []) or []:
-        name = capability.get("capability") or capability.get("name") or "capability"
+    contracts = preview.get("contracts_detected") or []
+    if contracts:
+        st.sidebar.caption(", ".join(contracts[:6]) + (" …" if len(contracts) > 6 else ""))
+
+    # `enables` is the point of the endpoint (§4.2): a daily-only upload learns that VWAP is
+    # unavailable *before* it commits, rather than meeting an empty panel afterwards.
+    for key, capability in (preview.get("enables") or {}).items():
+        name = _CAPABILITY_NAMES.get(key, key)
         if capability.get("available"):
             st.sidebar.markdown(f"✅ {name}")
         else:
             reason = capability.get("reason") or "not available for this file"
             st.sidebar.markdown(f"🚫 **{name}** — {reason}")
-    rejects = preview.get("rejects_estimated") or preview.get("rejects") or 0
-    if rejects:
-        st.sidebar.warning(f"{rejects} row(s) would be rejected at load.")
+
+    if preview.get("verdict") == "duplicate":
+        st.sidebar.warning(
+            f"These exact bytes are already loaded as batch {preview.get('already_ingested')}."
+        )
+    for warning in preview.get("warnings") or []:
+        st.sidebar.warning(warning)
+
+    companion = companion_grain(preview)
+    if companion:
+        st.sidebar.info(companion)
+
+
+#: `specs/loupe-solution-design.md` §2, "Advise Risk users to load both grains". Advice, not a
+#: gate: each file is fully usable on its own terms, and the message names what the second one
+#: would add rather than what this one lacks. The daily case is the one the advice targets —
+#: a daily file can only be checked against itself, and settlement is the Risk question.
+_COMPANION = {
+    "daily": "**Add the minute tape to corroborate settlement.** A daily file can only be "
+    "checked against itself — inside the bar range, on the tick, not duplicated. Reconciling "
+    "it against the tape is what catches a settlement that is self-consistent and still "
+    "wrong. It is also the Trader's series.",
+    "minute": "**Add the daily file to bring settlement into scope.** The tape already gives "
+    "bars, VWAP and quality on its own; the daily file is the Risk manager's grain, and "
+    "holding both lets the two be reconciled.",
+}
+
+
+def companion_grain(preview: dict[str, Any]) -> str | None:
+    """Recommend the other grain when reconciliation is not possible for this upload.
+
+    Keyed off `enables.reconciliation`, which the API already computes and explains — the
+    preview knows whether the other granularity is present for these contracts, so the UI
+    reads that answer instead of asking a second question or inventing its own.
+
+    Not a refusal and not a warning: a single-grain upload is valid and scoreable. This is a
+    statement of what the second file would buy, made at the moment the reader is deciding
+    which files to load.
+    """
+    reconciliation = (preview.get("enables") or {}).get("reconciliation") or {}
+    if reconciliation.get("available") is not False:
+        return None
+    frequency = (preview.get("inferred_frequency") or {}).get("value")
+    return _COMPANION.get(frequency)
 
 
 def render_header(persona: str) -> None:

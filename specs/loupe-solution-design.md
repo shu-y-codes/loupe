@@ -65,6 +65,38 @@ Illustrative trader question — *"I want to backtest ES through a wild market. 
 data?"* — remains valid. The shipped sample runs **2021–2026**, so demos use a volatile window
 inside that range rather than 2008.
 
+### Advise Risk users to load both grains
+
+**Every persona can use Loupe independently, on the grain they arrive with.** A Trader with
+only the minute tape gets bars, VWAP, warnings and a changelog — a real answer to *is this
+series usable*. An Analyst works with whatever is there and is told what is not. Nothing here
+is a prerequisite, and no upload is refused for arriving alone.
+
+**The Risk manager is the exception, and the advice is aimed at them.** Theirs is the one
+persona whose primary question cannot be fully answered from their own primary grain. Daily
+is the Risk grain — settlement is what the book is marked at — but a daily file can only be
+checked against itself: close inside the bar range, on the tick, not duplicated, session
+present. Nothing in that set can catch a settlement file that is internally perfect and still
+wrong. Only `REC.*` can (§9), and only when the minute tape is there to compare against.
+
+So the recommendation is specific rather than general: **a Risk user should load the minute
+tape alongside the daily file for the contracts they care about.** It is the Trader's primary
+grain, and reconciling one against the other is what turns "this file is self-consistent" into
+"this settlement is corroborated". Where the two disagree, the Analyst's Specifics view is
+where that gets investigated.
+
+The reason it needs saying out loud is that the failure is silent. A **minute-only** contract
+makes the Risk view visibly thin — no closing-day callouts, no settlement trend, both measured
+on the daily file — so the reader can see they are not being told much. A **daily-only**
+contract makes the Risk view look *complete*: every column fills and the score computes, but
+reconciliation is out of scope, §11.3 renormalises the denominator from 1.20 to 1.00, and a
+five-dimension measurement is displayed on the same 0–100 scale as a six-dimension one.
+
+**One grain scores what a file says about itself; two grains score whether it is true.** Where
+a contract holds one, every surface that shows a score must say which dimensions were in scope
+(`specs/dq-rules-and-scoring.md` §11.3), and the upload preview should name the companion
+grain that is missing — as advice, in the terms of the persona it matters to, never as a gate.
+
 ---
 
 ## 3. Locked decisions
@@ -201,6 +233,10 @@ HuggingFace dataset `lynx1231/historical-futures-data-sample` (public evaluation
 - Parse failures → `stage.record_reject`; nulls and soft defects → load + find
 - Frequency discriminator on every record: `(contract_id, frequency, ts_utc)` — loading daily and
   minute without it collides
+- **Name the companion grain at preview time** (§2, "Advise Risk users to load both grains"):
+  a daily file with no minute tape for that contract cannot be reconciled, which is the one
+  gap that matters to the Risk manager's question. Neither file is refused and neither is
+  incomplete on its own terms — the preview says what the second one would add
 
 ### Oracle (test asset, not runtime)
 
@@ -372,10 +408,36 @@ dataframe column `help`, chart caption.
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
 | UI | Persona view assembly; absence of apply/override controls | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `tests/ui/test_pages.py` |
 
 Edge cases to fixture explicitly: exact dup, key conflict, mid-session gap, missing day,
 negative volume, `high < low`, close outside range, unparseable timestamp, empty file,
 Sunday-evening trade date, three-character root (`SR3`), off-tick settlement, timezone smear.
+
+### A test that cannot fail is worse than no test
+
+Three defects reached `main` behind green suites during slice 5, all the same shape: the test
+exercised the path where the feature is **absent** and never the path where it works. Each
+would have passed against a function that returned `None` unconditionally. Three rules follow,
+and they are cheap:
+
+**Assert the guard, not only the property.** An assertion inside `if` or `for` proves nothing
+if the branch is never entered. A test that checks "every callout comes from the named set"
+must also assert it saw a callout. Where a fixture produces none, say so and use one that does.
+
+**Test both sides of a filter.** A selector needs an input it admits *and* an input it
+rejects, asserted separately. One side alone cannot distinguish a working filter from one that
+returns nothing — or everything.
+
+**Build stubs from the response, not from the caller.** A fixture written to match the code
+can only confirm the code's own assumptions. Copy a real response, and assert the stub's keys
+against the model it stands in for (`tests/ui/test_pages.py` does this for every envelope);
+unknown keys are mechanically detectable and were the whole of the third defect.
+
+The residue these rules do not cover is a stub that *omits* a field the API sends, since
+absence is legitimate. That is what a built-path test is for: assert the feature does its job
+on data that should trigger it, not merely that it declines gracefully on data that should
+not.
 
 ---
 

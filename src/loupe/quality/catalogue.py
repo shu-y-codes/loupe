@@ -520,7 +520,12 @@ NEVER_EXCLUDE_RULES: frozenset[str] = frozenset({"VAL.OFF_TICK_PRICE"})
 #: duplicated settlement: `dedupe_drop` resolves it automatically, so it is a changelog entry
 #: rather than open settlement risk. A key conflict is two *different* settlement prices for
 #: one session with no principled winner, which is what a risk manager must be told.
-#: Slice 6 adds the `REC.*` close-convention rule under the same test.
+#: **No `REC.*` rule joins this set** (§11.6). `REC.CLOSE_CONVENTION` is the near miss: its
+#: subject is plainly the settlement, but it is `info` and fires on the *expected* difference
+#: between a settlement and a last trade, and the Closing-day column is what a risk manager
+#: reads as what is *wrong* with a settlement. Reconciliation's contribution to the Risk view
+#: is the corroboration state of §8.7 — which changes what an existing callout means — not
+#: another callout.
 SETTLEMENT_RULES: frozenset[str] = frozenset(
     {
         "CON.CLOSE_OUT_OF_RANGE",

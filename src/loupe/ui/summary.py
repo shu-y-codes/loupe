@@ -18,7 +18,15 @@ import pandas as pd
 import streamlit as st
 
 from . import help as helptext
-from .runtime import EM_DASH, issue_text, percentage, score_text
+from .runtime import (
+    EM_DASH,
+    REDUCED_SCOPE_MARK,
+    issue_text,
+    percentage,
+    reduced_scope_contracts,
+    score_disclosure_text,
+    score_text,
+)
 
 #: Sort per persona (`specs/loupe-ui-design.md`, Summary module).
 #: Risk reads worst-first because the question is "what needs me now"; Trader and Analyst read
@@ -37,8 +45,23 @@ def _root(contract_id: str, roots: dict[str, str]) -> str:
     return roots.get(contract_id) or EM_DASH
 
 
+def _score_cell(row: dict[str, Any], reduced: set[str]) -> str:
+    """The score, marked when it covers fewer dimensions than others in the same column.
+
+    Sorting a five-dimension score against a six-dimension one is the comparison §11.3 says
+    must not be made silently, and a table column is the most persuasive invitation to make it.
+    """
+    text = score_text(row["score"])
+    if row["contract_id"] in reduced and row["score"] is not None:
+        return f"{text} {REDUCED_SCOPE_MARK}"
+    return text
+
+
 def inventory_frame(
-    persona: str, contracts: list[dict[str, Any]], roots: dict[str, str]
+    persona: str,
+    contracts: list[dict[str, Any]],
+    roots: dict[str, str],
+    reduced: set[str] | None = None,
 ) -> pd.DataFrame:
     """The inventory table for one persona.
 
@@ -47,6 +70,7 @@ def inventory_frame(
     status column at all (the score carries go/no-go), Analyst needs finding counts because
     the deep view is where they are going next.
     """
+    reduced = reduced or set()
     rows = sorted(contracts, key=_SORTS.get(persona, _SORTS["Trader"]))
     if persona == "Risk":
         return pd.DataFrame(
@@ -55,7 +79,7 @@ def inventory_frame(
                     "Status": row["status"],
                     "Root": _root(row["contract_id"], roots),
                     "Contract": row["contract_id"],
-                    "Score": score_text(row["score"]),
+                    "Score": _score_cell(row, reduced or set()),
                     "Closing-day": issue_text(row.get("settlement_issue")),
                 }
                 for row in rows
@@ -67,7 +91,7 @@ def inventory_frame(
                 {
                     "Root": _root(row["contract_id"], roots),
                     "Contract": row["contract_id"],
-                    "Score": score_text(row["score"]),
+                    "Score": _score_cell(row, reduced or set()),
                     "Findings": row["finding_count"],
                     "Top issue": issue_text(row.get("top_issue")),
                 }
@@ -79,7 +103,7 @@ def inventory_frame(
             {
                 "Root": _root(row["contract_id"], roots),
                 "Contract": row["contract_id"],
-                "Score": score_text(row["score"]),
+                "Score": _score_cell(row, reduced or set()),
                 "Warning": issue_text(row.get("top_issue")),
             }
             for row in rows
@@ -156,6 +180,19 @@ def render_headline(
             )
 
 
+def _render_scope_disclosure(persona: str, summary: dict[str, Any]) -> None:
+    """Say what the scores were measured over, wherever they invite comparison (§11.3).
+
+    Not a footnote for Risk in particular. Reconciliation is the only family that can catch a
+    settlement file that is internally perfect and still wrong, so a book with no minute tape
+    is answering the settlement question on internal evidence alone — and the score looks
+    exactly the same as one that survived cross-frequency checks.
+    """
+    text = score_disclosure_text(summary, persona)
+    if text:
+        st.caption(text)
+
+
 def _completeness(summary: dict[str, Any]) -> float | None:
     from .runtime import dimension_score
 
@@ -212,8 +249,10 @@ def render_summary(
         return None
 
     render_headline(persona, summary, trend)
+    _render_scope_disclosure(persona, summary)
 
-    frame = inventory_frame(persona, contracts, roots)
+    reduced = reduced_scope_contracts(summary)
+    frame = inventory_frame(persona, contracts, roots, reduced)
     caption = {
         "Risk": "Loaded contracts · worst first · select a row to open Specifics",
         "Trader": "Loaded contracts · by name · score carries go/no-go",
@@ -229,6 +268,13 @@ def render_summary(
         st.info(
             "**No daily records loaded.** Closing-day is empty because settlement lives in "
             "the daily file, not because these contracts' settlements are clean."
+        )
+
+    if reduced:
+        st.caption(
+            f"{REDUCED_SCOPE_MARK} scored without reconciliation — no minute tape for "
+            f"{', '.join(sorted(reduced))}, so settlement there is judged on the daily file "
+            "alone. Not directly comparable with the unmarked scores."
         )
 
     event = st.dataframe(

@@ -306,8 +306,18 @@ later reprocessing must reproduce:
 Uploads are the only way records enter the store. The UI "Load demo data" path posts files
 already on local disk to this same endpoint; no request path fetches a third-party dataset.
 
-`DELETE` implements purge: cascade to `market_record`, `record_reject`, findings and mart
-rows; soft delete (`status = 'purged'`) so ingest history stays intact.
+`DELETE` implements purge: cascade to `stage.market_record`, `stage.record_reject`, the
+batch's findings and the `mart.bar_daily` rows derived from them; soft delete
+(`status = 'purged'`) so ingest history stays intact.
+
+**"The batch's findings" is narrower than "every finding touching those sessions", and
+deliberately so.** A purge removes findings it can *attribute* to the batch — those from a run
+scoped to it (`dq.dq_run.batch_id`) and those pinned to one of its records. Findings written
+by a **corpus-wide** run that are about a *session* rather than a record survive: that session
+may hold another batch's records, and the finding is a statement about all of them. Guessing
+which half of such a statement to delete would be worse than leaving it. The honest response
+to a changed corpus is to re-validate it (`POST /v1/dq/runs`), which the response therefore
+invites rather than performing implicitly.
 
 ### 4.4 Why synchronous; async as extension
 
@@ -613,6 +623,11 @@ Paginated. A corrupt file can still produce tens of thousands of rows:
       "severity": "error", "affected_rows": 1, "status": "open",
       "frequency": "daily",
       "details": {"field": "close", "close": 6768.25, "low": 6769.50, "high": 6856.50},
+      "corroboration": {
+        "state": "confirmed",
+        "reason": "Vendor open, high and low agree with the minute tape for this session.",
+        "detail": {"minute_coverage_pct": 99.1, "close_gap_ticks": 2}
+      },
       "source": {"batch_id": "01H...", "filename": "ESZ25.parquet",
                  "source_row": 1145}
     }
@@ -622,6 +637,41 @@ Paginated. A corrupt file can still produce tens of thousands of rows:
 ```
 
 `source` carries `source_row` so the UI can cite "row 1,145 of `ESZ25.parquet`".
+
+**`corroboration` — what the tape says about a daily finding (§8.7 of
+`specs/dq-rules-and-scoring.md`).** It rides on the finding rather than on a route of its own,
+because it is not a fact about the corpus but a *qualification of this finding*: shipping it
+anywhere else would let a client render the finding without it.
+
+`state` is one of three, and they are not interchangeable:
+
+```json
+{"state": "disputed",
+ "reason": "The minute tape found prints above the stated high.",
+ "detail": {"field": "high", "ticks": 3, "finding_ids": ["01H..."]}}
+```
+```json
+{"state": "not_comparable",
+ "reason": "Only daily records are held for ZCZ25.",
+ "detail": {"minute_coverage_pct": null}}
+```
+
+`confirmed` licenses reading the finding as being about the close: the range around it is
+measured correctly. `disputed` says the stated range is itself wrong, so the same finding must
+be re-read as a range defect — `detail.finding_ids` cites the `REC.OHLC_DISAGREE` rows that
+say so. `not_comparable` licenses neither, and exists so that "we could not check" is never
+rendered as "we checked and it holds".
+
+**Null is a fourth answer and means something else.** `corroboration` is absent on findings
+corroboration does not apply to — a minute-grain timeliness finding is not a claim the daily
+file can speak to. Absent means *not applicable*; `not_comparable` means *applicable but
+unevaluable*, because one granularity is held, the session falls outside the reconcilable
+window (§8.5), or minute coverage is below `params.min_coverage_pct`.
+
+It is computed, never stored: no column on `dq.dq_finding`, no finding of its own, and no
+contribution to any score (§8.6's numerator is unchanged). Both `GET /v1/dq/findings` and
+`GET /v1/dq/findings/{id}` carry it, resolved in one pass over the run's `REC.*` findings
+rather than per row.
 
 ### 6.3 Finding review — extension
 

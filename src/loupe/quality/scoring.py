@@ -327,7 +327,19 @@ def _compose(
 def _reconciliation_note(
     con: duckdb.DuckDBPyConnection, contract_id: str
 ) -> dict[str, str]:
-    """Why reconciliation is out of scope. Never "score 100" and never "score 0"."""
+    """Why reconciliation is out of scope. Never "score 100" and never "score 0" (§11.3).
+
+    Both reasons are statements about **the data**, not about the roadmap. They are rendered
+    verbatim — `dimensions_not_in_scope` reaches the API envelope and the UI prints it under
+    the score (`specs/loupe-ui-design.md`) — so a build-sequence note here would be shown to a
+    reader as if it were a fact about their contract.
+
+    The second branch is where reconciliation becomes *scoreable*: §8.6's sub-score over
+    reconcilable sessions, renormalised to a 1.20 denominator by §11.3. Until `REC.*` findings
+    exist there is no evidence to score, and the honest answer is this note rather than a
+    numerator of zero defects — which would read as a perfect 100 and is the failure §11.3
+    rejects by name.
+    """
     row = con.execute(
         f"SELECT count(DISTINCT frequency) FROM {RECORDS} WHERE contract_id = ?",
         [contract_id],
@@ -336,7 +348,7 @@ def _reconciliation_note(
     return {
         "dimension": "reconciliation",
         "reason": (
-            "REC.* rules arrive in slice 6; no reconciliation evidence has been computed yet"
+            "no reconciliation evidence has been computed for this contract"
             if both
             else "only one frequency uploaded for this contract"
         ),

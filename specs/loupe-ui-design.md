@@ -88,6 +88,8 @@ contents per the motivations table.
 │ Preview          │  │ ATTN   │ CL     │ CLG26   │ 58    │ gap at EOD      │ │
 │  daily → bars+DQ │  │ OK     │ ES     │ ESZ25   │ 96    │ —               │ │
 │  no 15-min VWAP  │  └────────┴────────┴─────────┴───────┴─────────────────┘ │
+│  no minute tape  │  cmp+val+con+unq+tim · no reconciliation for 2 contracts │
+│  → no REC        │                                                          │
 │  (this role      │                                                          │
 │   does not need) │  SPECIFICS                                               │
 │                  │  why attention is needed · how you address it            │
@@ -227,6 +229,30 @@ A contract held only at minute grain has no daily records and so no settlement t
 the same boundary as §11.6's closing-day callout and holds for the same reason: settlement
 lives in the daily file.
 
+**Every surface that shows a score says which dimensions were in scope.** A six-dimension
+score is better evidenced than a five-dimension one and is not the same measurement
+(`specs/dq-rules-and-scoring.md` §11.3), so a bare `96` is not self-describing. Where a score
+appears, `scope_signature` and `dimensions_not_in_scope` travel with it. Equal signature means
+comparable; unequal means the page must say so — in two places, because they answer different
+questions:
+
+- **The headline caption** states what the book's scores were measured over, and what that
+  therefore cannot tell you. Enough on its own when every contract shares a signature: the
+  limitation is absolute and applies to all of them equally.
+- **A mark on the score cell** (`†`), when contracts *differ*. The inventory sorts scores
+  against each other in one column, which is the most persuasive invitation there is to
+  compare them, and a caption cannot say which row is the five-dimension one. The mark is
+  explained once beneath the table, naming the affected contracts, and is absent entirely
+  when scope is uniform so it never becomes furniture.
+
+**For Risk this is not a footnote; for the others it is.** Reconciliation is the only family
+that can catch a settlement file that is internally perfect and still wrong (§9), and Risk is
+the one persona whose primary question depends on it — so their disclosure names the
+consequence and the fix ("load the minute tape to reconcile it"). Trader and Analyst are told
+the same fact in the terms it matters to them: cross-frequency checks did not run, and scores
+with different signatures are not directly comparable. Neither is being told their view is
+invalid, because it is not.
+
 **When no daily records are loaded at all, both panels say so.** The trend tile and the
 inventory each state "No daily records loaded", the way the VWAP panel states "needs minute
 bars" rather than rendering an empty chart. An empty Closing-day column is ambiguous between
@@ -234,6 +260,32 @@ bars" rather than rendering an empty chart. An empty Closing-day column is ambig
 minute-only corpus it is always the second — so the page must not let a column of em dashes
 read as a clean bill of health. Risk loses two of its five columns and one of its four tiles
 on such a corpus, which is correct but needs saying out loud.
+
+**A daily finding states whether the tape corroborates it.** Where a contract holds both
+grains, the **Why** cell carries the corroboration state of `specs/dq-rules-and-scoring.md`
+§8.7 alongside the finding, because it changes what the reader should do about it:
+
+```
+Why
+Close outside H–L  ZCZ25  2025-12-12
+  range confirmed against the tape — the settlement sits 2 ticks above the high
+```
+```
+Close outside H–L  ZCZ25  2025-12-12
+  range disputed — the tape found prints 3 ticks above the stated high
+```
+```
+Close outside H–L  ZCZ25  2025-12-12
+  not corroborated — no minute tape for this session
+```
+
+The state arrives on the finding itself (`specs/api-contract.md` §6.2), so the cell renders
+what it was given and computes nothing. The first two are opposite instructions wearing the
+same finding: one says the settlement
+behaved like a settlement against a range you can trust, the other says the range itself is
+wrong and the close may be sound. The third says neither, and says it rather than implying
+the first. Reconciliation earns its place on the Risk screen here — qualifying a callout —
+and not by adding one to the Closing-day column (§11.6).
 
 **Specifics** — multi-select allowed; no tick log, no outlier hunting.
 
