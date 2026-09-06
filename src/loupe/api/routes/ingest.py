@@ -28,6 +28,7 @@ from loupe.data import (
     purge_batch,
 )
 from loupe.data.errors import MissingRequiredColumn, PreviewError, UnsupportedFileFormat
+from loupe.insights import build_bars
 from loupe.quality import assess
 
 from ..deps import Con, FrequencyParam, LimitParam, OffsetParam
@@ -243,6 +244,10 @@ def create_batch(
         if validate:
             run, _scores = assess(con, batch_id=result.batch_id)
             run_id = run.run_id
+        # Charts read `mart.bar_daily`; without this the analytics routes stay empty after
+        # a successful load. Call even when validate=false so raw bars exist for the UI.
+        contracts = tuple(result.contracts) or None
+        build_bars(con, contract_ids=contracts)
         return _summary(con, result.batch_id, dq_run_id=run_id)
     finally:
         _discard(path)

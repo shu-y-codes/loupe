@@ -9,7 +9,6 @@ the publish gate and its capability state exist to prevent.
 from __future__ import annotations
 
 from loupe.api import PROBLEM_MEDIA_TYPE
-from loupe.insights import build_bars
 from loupe.quality import run_rules
 
 MINUTE_FIXTURE = "insights_vwap_window.csv"
@@ -17,9 +16,17 @@ DAILY_FIXTURE = "con_derived_bar_invalid_vendor.csv"
 MISALIGNED_FIXTURE = "tim_timezone_misaligned.csv"
 
 
-def test_vwap_returns_the_line_for_a_minute_contract(client, upload, api_con):
+def test_upload_materialises_bars_without_a_manual_build(client, upload):
+    """Ingest calls `build_bars` — analytics must not depend on a test-only rebuild."""
     upload(MINUTE_FIXTURE)
-    build_bars(api_con)
+
+    response = client.get("/v1/analytics/bars/daily", params={"contract": "ESZ25"})
+    assert response.status_code == 200
+    assert response.json()["total"] > 0
+
+
+def test_vwap_returns_the_line_for_a_minute_contract(client, upload):
+    upload(MINUTE_FIXTURE)
 
     response = client.get("/v1/analytics/vwap", params={"contract": "ESZ25"})
     assert response.status_code == 200
@@ -86,7 +93,6 @@ def test_the_refusal_is_not_a_blocked_series(client, upload, api_con):
     blocking rule named. A daily-only contract refuses with 422. Neither is "no data".
     """
     upload(MISALIGNED_FIXTURE, validate=False)
-    build_bars(api_con)
     run_rules(api_con)
 
     response = client.get("/v1/analytics/vwap", params={"contract": "ESZ25"})
@@ -105,9 +111,8 @@ def test_vwap_never_offers_a_substitute(client, upload):
     assert body["meta"]["substitute_offered"] is False
 
 
-def test_bars_daily_echoes_the_scope_it_resolved(client, upload, api_con):
+def test_bars_daily_echoes_the_scope_it_resolved(client, upload):
     upload(MINUTE_FIXTURE)
-    build_bars(api_con)
 
     response = client.get("/v1/analytics/bars/daily", params={"contract": "ESZ25"})
     assert response.status_code == 200
@@ -125,13 +130,12 @@ def test_bars_daily_echoes_the_scope_it_resolved(client, upload, api_con):
         assert "completeness_pct" in bar and "finding_count" in bar
 
 
-def test_bars_frequency_daily_returns_the_supplied_bars(client, upload, api_con):
+def test_bars_frequency_daily_returns_the_supplied_bars(client, upload):
     """`frequency=minute` aggregates the tape; `frequency=daily` returns what was supplied.
 
     Both return daily bars and are not the same numbers (§2.1).
     """
     upload(DAILY_FIXTURE)
-    build_bars(api_con)
 
     response = client.get(
         "/v1/analytics/bars/daily", params={"contract": "CLZ25", "frequency": "daily"}
@@ -154,9 +158,8 @@ def test_compare_frequency_refuses_when_only_one_grain_is_held(client, upload):
     assert response.json()["code"] == "CAP.FREQUENCY_UNAVAILABLE"
 
 
-def test_compare_basis_lines_raw_and_clean_up(client, upload, api_con):
+def test_compare_basis_lines_raw_and_clean_up(client, upload):
     upload(MINUTE_FIXTURE)
-    build_bars(api_con)
 
     response = client.get(
         "/v1/analytics/compare", params={"contract": "ESZ25", "compare": "basis"}

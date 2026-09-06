@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-from loupe.insights import build_bars
-
 MINUTE_FIXTURE = "insights_vwap_window.csv"
 OTHER_MINUTE_FIXTURE = "cmp_missing_timestamp.csv"
 
@@ -33,11 +31,9 @@ def counts(con, batch_id: str) -> dict[str, int]:
 
 
 @pytest.fixture
-def loaded(upload, api_con):
-    """One batch, validated, with its derived bars materialised."""
-    batch_id = upload(MINUTE_FIXTURE).json()["batch_id"]
-    build_bars(api_con)
-    return batch_id
+def loaded(upload):
+    """One batch, validated — ingest materialises derived bars."""
+    return upload(MINUTE_FIXTURE).json()["batch_id"]
 
 
 def test_purge_removes_records_rejects_findings_and_bars(client, api_con, loaded):
@@ -78,7 +74,6 @@ def test_purged_batch_is_hidden_from_the_list_but_retrievable(client, loaded):
 def test_purge_leaves_an_unrelated_batch_intact(client, api_con, upload):
     keep = upload(OTHER_MINUTE_FIXTURE).json()["batch_id"]
     drop = upload(MINUTE_FIXTURE).json()["batch_id"]
-    build_bars(api_con)
     kept_before = counts(api_con, keep)
     assert kept_before["records"] > 0
 

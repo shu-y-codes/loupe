@@ -8,7 +8,46 @@ in the element tree — and never a number the API decided.
 from __future__ import annotations
 
 import pytest
-from ui_helpers import NOT_BUILT, SUMMARY, VWAP_REFUSED, FakeClient
+from ui_helpers import (
+    CHANGELOG,
+    CONTRACTS,
+    FINDINGS,
+    MIXED_SCOPE,
+    NOT_BUILT,
+    RECONCILED,
+    SUMMARY,
+    VWAP_REFUSED,
+    FakeClient,
+)
+
+
+def test_every_stub_matches_the_response_model_it_stands_in_for():
+    """The guard for a whole class of silent failure.
+
+    `render_preview` once read `capabilities` and `rejects_estimated`; the API returns
+    `enables` and `warnings`. The capability disclosure never fired in production while every
+    test passed, because the fixture had been written to match the code instead of the
+    contract. A stub shaped like the page expects rather than like the API answers can only
+    ever confirm the page's own assumptions.
+
+    Unknown keys are the detectable half — a stub cannot be checked for keys it omits, since
+    absence is legitimate. That is what the built-path tests are for.
+    """
+    from loupe.api import models
+
+    envelopes = [
+        ("SUMMARY", SUMMARY, models.DqSummaryResponse),
+        ("MIXED_SCOPE", MIXED_SCOPE, models.DqSummaryResponse),
+        ("RECONCILED", RECONCILED, models.DqSummaryResponse),
+        ("CONTRACTS", CONTRACTS, models.ContractsResponse),
+        ("FINDING", FINDINGS[0], models.Finding),
+        ("CHANGELOG", CHANGELOG[0], models.ChangelogEntry),
+        ("CONTRACT_ROW", SUMMARY["contracts"][0], models.ContractSummary),
+        ("SLICE", SUMMARY["slices"][0], models.SliceScore),
+    ]
+    for name, stub, model in envelopes:
+        unknown = set(stub) - set(model.model_fields)
+        assert not unknown, f"{name} invents fields the API never returns: {sorted(unknown)}"
 
 
 def _no_exception(test):
@@ -124,6 +163,85 @@ def test_risk_says_when_no_daily_records_are_loaded(app):
 def test_risk_stays_quiet_about_daily_records_when_some_are_loaded(app):
     test = _no_exception(app("Risk"))
     assert not [i for i in test.info if "No daily records loaded" in i.value]
+
+
+def test_a_score_says_which_dimensions_it_was_measured_over(app):
+    """§11.3: a five-dimension score is not a six-dimension score wearing the same number.
+
+    Without this the Risk screen shows a confident composite whose settlement evidence was
+    never cross-checked, and nothing on the page distinguishes it from one that was.
+    """
+    test = _no_exception(app("Risk"))
+    captions = " ".join(c.value for c in test.caption)
+    assert "cmp+val+con+unq+tim" in captions
+    assert "only one frequency" in captions
+    assert "load the minute tape" in captions.lower()
+
+
+def test_the_disclosure_names_the_consequence_the_persona_cares_about(app):
+    """Same missing dimension, different stake: Risk loses settlement evidence, the Analyst
+    loses comparability between two contracts' scores."""
+    risk = " ".join(c.value for c in _no_exception(app("Risk")).caption)
+    analyst = " ".join(c.value for c in _no_exception(app("Analyst")).caption)
+
+    assert "minute tape" in risk
+    assert "not directly comparable" in analyst
+
+
+def test_nothing_is_disclosed_when_every_dimension_was_in_scope(app):
+    """The notice must be absent when it would be false, or it becomes furniture."""
+    test = _no_exception(app("Risk", client=FakeClient(summary=RECONCILED)))
+    captions = " ".join(c.value for c in test.caption)
+    assert "only one frequency" not in captions
+    assert "load the minute tape" not in captions.lower()
+
+
+def test_a_reduced_scope_score_is_marked_in_the_inventory(app):
+    """A headline caption cannot say *which row* covers fewer dimensions; the column can.
+
+    ZCZ25 is daily-only and ESZ25 holds both, so the table sorts a five-dimension 41 against a
+    six-dimension 96 and they look equally authoritative without the mark.
+    """
+    test = _no_exception(app("Risk", client=FakeClient(summary=MIXED_SCOPE)))
+    frame = test.dataframe[0].value
+    scores = dict(zip(frame["Contract"], frame["Score"], strict=True))
+
+    assert scores["ZCZ25"].endswith("†"), "the reduced-scope score is unmarked"
+    assert not scores["ESZ25"].endswith("†"), "the fully-scoped score must stay clean"
+
+    captions = " ".join(c.value for c in test.caption)
+    assert "† scored without reconciliation" in captions
+    assert "ZCZ25" in captions, "the caption names which contract is affected"
+    assert "not directly comparable" in captions.lower()
+
+
+def test_the_mark_is_absent_when_every_contract_shares_a_signature(app):
+    """Uniform scope is comparable within the table, so the mark would be noise.
+
+    The absolute limitation is still disclosed by the headline caption — this asserts the
+    per-row mark is reserved for the case it exists to catch.
+    """
+    for envelope in (SUMMARY, RECONCILED):
+        test = _no_exception(app("Risk", client=FakeClient(summary=envelope)))
+        frame = test.dataframe[0].value
+        assert not [s for s in frame["Score"] if s.endswith("†")]
+        captions = " ".join(c.value for c in test.caption)
+        assert "scored without reconciliation" not in captions
+
+
+def test_the_mark_reaches_every_persona_that_shows_a_score_column(app):
+    for persona in ("Risk", "Trader", "Analyst"):
+        test = _no_exception(app(persona, client=FakeClient(summary=MIXED_SCOPE)))
+        frame = test.dataframe[0].value
+        assert any(s.endswith("†") for s in frame["Score"]), persona
+
+
+def test_the_disclosure_caption_reads_as_sentences(app):
+    """It concatenated a reason fragment straight onto the next sentence."""
+    test = _no_exception(app("Risk"))
+    caption = next(c.value for c in test.caption if c.value.startswith("Scored over"))
+    assert "contract Settlement" not in caption
+    assert "for this contract. Settlement" in caption
 
 
 # ------------------------------------------------------------------ callouts

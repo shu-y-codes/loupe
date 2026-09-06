@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from loupe.insights import build_bars
 from loupe.quality import (
     RunScope,
     assess,
@@ -536,11 +537,12 @@ def create_run(
     batch_id: Annotated[str | None, Query(description="Narrow to one batch.")] = None,
 ) -> RunSummary:
     """Blocks until the run finishes and returns the **completed** run, not a job handle."""
+    contract_ids = tuple(_contracts(contract)) or None
     try:
         result, scores = assess(
             con,
             batch_id=batch_id,
-            contract_ids=tuple(_contracts(contract)) or None,
+            contract_ids=contract_ids,
             frequencies=(frequency,) if frequency else None,
         )
     except RulesNotSeeded as exc:
@@ -551,6 +553,9 @@ def create_run(
             code="CAP.RULES_NOT_SEEDED",
             type_="/errors/rules-not-seeded",
         ) from exc
+    # Rebuild bars so clean-basis OHLCV and finding annotations match this run.
+    # `None` contracts = corpus-wide, matching an unscoped re-validate.
+    build_bars(con, contract_ids=contract_ids)
     return _run_summary(con, result.run_id, scores=[_as_slice_score(s) for s in scores])
 
 

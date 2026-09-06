@@ -271,6 +271,23 @@ Session date is **derived** on the configured boundary, never read from a vendor
 Storage: same `dq.dq_finding` table, with `frequency` + `compare_frequency`
 (`specs/data-model.md` §4).
 
+**Which side goes in `frequency`.** `frequency` is the side the finding is a *statement
+about*; `compare_frequency` is the side it was checked against. This is not free-form: the
+closing-day callout selects `SETTLEMENT_RULES` at `frequency = 'daily'` (§11.6), so a
+reconciliation finding written on the wrong side is filtered out silently rather than
+rejected. The convention follows each rule's own claim:
+
+| Rule | `frequency` | Because |
+|---|---|---|
+| `REC.OHLC_DISAGREE` | `daily` | it says the vendor's stated `high` or `low` is wrong |
+| `REC.CLOSE_CONVENTION` | `daily` | its subject is the settlement |
+| `REC.VOLUME_SHORTFALL` | `minute` | it says the *tape* is short — which is why §8.3 fires in one direction only |
+| `REC.SESSION_ONLY_IN_ONE` | the side that holds the session | it is a statement about the side that has it |
+
+`'cross'` is **not** a finding's frequency. It is the `mart.dq_metric_daily` rollup grain for
+the reconciliation dimension (§11.1), where the row is about the pair rather than either
+side.
+
 ### 8.1 Coverage-gated invariant
 
 On any session where the minute data holds at least `params.min_coverage_pct` of the
@@ -335,6 +352,59 @@ Denominator: sessions present at both frequencies and inside the reconcilable wi
 records. `REC.CLOSE_CONVENTION` never enters the numerator. A contract with no reconcilable
 sessions has **no** reconciliation score — not 100, not 0. Reconciliation rows in
 `mart.dq_metric_daily` are absent, not zero, when only one granularity was uploaded.
+
+### 8.7 Corroboration — what reconciliation does for a daily finding
+
+Reconciliation's value to the Risk persona is **attribution, not detection**. A daily defect is
+already visible in the daily file; what a single file cannot say is *which of its numbers to
+distrust*.
+
+`CON.CLOSE_OUT_OF_RANGE` is the worked example. On its own it says four numbers from one row do
+not cohere — close above high, or below low. Two situations produce it and they call for
+opposite responses:
+
+- **The range is right and the close sits outside it.** Vendor `open`/`high`/`low` agree with
+  the tape, so the traded range is correctly measured. A settlement is not a trade: it is
+  derived from a closing range or set by committee and is under no obligation to fall inside
+  the day's prints. This is ordinary behaviour, and it is why the rule drops to
+  `params.daily_severity` at daily grain (§6) rather than excluding the row.
+- **The range is understated.** `REC.OHLC_DISAGREE` fires on `high` or `low` for the same
+  session: the tape found prints outside the vendor's stated range. The *range* is the broken
+  field, and the close may be sound. Without the tape this is invisible and the reader reaches
+  for the close.
+
+So a daily finding on a contract that also holds minute records carries a **corroboration
+state**, and there are three of them — the same three-way shape as the publication gate,
+because collapsing "we checked and it holds" into "we could not check" is the failure both
+exist to prevent:
+
+| State | When | What it licenses |
+|---|---|---|
+| `confirmed` | The session is inside the reconcilable window, minute coverage is at or above `min_coverage_pct`, and no `REC.OHLC_DISAGREE` fired on it | The range is measured correctly; the finding is about the close |
+| `disputed` | `REC.OHLC_DISAGREE` fired on `high` or `low` for that session | The stated range is wrong; re-read the finding as a range defect |
+| `not_comparable` | One granularity only, outside the reconcilable window (§8.5), or coverage below `min_coverage_pct` | Nothing. Say so rather than implying either of the above |
+
+**Corroboration is not a rule and writes no finding.** It is a reading of findings that already
+exist, composed in `quality` and carried alongside a finding so the UI can state it (see
+`specs/loupe-ui-design.md`, Specifics). It enters no score: §8.6's numerator is unchanged.
+
+It therefore gets its own module — `src/loupe/quality/corroboration.py` — rather than joining
+the rule runners or the scorer. It is neither: a runner writes findings and a scorer produces
+numbers, and this does neither. Filing it with either would invite a later contributor to make
+it do the thing its neighbours do.
+
+**It travels on the finding.** `specs/api-contract.md` §6.2 carries it as a `corroboration`
+object on each finding rather than on a route of its own, because it qualifies *that finding*
+and a separate endpoint would let a client render the finding without it. The envelope adds a
+fourth answer the three states above do not need: `corroboration` is **absent** on findings
+this reading does not apply to — a minute-grain timeliness finding is not a claim the daily
+file can speak to — where `not_comparable` means it applies but could not be evaluated.
+
+**What it does not do.** It cannot adjudicate the settlement itself. A legitimately different
+settlement and an erroneous one look identical to `REC.CLOSE_CONVENTION`, which is why that
+rule is `info` and stays out of the numerator (§8.4). Corroboration confirms or disputes the
+*range*, quantifies the gap, and — via `REC.VOLUME_SHORTFALL` — says whether the tape was
+complete enough for either statement to carry weight.
 
 ---
 
@@ -533,8 +603,23 @@ any kind, and nothing on `dq.dq_rule` distinguishes the two. The named set is:
 | `UNQ.KEY_CONFLICT` | duplicate settlement |
 | `VAL.OFF_TICK_PRICE` | off-tick close |
 
-Membership test: the rule's subject can be the session's settlement record. Slice 6 adds the
-`REC.*` close-convention rule (§8.4) under the same test.
+The set is closed at those four. It is a list of defects in a settlement, not a list of
+everything that mentions one.
+
+Membership test: the rule's subject can be the session's settlement record, **and the rule
+asserts a defect**.
+
+**No `REC.*` rule joins this set, `REC.CLOSE_CONVENTION` included.** An earlier draft of this
+section said slice 6 would add it, on the grounds that its subject is plainly the settlement.
+That was wrong on the second half of the test. It is `info`, it fires on the *expected*
+difference between a settlement and a last trade (§8.4), and the Closing-day column is what a
+risk manager reads as *what is wrong with this settlement*. Filling it with a difference that
+is not an error is noise in the one column that must not have any.
+
+Reconciliation's contribution to the Risk view is not another callout. It is the corroboration
+state of §8.7, which changes what an existing callout **means** — whether a close outside the
+range sits outside a confirmed range or a disputed one. That belongs in Specifics, next to the
+finding it qualifies, not in a one-line column at book grain.
 
 **Filtered to `frequency = 'daily'` findings**, which is load-bearing rather than tidying.
 `VAL.OFF_TICK_PRICE` on a minute record says "off-tick price", not "off-tick close" — §5
