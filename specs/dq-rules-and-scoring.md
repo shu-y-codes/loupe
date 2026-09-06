@@ -519,6 +519,31 @@ grade — it points the user to which dimensions need work, so show the breakdow
 - Below `params.min_records` (default 100), show "insufficient data" instead of a score.
 - Call it an index, not a probability or a grade.
 
+### 11.6 Settlement rules — a callout filter, not a score input
+
+Like §11.4's triage weight, this classifies rules for a presentation purpose and enters no
+score formula. The Risk inventory's **Closing-day** column (`specs/loupe-ui-design.md`) is a
+one-line callout about the session's *settlement* record, not the contract's worst issue of
+any kind, and nothing on `dq.dq_rule` distinguishes the two. The named set is:
+
+| Rule | The closing-day statement it makes |
+|---|---|
+| `CON.CLOSE_OUT_OF_RANGE` | close outside H–L |
+| `CMP.SESSION_MISSING` | missing EOD bar |
+| `UNQ.KEY_CONFLICT` | duplicate settlement |
+| `VAL.OFF_TICK_PRICE` | off-tick close |
+
+Membership test: the rule's subject can be the session's settlement record. Slice 6 adds the
+`REC.*` close-convention rule (§8.4) under the same test.
+
+**Filtered to `frequency = 'daily'` findings.** Two of the four are only settlement-shaped at
+daily grain — `VAL.OFF_TICK_PRICE` on a minute record says "off-tick price", not "off-tick
+close" — so without the frequency clause the column fills with intraday noise.
+
+The set lives beside `DEDUPE_DROP_RULES` and `NEVER_EXCLUDE_RULES` in
+`src/loupe/quality/catalogue.py`, which is already where a named set of rule IDs with a
+documented reason belongs.
+
 ---
 
 ## 12. Recurring patterns
