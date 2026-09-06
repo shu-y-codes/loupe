@@ -49,19 +49,19 @@ what makes the thin-client boundary real rather than asserted
 (`specs/loupe-solution-design.md` §6).
 
 ```bash
-uv run uvicorn loupe.api.app:bootstrapped_app --factory   # http://127.0.0.1:8000/v1
-uv run streamlit run src/loupe/ui/app.py                  # http://localhost:8501
+uv run uvicorn loupe.api.app:create_app --factory   # http://127.0.0.1:8000/v1
+uv run streamlit run src/loupe/ui/app.py           # http://localhost:8501
 ```
 
 **That is the whole setup.** On a store that does not exist yet, the first start creates it,
 applies the schema, and seeds both the reference data and the rule catalogue — so the two
 commands above take a fresh clone to a page you can upload a file to. Nothing to run in a REPL
-first.
+first, and no second factory name to remember: `loupe.api.app:bootstrapped_app` still works and
+is now just an alias.
 
-`loupe.api.app:create_app` is the same app without that: it opens the store and creates
-nothing, which is what you want when a store already exists and an empty one should be reported
-rather than silently manufactured. `GET /v1/health` says which state you are in through
-`schema_applied` and `rules_seeded`, and the UI reads it before offering you anything.
+The store it resolved is printed on the way up, so a mistyped `LOUPE_DB` shows as the wrong path
+rather than as an empty corpus. `GET /v1/health` reports `schema_applied` and `rules_seeded`, and
+the UI reads it before offering you anything.
 
 The UI reads `LOUPE_API_URL` and falls back to `http://127.0.0.1:8000/v1`, so pointing it at
 another host needs no code change:

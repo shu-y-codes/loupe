@@ -11,6 +11,8 @@ translation in one readable list instead of scattered through `try` blocks.
 
 from __future__ import annotations
 
+import sys
+
 import duckdb
 from duckdb import CatalogException
 from fastapi import FastAPI, Request
@@ -18,6 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from loupe.data import LoupeDataError, apply_schema, connect, seed_reference
+from loupe.data.connection import database_path
 from loupe.data.errors import UnsupportedFileFormat
 from loupe.quality import seed_quality
 from loupe.quality.errors import LoupeQualityError
@@ -43,14 +46,23 @@ for a well-formed request the ingested data cannot support.
 def create_app(
     connection: duckdb.DuckDBPyConnection | None = None,
     *,
-    bootstrap: bool = False,
+    bootstrap: bool = True,
 ) -> FastAPI:
     """Build the app over `connection`, or over the default store when none is given.
 
-    `bootstrap` applies the schema and seeds reference data **and the rule catalogue**, so one
-    flag produces a store the app can actually serve. It is off by default: creating tables as
-    a side effect of starting a server would hide a misconfigured `LOUPE_DB` behind an empty
-    but healthy-looking store.
+    `bootstrap` applies the schema and seeds reference data **and the rule catalogue**, so any
+    way of starting this app produces a store it can actually serve.
+
+    **It defaults on, and that is a reversal.** It was off, on the grounds that creating tables
+    as a side effect of starting a server would hide a misconfigured `LOUPE_DB` behind an empty
+    but healthy-looking store. That risk is real and the answer to it was wrong: it made the
+    documented `uvicorn loupe.api.app:create_app --factory` produce an app that refused every
+    request until someone found the other factory name, which is a worse failure and a far more
+    likely one. The resolved store path is printed on the way up instead, so a misconfigured
+    `LOUPE_DB` is *visible* rather than prevented by refusing to work.
+
+    Pass `bootstrap=False` for the case the original reasoning cared about: inspecting a store
+    that should already exist, where creating one silently would be the wrong answer.
 
     The rule catalogue used to be a separate step, on the grounds that rules are rows and which
     rules a deployment wants is its decision. That is true and it is still true — `seed_rules`
@@ -65,6 +77,10 @@ def create_app(
         apply_schema(con)
         seed_reference(con)
         seed_quality(con)
+        if connection is None:
+            # Named, not hidden. This is what stops a mistyped `LOUPE_DB` looking like an
+            # empty corpus: the path is in the server log before the first request.
+            print(f"loupe: store ready at {database_path()}", file=sys.stderr)
 
     app = FastAPI(
         title="Loupe API",
@@ -84,14 +100,13 @@ def create_app(
 
 
 def bootstrapped_app() -> FastAPI:
-    """`create_app(bootstrap=True)`, named so `uvicorn --factory` can reach it.
+    """`create_app()`, kept as a name because the README and older commands point at it.
 
-    `--factory` calls the target with no arguments, so the one-liner in the README needs a
-    zero-argument entry point rather than a `lambda` a reader cannot type. This is the
-    difference between "clone and run" and "clone, open a REPL, seed three things, then run",
-    which is the whole reason the flag exists.
+    It was the only way to reach `bootstrap=True` from `uvicorn --factory`, which calls its
+    target with no arguments. Bootstrapping is the default now, so this is an alias — retained
+    because a documented command that stops working is its own kind of setup step.
     """
-    return create_app(bootstrap=True)
+    return create_app()
 
 
 def _register_error_handlers(app: FastAPI) -> None:

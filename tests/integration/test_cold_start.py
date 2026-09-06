@@ -39,7 +39,7 @@ def test_health_reports_degraded_rather_than_raising(cold_store):
     """
     from fastapi.testclient import TestClient
 
-    with TestClient(create_app(cold_store)) as client:
+    with TestClient(create_app(cold_store, bootstrap=False)) as client:
         response = client.get("/v1/health")
 
     assert response.status_code == 200
@@ -67,7 +67,8 @@ def test_an_empty_store_refuses_legibly_rather_than_returning_a_500(cold_store, 
     """
     from fastapi.testclient import TestClient
 
-    with TestClient(create_app(cold_store), raise_server_exceptions=False) as client:
+    app = create_app(cold_store, bootstrap=False)
+    with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get(path)
 
     assert response.status_code == 503, response.text
