@@ -128,6 +128,19 @@ def test_a_run_blocks_and_returns_the_finished_run(client, upload):
     assert fetched.json()["run_id"] == body["run_id"]
 
 
+def test_a_run_rebuilds_bars_for_analytics(client, upload, api_con):
+    """`POST /dq/runs` materialises `mart.bar_daily` for the run's scope."""
+    upload(MINUTE_FIXTURE, validate=False)
+    api_con.execute("DELETE FROM mart.bar_daily")
+    assert api_con.execute("SELECT count(*) FROM mart.bar_daily").fetchone()[0] == 0
+
+    assert client.post("/v1/dq/runs").status_code == 200
+
+    response = client.get("/v1/analytics/bars/daily", params={"contract": "ESZ25"})
+    assert response.status_code == 200
+    assert response.json()["total"] > 0
+
+
 def test_unknown_run_is_404(client):
     response = client.get("/v1/dq/runs/01900000-0000-0000-0000-000000000000")
     assert response.status_code == 404

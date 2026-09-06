@@ -7,7 +7,8 @@ data; no duplicated business maths.
 
 Amended 2026-09-06 after done-when 1: three prerequisites the promote surfaced (purge,
 capability state, dependencies) and one scope cut (patterns / suggestions to slice 6).
-See **Sequencing** below.
+See **Sequencing** below. Amended again the same day: done-when 9 closes the
+`build_bars` gap left between slices 3 and 4.
 
 ## Done when
 
@@ -45,6 +46,14 @@ See **Sequencing** below.
    data" is the failure it exists to prevent. A handler that queries which frequencies a
    contract holds has taken a capability decision away from the layer that owns publication.
 8. ✅ OpenAPI is generated from the app; `TestClient` covers shapes.
+9. ✅ **`build_bars` after assess (gap from slices 3/4).** Slice 3 shipped the mart writer;
+   slice 4 shipped `GET /analytics/bars/daily` and ingest/`dq/runs`, but nothing called
+   `insights.build_bars` on those write paths — the UI showed "No bars in this window"
+   after a successful upload. `POST /ingest/batches` materialises bars for the batch's
+   contracts (after assess when `validate=true`, after load when `validate=false`);
+   `POST /dq/runs` rebuilds for the same contract scope as the run. Handlers call
+   `insights`; do not fold this into `quality.assess`. Two-pass assess for
+   `CON.DERIVED_BAR_INVALID` stays out of scope (that rule still needs a later re-run).
 
 ## Sequencing — insights routes move to slice 6
 

@@ -11,7 +11,8 @@ examples are owned by `specs/sample-corpus.md`.
 Revised 2026-09-06: promoted from research; first normative version. Same day: v1 vs
 extension boundaries for finding override, suggestion apply/dismiss, and catalogue
 mutation routes are stated here to match solution brief §11 / §14 (the research note
-listed those routes without the v1 cut).
+listed those routes without the v1 cut). Revised 2026-09-06: ingest validate and
+`POST /v1/dq/runs` materialise `mart.bar_daily` before returning (gap from slices 3/4).
 
 **Scope of authority.** This spec owns *paths, query parameters, status codes, JSON
 envelopes, and transport error codes (`STR.*`, `CAP.*`)*. It does not own DDL, rule
@@ -286,7 +287,10 @@ Daily-only preview (`GCJ26`):
 
 `POST /v1/ingest/batches` blocks until load and validation finish, then returns **201** with
 the completed batch summary, or **409 with the existing batch** when `file_hash` already
-exists — idempotent re-upload, surfaced rather than silently duplicated. The batch persists
+exists — idempotent re-upload, surfaced rather than silently duplicated. Before returning,
+the handler materialises `mart.bar_daily` for the batch's contracts (after `assess` when
+`validate=true`, and after load alone when `validate=false`) so analytics reads are not
+empty for a just-loaded file. The batch persists
 `frequency`, timezone, timestamp convention, and session boundary — the four decisions a
 later reprocessing must reproduce:
 
@@ -684,7 +688,8 @@ rather than per row.
 ### 6.4 Rules and runs
 
 `GET /v1/dq/rules` returns the catalogue. `POST /v1/dq/runs` re-validates a scope under the
-current ruleset, blocks until finished, and returns the completed run summary (`run_id`,
+current ruleset, blocks until finished, materialises `mart.bar_daily` for the same contract
+scope (corpus-wide when unscoped), and returns the completed run summary (`run_id`,
 status, `ruleset_hash`, findings count, elapsed). `GET /v1/dq/runs/{run_id}` retrieves a
 past run — not a pending job handle.
 
