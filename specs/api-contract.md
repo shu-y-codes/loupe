@@ -323,6 +323,14 @@ which half of such a statement to delete would be worse than leaving it. The hon
 to a changed corpus is to re-validate it (`POST /v1/dq/runs`), which the response therefore
 invites rather than performing implicitly.
 
+**`origin` — where a batch came from.** `POST /v1/ingest/batches` takes an optional
+`origin` of `upload` (default), `demo` or `injected`, recorded on `stage.ingest_batch` and
+echoed on every batch summary. It is a declaration, not a check: it changes nothing about how
+the file is read, and exists so that manufactured demo defects can never be rendered as vendor
+ones. `GET /v1/health` reports `synthetic_batches` and `synthetic_records` for the same reason —
+the UI already calls it before drawing anything, so the disclosure costs no extra request and
+cannot be skipped by a page that forgot.
+
 ### 4.4 Why synchronous; async as extension
 
 Streamlit re-runs on every interaction and has no server push. Async ingest would need a
@@ -331,6 +339,21 @@ DuckDB, sample-scale assumptions. Blocking is simpler and honest about completio
 
 **Extension:** job table, **202** with a job handle, UI polling. Trigger when sustained
 ingest exceeds ~30s; enforce a hard upload size cap meanwhile.
+
+**`POST /v1/dq/runs` blocks under the same reasoning and the same budget.** It is the longest
+synchronous call in the app — a corpus-wide re-validate reads every record, writes every finding
+and rebuilds the daily metrics — and locked decision 7 covers it even though its wording names
+ingest. Naming it here closes a gap: an endpoint that blocks with no stated latency expectation
+is one nobody notices getting slower.
+
+The budget is a design constraint rather than an aspiration, and it has already bitten once. A
+corpus-wide run over 711,484 records took **240 seconds**, of which 160 was a single `executemany`
+inserting 145,236 metric rows one at a time and a further 37 was the findings written the same
+way; the query producing the metrics took 0.1 seconds. Written set-based the same run takes
+**10.6 seconds** (`specs/data-model.md` §5). Nothing about the corpus changed — the work was
+always about a second of analysis wrapped in four minutes of round trips, and a change that
+reintroduces a per-row loop will show up as this endpoint crossing 30s long before anything
+else does.
 
 ---
 

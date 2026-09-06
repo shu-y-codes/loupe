@@ -72,6 +72,11 @@ CREATE TABLE IF NOT EXISTS stage.ingest_batch (
   file_hash       VARCHAR NOT NULL,          -- sha256 of file bytes
   file_bytes      BIGINT,
   file_format     VARCHAR CHECK (file_format IN ('csv','parquet')),
+  -- Where this batch came from, so provenance travels with the records rather than with a
+  -- session. 'injected' marks manufactured demo defects, and every surface that reports a
+  -- number drawn from them has to say so (`plans/07-demo-corpus.md`).
+  origin          VARCHAR NOT NULL DEFAULT 'upload'
+                  CHECK (origin IN ('upload','demo','injected')),
   status          VARCHAR NOT NULL DEFAULT 'pending'
                   CHECK (status IN ('pending','running','succeeded','partial','failed','purged')),
   rows_read       BIGINT DEFAULT 0,

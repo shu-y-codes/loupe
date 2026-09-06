@@ -17,6 +17,7 @@ import streamlit as st
 # module of the package, so a relative import fails at launch as well as under test.
 from loupe.ui.chrome import render_header, render_sidebar
 from loupe.ui.client import ApiProblem, ApiUnavailable, LoupeClient
+from loupe.ui.demo import render_demo, render_synthetic_notice
 from loupe.ui.runtime import get_client
 from loupe.ui.specifics import render_specifics
 from loupe.ui.summary import render_summary
@@ -50,36 +51,47 @@ def settlement_trend(client: LoupeClient, start, end) -> list[dict[str, Any]]:
     return body.get("data", [])
 
 
-def store_is_ready(client: LoupeClient) -> bool:
-    """Ask `/health` before anything else, so an unprepared store gets a sentence.
+def read_health(client: LoupeClient) -> dict[str, Any] | None:
+    """Ask `/health` before anything else, and hand the answer back rather than a verdict.
 
-    A store with no schema answers every analytic call with a 500 — `dq.dq_run` does not
-    exist to be queried. Rendering that as a stack trace would blame the reader for a setup
-    step nobody told them about, so the page checks first and says what to run.
+    Two things depend on the body, not on a yes/no. The demo panel decides which controls to
+    offer from `records`, and the synthetic-data disclosure fires on `synthetic_batches` — and
+    that disclosure has to be driven by something the page cannot skip, which is why it reads
+    the call that already gates everything else.
     """
     try:
-        health = client.health()
+        return client.health()
     except ApiUnavailable as exc:
         st.error(str(exc))
-        return False
+        return None
     except ApiProblem as problem:
         st.error(f"{problem.title}: {problem}")
-        return False
+        return None
 
+
+def store_is_ready(health: dict[str, Any]) -> bool:
+    """Whether the store can answer at all, with a sentence when it cannot.
+
+    A store with no schema answers every analytic call with a refusal — `dq.dq_run` does not
+    exist to be queried. Blaming the reader for a setup step nobody told them about would be
+    the wrong response, so the page checks first and says what to run. Both branches should be
+    unreachable now that `bootstrapped_app` seeds on first start; they stay because a store
+    can also be pointed at by `LOUPE_DB` after being created some other way.
+    """
     if not health.get("schema_applied"):
         st.warning(
-            "**The store has no schema yet.** Apply it once before using the app:\n\n"
-            "```python\n"
-            "from loupe.data import apply_schema, connect, seed_reference\n"
-            "from loupe.quality import seed_quality\n"
-            "con = connect(); apply_schema(con); seed_reference(con); seed_quality(con)\n"
+            "**The store has no schema yet.** Start the API with the bootstrapping factory, "
+            "which applies the schema and seeds the rule catalogue on first run:\n\n"
+            "```bash\n"
+            "uv run uvicorn loupe.api.app:bootstrapped_app --factory\n"
             "```"
         )
         return False
     if not health.get("rules_seeded"):
         st.warning(
-            "**The rule catalogue is not seeded.** Run `seed_quality(con)` — quality rules "
-            "are rows, so nothing can be validated until they exist."
+            "**The rule catalogue is not seeded.** Restart the API with "
+            "`loupe.api.app:bootstrapped_app`, or run `seed_quality(con)` — quality rules are "
+            "rows, so nothing can be validated until they exist."
         )
         return False
     return True
@@ -100,11 +112,22 @@ def main() -> None:
     st.set_page_config(page_title="Loupe", page_icon="🔍", layout="wide")
     client = get_client()
 
+    health = read_health(client)
+    if health is None:
+        return
+
     state = render_sidebar(client)
+    # The demo panel sits under the uploader, because loading a curated corpus and uploading
+    # your own file are the same question asked two ways.
+    render_demo(client, health)
     render_header(state.persona)
 
-    if not store_is_ready(client):
+    if not store_is_ready(health):
         return
+
+    # Before anything that reports a number. A reader must never meet a score without knowing
+    # whether the data behind it was planted (`plans/07-demo-corpus.md` done-when 5).
+    render_synthetic_notice(health)
 
     summary = load_summary(client, state.start, state.end)
     if summary is None:

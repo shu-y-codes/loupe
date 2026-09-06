@@ -25,13 +25,22 @@ Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 uv sync                              # create the venv and install
 git config core.hooksPath .githooks  # ruff + pytest on every commit (matches CI)
-uv run python tools/fetch_samples.py # ~15.5 MB of vendor sample data, gitignored
 uv run pytest                        # tests that need the corpus skip without it
 uv run ruff check .
 ```
 
-The sample corpus carries **no redistribution licence**, so it is fetched, never committed
-(`specs/sample-corpus.md` §1). Nothing in the application fetches at runtime.
+You do not need to fetch data to start — **Load demo data** in the running app does it. To do
+it from a terminal instead:
+
+```bash
+uv run python tools/fetch_samples.py --csv   # ~16 MB of vendor sample data, gitignored
+```
+
+The sample corpus carries **no redistribution licence**, so it is fetched and never committed
+(`specs/sample-corpus.md` §1). Nothing fetches **during ingest** — reading a file touches the
+filesystem and the database and nothing else (locked decision 9). The download happens when a
+person asks for it, by running that script or by pressing that button, and the app says what it
+is about to download and from where before it does.
 
 ## Running the app
 
@@ -65,21 +74,36 @@ LOUPE_API_URL=http://localhost:9000/v1 uv run streamlit run src/loupe/ui/app.py
 upload; the sidebar previews the file, discloses what it cannot support (a daily-only file
 gets bars and quality but no 15-minute VWAP), and only then commits it.
 
-## Demo defects
+## The demo, in two clicks
 
-The minute corpus is effectively defect-free (`specs/sample-corpus.md` §7.1), so a demo leads
-with the **real** findings it does contain — the timezone trap, settlements outside the traded
-range, off-tick settlements. For the defect types it happens not to contain there is a
-labelled injector, which writes a defective *copy* and a ground-truth manifest beside it:
+**Load demo data** fetches 40 daily files and eight minute files — all six exchanges, all three
+session profiles, both odd tick regimes — and loads them. Two of the eight are converted from
+Parquet to CSV first, so both accepted formats actually run: the earliest file by
+`first_timestamp_ms` and the smallest by `row_count`, picked from the vendor's own manifest
+rather than by name. The whole thing takes about three quarters of a minute — mostly parsing —
+and every finding it produces is real.
+
+**Inject demo defects** is a second, separate click, and the separation is the point. The
+vendor corpus is close to defect-free — 17 of 37 rules fire on it and 20 cannot
+(`specs/sample-corpus.md` §8.1) — so the injector plants nine labelled defects to show six that
+are otherwise unreachable, including a key conflict, an inverted bar and a negative volume. It
+writes a defective *copy*, refuses to touch the vendor file, and records a manifest naming the
+rule each defect should trip.
+
+**While any of it is loaded the app says so, on every screen and every rerun.** A banner names
+how many records are synthetic, the manifest is one expander away, and **Remove demo defects**
+puts the clean file back. A planted defect that a reader could mistake for a vendor one would
+make every number in the app unciteable, which is the one thing this demo may not trade away
+for convenience.
+
+The injector is also available from a terminal:
 
 ```bash
 uv run python -m loupe.demo.injection tests/fixtures/injection_base.csv --out /tmp/demo.csv
 ```
 
-It refuses to write over its source and records the SHA-256 of both files. A corrupted sample
-nobody labelled is indistinguishable from a vendor defect, and it would end up quoted in a
-spec. `tests/demo/` runs the real engine over an injected file and asserts the findings agree
-with the manifest, which is what makes it a test asset rather than a prop.
+`tests/demo/` runs the real engine over an injected file and asserts the findings agree with the
+manifest, which is what makes it a test asset rather than a prop.
 
 ## Status
 

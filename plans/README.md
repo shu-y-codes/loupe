@@ -29,7 +29,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 4 | api | **done** | [04-api.md](04-api.md) |
 | 5 | ui | **done** | [05-ui.md](05-ui.md) |
 | 6 | rec / suggestions / demo | **done** | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
-| 7 | demo corpus / first run | pending | [07-demo-corpus.md](07-demo-corpus.md) |
+| 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
 | 8 | README walkthrough | pending | [08-readme-walkthrough.md](08-readme-walkthrough.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is

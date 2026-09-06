@@ -35,6 +35,16 @@ class Health(BaseModel):
     records: int = Field(description="Rows in `stage.market_record`.")
     contracts: int
     batches: int = Field(description="Ingest batches, excluding purged ones.")
+    synthetic_batches: int = Field(
+        0,
+        description="Batches loaded with `origin = 'injected'` — manufactured demo defects. "
+        "Non-zero means some findings in this store were planted, and every surface showing a "
+        "number has to say so. Reported here because the UI already calls `/health` before it "
+        "draws anything, so the disclosure costs no extra request and cannot be forgotten.",
+    )
+    synthetic_records: int = Field(
+        0, description="Rows belonging to those batches."
+    )
 
 
 class Coverage(BaseModel):
@@ -160,6 +170,12 @@ class BatchSummary(BaseModel):
     status: str
     filename: str
     file_format: str | None
+    origin: str = Field(
+        "upload",
+        description="`upload`, `demo` (the fetched vendor corpus) or `injected` (manufactured "
+        "demo defects). A declaration by the caller that changes nothing about how the file "
+        "was read; it exists so a planted defect can never be read as a vendor one.",
+    )
     file_hash: str
     frequency: str
     source_timezone: str | None

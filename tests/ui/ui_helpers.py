@@ -34,7 +34,7 @@ class FakeClient:
     def __init__(self, **overrides: Any) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self._responses: dict[str, Any] = {
-            "health": {"status": "ok", "schema_applied": True, "rules_seeded": True},
+            "health": HEALTH,
             "summary": SUMMARY,
             "metrics": {"data": TREND, "total": len(TREND), "dimension": "completeness"},
             "contracts": CONTRACTS,
@@ -115,6 +115,33 @@ VWAP_REFUSED = ApiProblem(
     title="Frequency unavailable",
     detail="ZCZ25 holds daily records only; a 15-minute VWAP needs minute bars.",
 )
+
+#: `GET /v1/health`. `synthetic_batches` is zero here: the default stub is a store holding only
+#: real vendor data, which is what the app must look like before anyone presses Inject.
+HEALTH: dict[str, Any] = {
+    "status": "ok",
+    "schema_applied": True,
+    "rules_seeded": True,
+    "records": 115622,
+    "contracts": 2,
+    "batches": 2,
+    "synthetic_batches": 0,
+    "synthetic_records": 0,
+}
+
+#: The same store after labelled defects were planted. Every surface reporting a number has to
+#: say so while this is true, and has to keep saying so on every rerun
+#: (`plans/07-demo-corpus.md` done-when 5).
+SYNTHETIC_HEALTH: dict[str, Any] = {
+    **HEALTH,
+    "records": 115967,
+    "batches": 3,
+    "synthetic_batches": 1,
+    "synthetic_records": 345,
+}
+
+#: A store nobody has loaded anything into — where the demo panel offers the fetch.
+EMPTY_HEALTH: dict[str, Any] = {**HEALTH, "records": 0, "contracts": 0, "batches": 0}
 
 CONTRACTS = {
     "data": [

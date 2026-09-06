@@ -225,6 +225,11 @@ __marimo__/
 *.duckdb.wal
 
 # Loupe — vendor sample data.
+# Derived demo assets: CSV renderings of vendor Parquet and the injected defect copies, with
+# their manifests. Derived from data that carries no redistribution grant, so they inherit the
+# same rule (`specs/sample-corpus.md` §1).
+data/demo/
+
 # Fetched by tools/fetch_samples.py, never committed: the upstream dataset carries no
 # licence grant. Small hand-built test fixtures live in tests/fixtures/ and ARE committed.
 data/samples/

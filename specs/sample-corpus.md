@@ -538,6 +538,71 @@ Between them these cover all six exchanges, all eight roots, both frequencies fo
 contract, all three session profiles, both odd tick regimes, a contract expiring inside the window,
 and file sizes from 345 to 139,406 rows.
 
+### 8.1 What the curated subset actually fires — measured
+
+The selection above was curated for **ingest** diversity, and the question it never answered is
+which of the 37 engine rules a reviewer would see fire. Measured over the whole subset — 48 files,
+711,484 records, one corpus-wide run — **17 do**:
+
+| Fires naturally | Findings |
+|---|---|
+| `CMP.MISSING_TIMESTAMP` | 135,808 |
+| `OUT.RETURN_MAD` | 19,666 |
+| `CMP.PARTIAL_SESSION` | 1,190 |
+| `REC.VOLUME_SHORTFALL` | 1,088 |
+| `VAL.ZERO_VOLUME_WITH_RANGE` | 400 |
+| `CMP.SESSION_MISSING` | 382 |
+| `REC.CLOSE_CONVENTION` | 325 |
+| `OUT.VOLUME_MAD` | 186 |
+| `VAL.OFF_TICK_PRICE` | 62 |
+| `CON.CLOSE_OUT_OF_RANGE` | 42 |
+| `REC.OHLC_DISAGREE` | 25 |
+| `REC.SESSION_ONLY_IN_ONE` | 13 |
+| `VAL.EXTREME_VOLUME`, `CON.PRICE_JUMP` | 10 each |
+| `ROL.NO_SUCCESSOR` | 9 |
+| `ROL.THIN_NEAR_EXPIRY` | 5 |
+| `CON.OPEN_OUT_OF_RANGE` | 2 |
+
+**Twenty do not, and that is a fact about the data rather than a shortfall in the selection.**
+§7.1 measures the minute config as effectively defect-free and §7.5 records that the defects that
+do exist are natural, not planted. No file in this package will demonstrate `UNQ.KEY_CONFLICT`,
+`CON.HIGH_LT_LOW` or `VAL.NEGATIVE_VOLUME`, because nothing is wrong with them. Widening the
+selection cannot fix that; **labelled injection is the answer** (`specs/loupe-solution-design.md`
+§9), and `loupe.demo.injection` plants nine defect types of which six are otherwise unreachable:
+`VAL.NEGATIVE_VOLUME`, `CON.HIGH_LT_LOW`, `CMP.NULL_FIELD`, `VAL.PRICE_MAGNITUDE`,
+`UNQ.EXACT_DUPLICATE` and `UNQ.KEY_CONFLICT`. That takes the demonstrable set to 23 of 37.
+
+Three absences are worth reading rather than skipping:
+
+- **The whole `TIM.*` family is silent.** Timestamps in this package are monotonic, on-grid, and
+  inside the listed span; `TIM.TIMEZONE_MISALIGNED` needs a deliberately corrupted derivative
+  (§15) because the vendor's own timezone handling is consistent, even where it is confusing.
+- **`CON.STALE_REPEAT` does not fire**, though §7.1 measured 14,830 flat-price runs at `n = 10`.
+  The seeded default is `n = 30` with per-root overrides up to 120, calibrated so an illiquid rate
+  contract is not reported for behaving like one. The rule and the calibration disagreeing with a
+  raw count is the calibration working.
+- **`CON.DERIVED_BAR_INVALID` refused** in this measurement, because it reads `mart.bar_daily` and
+  bars had not been built. Ingest builds them after every load, so it is evaluated in the app;
+  the refusal here is an artefact of measuring with `load_file` directly.
+
+**Cost, for anyone waiting on it.** Loading the 48 files takes about 33 seconds and the
+corpus-wide validation about 11 — so the demo button is roughly three quarters of a minute, and
+**parsing the files is now the slow half**. Of the 159,223 findings, 136,000 are missing minute
+slots: legitimate sparsity in the deferred contracts (§7.4), not a defect.
+
+The run was four minutes when first measured, and none of that was analysis. 160 seconds went on
+inserting 145,236 metric rows one statement at a time against a composite key, and 37 on writing
+the findings the same way; the queries behind both take a tenth of a second. `specs/data-model.md`
+§5 carries the rule that came out of it, and `specs/api-contract.md` §4.4 carries the latency
+budget that should have caught it earlier.
+
+**Two of the eight minute files load as CSV**, converted from their Parquet by
+`loupe.demo.corpus`: the earliest by `first_timestamp_ms` and the smallest by `row_count`. The
+vendor ships only Parquet, so without this the CSV half of "accept CSV or Parquet" would never
+run outside the test suite. A converted file **replaces** its Parquet in the load rather than
+joining it — two copies of one tape differ only in format, and loading both would make almost
+every row an exact duplicate.
+
 **Test fixtures are a separate concern with a different answer.** The real files are unsuitable as
 unit-test fixtures: too large, not committable, and far too clean to exercise the rule catalogue.
 Fixtures are tiny, hand-built, committed CSVs under `tests/fixtures/`, each carrying exactly one

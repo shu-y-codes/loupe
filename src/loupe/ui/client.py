@@ -130,6 +130,15 @@ class LoupeClient:
     def changelog(self, **params: Any) -> dict[str, Any]:
         return self.get("/dq/changelog", **params)
 
+    def run_rules(self, **params: Any) -> dict[str, Any]:
+        """`POST /v1/dq/runs` — re-validate a scope, corpus-wide when unscoped (§6.4).
+
+        The demo needs this and so does anyone who uploads a second granularity: an upload runs
+        the rules scoped to *its own batch*, so cross-frequency reconciliation cannot be in
+        scope at that moment — the run has not seen the other grain yet.
+        """
+        return self._request("POST", "/dq/runs", params=_params(params))
+
     def suggestions(self, **params: Any) -> dict[str, Any]:
         """Slice 6 (`plans/06-rec-suggestions-demo.md` done-when 4).
 
@@ -142,13 +151,29 @@ class LoupeClient:
 
     # ---------------------------------------------------------------- ingest
 
+    def batches(self, **params: Any) -> dict[str, Any]:
+        return self.get("/ingest/batches", **params)
+
+    def purge_batch(self, batch_id: str) -> dict[str, Any]:
+        """`DELETE /v1/ingest/batches/{id}` — the way back out of a demo.
+
+        Injected defects have to be removable without deleting the store, or nobody presses the
+        button that plants them.
+        """
+        return self._request("DELETE", f"/ingest/batches/{batch_id}")
+
     def preview(self, filename: str, content: bytes) -> dict[str, Any]:
         return self._request(
             "POST", "/ingest/preview", files={"file": (filename, content)}
         )
 
     def create_batch(
-        self, filename: str, content: bytes, *, validate: bool = True
+        self,
+        filename: str,
+        content: bytes,
+        *,
+        validate: bool = True,
+        origin: str = "upload",
     ) -> dict[str, Any]:
         """Ingest a file. A re-upload of the same bytes is refused with something to say.
 
@@ -167,7 +192,7 @@ class LoupeClient:
                 "POST",
                 "/ingest/batches",
                 files={"file": (filename, content)},
-                params={"validate": validate},
+                params={"validate": validate, "origin": origin},
             )
         except ApiProblem as problem:
             if problem.status != 409:
