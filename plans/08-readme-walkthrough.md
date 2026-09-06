@@ -1,21 +1,28 @@
-# 07 — README walkthrough
+# 08 — README walkthrough
 
 **Goal.** The delivered README a reviewer reads first: philosophy, architecture, trade-offs,
 limitations, extensibility, and a walkthrough against real `ESZ25` (solution brief §16).
 
 **Status.** pending
 
-Written 2026-09-07, after slice 6 shipped and after the integration tier went in. Slices 1-6
-each left the README a paragraph; this slice makes it the document the work is judged by. Three
-things are already known and should not be rediscovered — see "Carried in from slice 6".
+Written 2026-09-07, after slice 6 shipped and after the integration tier went in; renumbered
+from 07 when the demo-corpus work was split out ahead of it. Slices 1-6 each left the README a
+paragraph; this slice makes it the document the work is judged by. Three things are already
+known and should not be rediscovered — see "Carried in from slice 6".
+
+**Slice 7 is a hard dependency, not a nicety.** The walkthrough is prose *about* a corpus, and
+until [07-demo-corpus.md](07-demo-corpus.md) lands there is no CSV file to name, no demo button
+to describe, and no answer to "what does a reviewer see first". Write this after that, not
+alongside it.
 
 ## Done when
 
-1. **The walkthrough runs from a clone with no setup step.** `bootstrap` now seeds the schema,
+1. **The walkthrough runs from a clone with no setup step.** `bootstrap` seeds the schema,
    reference data and the rule catalogue, and `loupe.api.app:bootstrapped_app` is the
-   zero-argument factory `uvicorn --factory` needs. Verify by hand on a fresh clone with an
-   empty `data/`: two commands, upload a file, see findings. Anything that needs a Python REPL
-   before the app works is a bug in this slice, not a step to document.
+   zero-argument factory `uvicorn --factory` needs. Slice 7 adds the demo-data button, so the
+   documented path is: two commands, one click, findings on real vendor data. Verify by hand on
+   a fresh clone with an empty `data/`. Anything that needs a Python REPL before the app works
+   is a bug, not a step to document.
 2. **Philosophy, architecture and trade-offs**, in the reviewer's reading order rather than the
    build order. The locked decisions (`specs/loupe-solution-design.md` §3) are the spine: say
    what was chosen, what was rejected, and what the choice costs. A trade-off with no cost
@@ -96,8 +103,8 @@ No new tier. The claims the README makes are already covered — the two-command
 `tests/integration/test_cold_start.py`, the upload round trip and the reconciled book by
 `tests/integration/test_walkthrough.py`, the endpoint table by `tests/api/test_openapi.py`.
 
-What this slice owes is a **manual pass on a clean clone**: `git clone`, `uv sync`, fetch the
-corpus, run the two commands, follow the walkthrough as written, and fix the README where
+What this slice owes is a **manual pass on a clean clone**: `git clone`, `uv sync`, run the two
+commands, click Load demo data, follow the walkthrough as written, and fix the README where
 reality disagrees. Do it on a machine that has never run Loupe, or the one thing being tested —
 that a stranger can start it — is the one thing not being tested.
 
@@ -115,9 +122,3 @@ New features. If the walkthrough wants a capability that does not exist, the ans
 sentence in Limitations, not a slice 7 implementation. The one exception is a defect the
 walkthrough surfaces in something already claimed to work — that gets fixed, because the
 README is the claim.
-
-
-## appended
-- for first time app launch, want to bootstrap a fetch sample data from the huggingface sample data repo referenced in /Users/shu/Documents/loupe/specs/sample-corpus.md
-- there's a requirement to demonstrate that we can ingest csv and parquet files so we should convert one of the parquets into csv (let's say the earliest file)
-- the files that we fetch should be an example selection that we curate to demonstrate the rules that we have built
