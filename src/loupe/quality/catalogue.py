@@ -508,3 +508,67 @@ RULES_ENFORCED_BY_ENGINE: frozenset[str] = frozenset(
 #: the exclusion back re-seeds the param rather than editing this set.
 DEDUPE_DROP_RULES: frozenset[str] = frozenset({"UNQ.EXACT_DUPLICATE"})
 NEVER_EXCLUDE_RULES: frozenset[str] = frozenset({"VAL.OFF_TICK_PRICE"})
+
+#: specs/dq-rules-and-scoring.md §11.6. The Risk inventory's **Closing-day** column is a
+#: statement about the session's *settlement* record, not the contract's worst issue of any
+#: kind, and nothing on `dq.dq_rule` distinguishes the two — hence a named set rather than a
+#: query. Membership test: the rule's subject can be the session's settlement record.
+#: Applied together with `frequency = 'daily'`; at minute grain `VAL.OFF_TICK_PRICE` says
+#: "off-tick price", not "off-tick close", and `CMP.SESSION_MISSING` says "no tape at all"
+#: rather than "no settlement".
+#: `UNQ.EXACT_DUPLICATE` is deliberately absent though a duplicated daily row is literally a
+#: duplicated settlement: `dedupe_drop` resolves it automatically, so it is a changelog entry
+#: rather than open settlement risk. A key conflict is two *different* settlement prices for
+#: one session with no principled winner, which is what a risk manager must be told.
+#: Slice 6 adds the `REC.*` close-convention rule under the same test.
+SETTLEMENT_RULES: frozenset[str] = frozenset(
+    {
+        "CON.CLOSE_OUT_OF_RANGE",
+        "CMP.SESSION_MISSING",
+        "UNQ.KEY_CONFLICT",
+        "VAL.OFF_TICK_PRICE",
+    }
+)
+
+#: specs/dq-rules-and-scoring.md §11.7. The Analyst **Worst field** tile, derived from rule
+#: identity rather than by grouping `dq.dq_finding.details` — that column is evidence and is
+#: never grouped on (`specs/data-model.md`).
+#:
+#: Membership is a two-part test, because the tile answers *what is broken*: the rule must
+#: **assert a defect**, and must **fix the field that defect is in**. "Fixes a field" alone
+#: is too loose — it admits rules that name a field while claiming nothing is wrong with it.
+#:
+#: Three groups are therefore absent, and their absence is the design:
+#:   * field-parametric — `CMP.NULL_FIELD`, `VAL.NON_POSITIVE_PRICE`, `VAL.OFF_TICK_PRICE`,
+#:     `VAL.PRICE_MAGNITUDE`, `CON.HIGH_LT_LOW`, `CON.PRICE_JUMP`. Which field they implicate
+#:     is known only per finding, in `details`.
+#:   * record-, session- or series-shaped — all `UNQ.*`, `CMP.MISSING_TIMESTAMP`,
+#:     `CMP.SESSION_MISSING`, `CMP.PARTIAL_SESSION`, `CMP.SPARSE_SERIES`, `CON.STALE_REPEAT`,
+#:     `CON.DERIVED_BAR_INVALID`, all `ROL.*`. `CMP.MISSING_TIMESTAMP` belongs here and not
+#:     under `timestamp`: its trigger is a run of expected slots with *no record*, so no
+#:     timestamp value is wrong — the defect is absence, exactly as for the other two `CMP`
+#:     session rules.
+#:   * diagnostic rather than defect — `OUT.*`, always `info` and never auto-excluded (§10).
+#:     A log return also spans two closes, so no individual close is accused.
+RULE_SUBJECT_FIELD: Mapping[str, str] = MappingProxyType(
+    {
+        "CON.CLOSE_OUT_OF_RANGE": "close",
+        "CON.OPEN_OUT_OF_RANGE": "open",
+        "VAL.NEGATIVE_VOLUME": "volume",
+        "VAL.NON_INTEGER_VOLUME": "volume",
+        "VAL.ZERO_VOLUME_WITH_RANGE": "volume",
+        "VAL.EXTREME_VOLUME": "volume",
+        # Every `timestamp` entry fires on a record that *exists* and whose timestamp is
+        # wrong — off the grid, out of order, misaligned, or placing the record on a
+        # weekend, holiday or halt. That is what separates them from the absence rules.
+        "TIM.AFTER_EXPIRY": "timestamp",
+        "TIM.BEFORE_LISTING": "timestamp",
+        "TIM.FUTURE_TIMESTAMP": "timestamp",
+        "TIM.OFF_GRID": "timestamp",
+        "TIM.OUT_OF_ORDER": "timestamp",
+        "TIM.TIMEZONE_MISALIGNED": "timestamp",
+        "CON.WEEKEND_RECORD": "timestamp",
+        "CON.RECORD_IN_HALT": "timestamp",
+        "CON.RECORD_ON_HOLIDAY": "timestamp",
+    }
+)

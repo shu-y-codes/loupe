@@ -16,7 +16,15 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
-from loupe.quality import RunScope, assess, scoped, score_slice
+from loupe.quality import (
+    RunScope,
+    assess,
+    changelog,
+    contract_rows,
+    scoped,
+    score_slice,
+    worst_field,
+)
 from loupe.quality.errors import RulesNotSeeded
 
 from ..deps import (
@@ -30,6 +38,9 @@ from ..deps import (
 )
 from ..errors import ProblemError
 from ..models import (
+    ChangelogEntry,
+    ChangelogResponse,
+    ContractSummary,
     DimensionScore,
     DqMetricsResponse,
     DqSummaryResponse,
@@ -142,9 +153,11 @@ def summary(
 
     resolved = sorted({s.frequency for s in scores})
     scored = [s.overall for s in scores if s.overall is not None]
+    in_scope = contracts or sorted({s.contract_id for s in scores})
+    rows = contract_rows(con, run_id, scores, contracts=contracts or None)
     return DqSummaryResponse(
         scope=Scope(
-            contracts=contracts or sorted({s.contract_id for s in scores}),
+            contracts=in_scope,
             start=start,
             end=end,
             basis=basis,
@@ -154,6 +167,8 @@ def summary(
         overall_score=round(sum(scored) / len(scored), 1) if scored else None,
         score_method=_SCORE_METHOD,
         slices=[_as_slice_score(s) for s in scores],
+        contracts=[ContractSummary(**row.as_json()) for row in rows],
+        worst_field=worst_field(con, run_id, in_scope),
         records=_record_counts(con, contracts),
         top_issues=_top_issues(con, run_id, contracts),
         meta={
@@ -233,22 +248,35 @@ def metrics(
             "endpoint per metric would not.",
         ),
     ] = "day",
+    dimension: Annotated[
+        str | None,
+        Query(
+            pattern="^(completeness|validity|consistency|uniqueness|timeliness|reconciliation)$",
+            description="Restrict to one quality dimension. Without it `group_by=day` "
+            "averages the dimensions together, which cannot express a single-dimension "
+            "trend: the Risk **Settlement trend** sparkline is `completeness` at "
+            "`frequency=daily` over trade dates (`specs/loupe-ui-design.md`, Risk → Summary).",
+        ),
+    ] = None,
 ) -> DqMetricsResponse:
     """Persisted daily metrics, rolled up. `group_by=rule` reads findings instead."""
     contracts = _contracts(contract)
     if group_by == "rule":
-        data = _metrics_by_rule(con, contracts, start, end, frequency)
+        data = _metrics_by_rule(con, contracts, start, end, frequency, dimension)
     else:
-        data = _metrics_from_mart(con, contracts, start, end, frequency, group_by)
+        data = _metrics_from_mart(con, contracts, start, end, frequency, group_by, dimension)
     return DqMetricsResponse(
         scope=Scope(contracts=contracts, start=start, end=end, frequency=frequency),
         group_by=group_by,
         data=data,
         total=len(data),
+        dimension=dimension,
     )
 
 
-def _metric_filters(contracts, start, end, frequency, *, prefix: str = "") -> tuple[str, list]:
+def _metric_filters(
+    contracts, start, end, frequency, dimension=None, *, prefix: str = "", dimension_column=None
+) -> tuple[str, list]:
     clauses, args = [], []
     clause, cargs = _contract_clause(contracts, f"{prefix}contract_id")
     clauses.append(clause)
@@ -262,12 +290,17 @@ def _metric_filters(contracts, start, end, frequency, *, prefix: str = "") -> tu
     if frequency is not None:
         clauses.append(f"{prefix}frequency = ?")
         args.append(frequency)
+    if dimension is not None:
+        clauses.append(f"{dimension_column or f'{prefix}dimension'} = ?")
+        args.append(dimension)
     return " AND ".join(clauses), args
 
 
-def _metrics_from_mart(con, contracts, start, end, frequency, group_by) -> list[dict]:
+def _metrics_from_mart(
+    con, contracts, start, end, frequency, group_by, dimension=None
+) -> list[dict]:
     column = GROUP_BY_COLUMN[group_by]
-    where, args = _metric_filters(contracts, start, end, frequency)
+    where, args = _metric_filters(contracts, start, end, frequency, dimension)
     rows = con.execute(
         f"""
         SELECT {column}, sum(expected_records), sum(actual_records),
@@ -290,8 +323,12 @@ def _metrics_from_mart(con, contracts, start, end, frequency, group_by) -> list[
     ]
 
 
-def _metrics_by_rule(con, contracts, start, end, frequency) -> list[dict]:
-    where, args = _metric_filters(contracts, start, end, frequency, prefix="f.")
+def _metrics_by_rule(con, contracts, start, end, frequency, dimension=None) -> list[dict]:
+    # `dq.dq_finding` has no dimension column; the rule carries it, so the filter lands on
+    # the joined `dq.dq_rule` rather than on the finding's own prefix.
+    where, args = _metric_filters(
+        contracts, start, end, frequency, dimension, prefix="f.", dimension_column="r.dimension"
+    )
     rows = con.execute(
         f"""
         SELECT f.rule_id, r.dimension, r.severity, count(*), sum(f.affected_rows)
@@ -411,6 +448,60 @@ def get_finding(con: Con, finding_id: str) -> Finding:
             type_="/errors/finding-not-found",
         )
     return _as_finding(row)
+
+
+@router.get(
+    "/changelog",
+    response_model=ChangelogResponse,
+    summary="Cleaning decisions (read-only)",
+)
+def get_changelog(
+    con: Con,
+    contract: ContractParam = None,
+    start: StartDateParam = None,
+    end: EndDateParam = None,
+    run_id: Annotated[
+        str | None,
+        Query(description="Defaults to the latest succeeded run; pass one to inspect a past "
+              "run, which stays readable after a later run supersedes it."),
+    ] = None,
+    limit: LimitParam = 100,
+    offset: OffsetParam = 0,
+) -> ChangelogResponse:
+    """What default cleaning decided, aggregated by rule x trade date x action.
+
+    Read-only, like findings: cleaning is automatic policy driven by severity, not a user
+    action, so there is nothing here to post to. The rows are the evidence that the clean
+    basis is derived rather than edited in place.
+    """
+    contracts = _contracts(contract)
+    resolved = run_id or _latest_run(con)
+    if resolved is None:
+        return ChangelogResponse(
+            scope=Scope(contracts=contracts, start=start, end=end),
+            run_id=None,
+            data=[],
+            total=0,
+            limit=limit,
+            offset=offset,
+        )
+    entries, total = changelog(
+        con,
+        resolved,
+        contracts=contracts or None,
+        start=start,
+        end=end,
+        limit=limit,
+        offset=offset,
+    )
+    return ChangelogResponse(
+        scope=Scope(contracts=contracts, start=start, end=end),
+        run_id=resolved,
+        data=[ChangelogEntry(**e.as_json()) for e in entries],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/rules", response_model=RulesResponse, summary="The rule catalogue")

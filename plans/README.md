@@ -11,7 +11,11 @@ See `.cursor/rules/docs-authority.mdc`.
 implement solely from `_notes/`. Promoted so far: `specs/data-model.md` and
 `specs/sample-corpus.md` (slice 1); `specs/dq-rules-and-scoring.md` (slice 2);
 `specs/analytics-semantics.md` (slice 3 done-when 1); `specs/api-contract.md`
-(slice 4 done-when 1).
+(slice 4 done-when 1). Slice 5 needed no promote — `specs/loupe-ui-design.md` was already
+promoted from the founding notes — but it amended four specs: `api-contract.md` (§6.1, §6.5
+and the v1 route table), `dq-rules-and-scoring.md` (§11.6, §11.7),
+`loupe-ui-design.md` (Risk status and trend, the daily-grain neighbourhood) and
+`loupe-solution-design.md` §13 (the UI test tier).
 
 Sequence matches `specs/loupe-solution-design.md` §17.
 
@@ -23,7 +27,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 2 | quality | **done** | [02-quality.md](02-quality.md) |
 | 3 | insights | **done** | [03-insights.md](03-insights.md) |
 | 4 | api | **done** | [04-api.md](04-api.md) |
-| 5 | ui | pending | [05-ui.md](05-ui.md) |
+| 5 | ui | **done** | [05-ui.md](05-ui.md) |
 | 6 | rec / suggestions / demo | pending | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
 | 7 | README walkthrough | pending | this index (no slice file) |
 

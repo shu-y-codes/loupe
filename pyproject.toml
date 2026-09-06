@@ -12,14 +12,23 @@ dependencies = [
     # FastAPI's UploadFile will not parse a multipart body without it, and
     # POST /v1/ingest/batches is multipart (specs/api-contract.md §4).
     "python-multipart>=0.0.9",
+    # The UI layer (plans/05-ui.md). `streamlit.testing.v1.AppTest` ships inside it, so the
+    # UI test tier (solution brief §13) needs no separate harness dependency.
+    "streamlit>=1.40",
+    # The README tells the reader to run `uvicorn loupe.api.app:create_app`. Streamlit
+    # happens to pull uvicorn in today; a documented command should not rest on another
+    # package's transitive dependency.
+    "uvicorn>=0.30",
+    # `loupe.ui.client` speaks HTTP to the API rather than importing it (plans/05-ui.md,
+    # done-when 3), so httpx is a runtime dependency of the UI and not only of the tests.
+    # `TestClient` is a thin wrapper over the same library.
+    "httpx>=0.27",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
-    # TestClient is a thin wrapper over httpx; it is not pulled in by fastapi itself.
-    "httpx>=0.27",
 ]
 
 [build-system]

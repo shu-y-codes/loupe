@@ -325,11 +325,62 @@ class SliceScore(BaseModel):
     dimensions: dict[str, DimensionScore]
 
 
+class Issue(BaseModel):
+    """One inventory callout, in the rule catalogue's own words — never copy from a widget."""
+
+    rule_id: str
+    label: str = Field(description="`dq.dq_rule.name`, so the wording lives with the rule.")
+    severity: str = Field(
+        description="The severity the finding fired at, which is not always the rule's "
+        "declared one: `CON.CLOSE_OUT_OF_RANGE` drops to `params.daily_severity` on daily "
+        "rows."
+    )
+    findings: int
+
+
+class ContractSummary(BaseModel):
+    """One row of the Summary inventory. Every persona reads this; each shows a subset."""
+
+    contract_id: str
+    score: float | None = Field(
+        description="**Minimum** across the contract's slices — as trustworthy as its worst "
+        "frequency. Not a mean, which would let a large clean minute tape bury a broken "
+        "daily file."
+    )
+    status: str = Field(
+        description="`ATTN` when the contract holds any open `error` or `critical` finding, "
+        "`OK` otherwise. Severity, never a score cut: the score is a navigation index and "
+        "not a grade (`specs/dq-rules-and-scoring.md` §11.5)."
+    )
+    frequencies: list[str]
+    finding_count: int
+    top_issue: Issue | None = Field(
+        None, description="Worst issue of any kind: the Analyst Top issue and Trader Warning."
+    )
+    settlement_issue: Issue | None = Field(
+        None,
+        description="Risk's Closing-day column — `SETTLEMENT_RULES` at daily grain only "
+        "(§11.6). Null for a contract held solely at minute grain, because settlement lives "
+        "in the daily file.",
+    )
+
+
 class DqSummaryResponse(BaseModel):
     scope: Scope
     overall_score: float | None
     score_method: str
     slices: list[SliceScore]
+    contracts: list[ContractSummary] = Field(
+        default_factory=list,
+        description="`slices` rolled up to one row per contract, with the callouts each "
+        "persona selects. Both callouts ship on every row rather than behind a `?callout=` "
+        "parameter: personas are a UI view selector and nothing here is persona-aware (§8).",
+    )
+    worst_field: dict[str, Any] | None = Field(
+        None,
+        description="The Analyst tile, derived from rule identity (§11.7). Null — the tile "
+        "reads 'not applicable' — when the scope's findings are all from unmapped rules.",
+    )
     records: dict[str, Any]
     top_issues: list[dict[str, Any]]
     meta: dict[str, Any]
@@ -338,6 +389,9 @@ class DqSummaryResponse(BaseModel):
 class DqMetricsResponse(BaseModel):
     scope: Scope
     group_by: str
+    dimension: str | None = Field(
+        None, description="Echoed dimension filter; null means every dimension, averaged."
+    )
     data: list[dict[str, Any]]
     total: int
 
@@ -361,6 +415,33 @@ class Finding(BaseModel):
 
 class FindingsResponse(BaseModel):
     data: list[Finding]
+    total: int
+    limit: int
+    offset: int
+
+
+class ChangelogEntry(BaseModel):
+    """One cleaning decision, summarised over the records it touched."""
+
+    contract_id: str
+    trade_date: date | None
+    frequency: str | None
+    rule_id: str | None = Field(
+        None, description="Null when a decision cannot be attributed to a rule; kept rather "
+        "than dropped, because an unattributable action is what an audit trail must show."
+    )
+    label: str | None = Field(None, description="`dq.dq_rule.name`.")
+    action: str = Field(description="`exclude`, `dedupe_drop`, `coerce` or `impute`.")
+    records: int = Field(description="How many records this decision touched.")
+
+
+class ChangelogResponse(BaseModel):
+    """Aggregated by rule × trade date × action, never one row per record: the panel shows a
+    count, and summing rows in a widget is aggregation outside `ui`."""
+
+    scope: Scope
+    run_id: str | None
+    data: list[ChangelogEntry]
     total: int
     limit: int
     offset: int
