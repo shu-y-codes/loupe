@@ -7,8 +7,9 @@ page against that spec.
 **Status.** done — 2026-09-07
 
 Written 2026-09-07. Click-test chrome is [10-reviewer-chrome.md](10-reviewer-chrome.md)
-(done). The README walkthrough is [11-readme-walkthrough.md](11-readme-walkthrough.md)
-and must describe the page **after** 10, not Summary / Specifics and not the score caption.
+(done). Grain/source correctness follows in
+[11-grain-honest-review.md](11-grain-honest-review.md). The README walkthrough is
+[12-readme-walkthrough.md](12-readme-walkthrough.md) and must describe the page after 11.
 
 Do not reopen [05-ui.md](05-ui.md) or [08-ingest-chrome.md](08-ingest-chrome.md). Those
 slices stay **done**. Amend the specs they pointed at; leave the plan files as history.
@@ -177,9 +178,8 @@ wrong. This slice is labelling, grouping, overlay payloads, and chrome.
 
 Done-when 1–4 (specs) before any widget. 5 before 6. 7 with 6.
 
-Slice 11's walkthrough done-whens that name “open one finding” / Risk columns are rewritten
-when this page exists, against this page after slice 10 chrome. Do not start 11 in
-parallel with 9; 10 is the click-test chrome and blocks 11.
+Slice 12's walkthrough done-whens that name “open one finding” / Risk columns are rewritten
+against the page after slices 10 and 11.
 
 ## Files
 
@@ -206,7 +206,8 @@ parallel with 9; 10 is the click-test chrome and blocks 11.
 - `specs/dq-rules-and-scoring.md` §11.3, §11.6–11.7
 - `specs/analytics-semantics.md` §3.3–3.4
 - [10-reviewer-chrome.md](10-reviewer-chrome.md) — click-test chrome; do not reopen this slice
-- [11-readme-walkthrough.md](11-readme-walkthrough.md) — blocked on 10
+- [11-grain-honest-review.md](11-grain-honest-review.md) — explicit grain/source correctness
+- [12-readme-walkthrough.md](12-readme-walkthrough.md) — blocked on 11
 - [05-ui.md](05-ui.md), [08-ingest-chrome.md](08-ingest-chrome.md) — done; do not reopen
 
 ## Non-goals

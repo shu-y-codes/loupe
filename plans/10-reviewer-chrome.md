@@ -11,9 +11,9 @@ Written 2026-09-07, after a demo-load click-test of [09-reviewer-ui.md](09-revie
 [05-ui.md](05-ui.md) or [08-ingest-chrome.md](08-ingest-chrome.md). Amend the specs they
 pointed at.
 
-[11-readme-walkthrough.md](11-readme-walkthrough.md) stays pending and must describe **this**
-chrome **including the follow-on**. Write 11 after this slice, not against the score caption
-or the extra Check control.
+[11-grain-honest-review.md](11-grain-honest-review.md) follows this slice.
+[12-readme-walkthrough.md](12-readme-walkthrough.md) stays pending and must describe the
+page after 11, not the score caption or the extra Check control.
 
 ## The change
 
@@ -115,7 +115,7 @@ already fetches. Do not change rule triggers, scores, cleaning, or overlay paylo
 ## Sequencing
 
 Done-when 1–3 (specs) before any widget. 4 and 5 together. Do not start
-[11-readme-walkthrough.md](11-readme-walkthrough.md) in parallel.
+[12-readme-walkthrough.md](12-readme-walkthrough.md) before slice 11.
 
 ## Files
 
@@ -138,7 +138,8 @@ Done-when 1–3 (specs) before any widget. 4 and 5 together. Do not start
 - `src/loupe/quality/catalogue.py` — family map (read; do not relitigate)
 - `src/loupe/demo/injection.py` — `INJECTABLE_RULES` / manifest shape
 - [08-ingest-chrome.md](08-ingest-chrome.md) — done; list exists; this slice groups it
-- [11-readme-walkthrough.md](11-readme-walkthrough.md) — blocked on this
+- [11-grain-honest-review.md](11-grain-honest-review.md) — next UI correctness slice
+- [12-readme-walkthrough.md](12-readme-walkthrough.md) — blocked on 11
 
 ## Non-goals
 
@@ -180,4 +181,6 @@ Promote into the UI spec before widgets:
    does not say “findings below”; grouped family labels appear when a stubbed manifest
    is present. **done**
 
-Follow-on landed 2026-09-08. Next: [11-readme-walkthrough.md](11-readme-walkthrough.md).
+Follow-on landed 2026-09-08. Next:
+[11-grain-honest-review.md](11-grain-honest-review.md), then
+[12-readme-walkthrough.md](12-readme-walkthrough.md).

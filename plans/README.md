@@ -34,7 +34,8 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 8 | ingest chrome | **done** | [08-ingest-chrome.md](08-ingest-chrome.md) |
 | 9 | reviewer-facing UI | **done** | [09-reviewer-ui.md](09-reviewer-ui.md) |
 | 10 | reviewer chrome (click-test) | **done** | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
-| 11 | README walkthrough | pending | [11-readme-walkthrough.md](11-readme-walkthrough.md) |
+| 11 | grain-honest review | pending | [11-grain-honest-review.md](11-grain-honest-review.md) |
+| 12 | README walkthrough | pending | [12-readme-walkthrough.md](12-readme-walkthrough.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
@@ -42,9 +43,11 @@ was split out again once the ingest path itself changed — dropping the uploade
 what loaded is chrome the walkthrough would otherwise describe wrongly. Slice 9 rebuilds the
 main page around the brief’s four checks and two charts (no persona selector). Slice 10 is
 chrome a click-test of 9 asked for (cards as the control, no score line, zoom + legend,
-grouped sidebar). Slice 11 then carries three findings from slice 6's integration tier and
-a limitations list that is already decided, so it is assembly rather than discovery — and
-it must describe the page after slice 10, not the score caption or Summary / Specifics.
+grouped sidebar). Slice 11 makes the selected quality grain explicit, aligns cards and
+evidence with the plotted source, fixes Invalid and pattern pictures, and adds VWAP zoom.
+Slice 12 then carries three findings from slice 6's integration tier and a limitations list
+that is already decided, so it is assembly rather than discovery — and it must describe
+the page after slice 11.
 
 ## Archive
 

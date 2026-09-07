@@ -9,7 +9,7 @@ stops saying it did.
 Written 2026-09-07, split out of the README walkthrough once it was clear the prose depends on
 it: there is nothing to describe until the corpus, the CSV file and the buttons exist.
 [08-ingest-chrome.md](08-ingest-chrome.md) then
-[11-readme-walkthrough.md](11-readme-walkthrough.md) follow this slice, not alongside it.
+[12-readme-walkthrough.md](12-readme-walkthrough.md) follow this slice, not alongside it.
 
 ## The two things this slice is balancing
 

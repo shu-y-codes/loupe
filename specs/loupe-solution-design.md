@@ -2,8 +2,8 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-07: §17 inserts slice 10 (reviewer chrome) and moves the README
-walkthrough to 11. Same day: reviewer chrome — cards are the family selector, no score
+Revised 2026-09-08: §17 inserts slice 11 (grain-honest review) and moves the README
+walkthrough to 12. Revised 2026-09-07: reviewer chrome — cards are the family selector, no score
 caption, OHLCV legend + zoom, grouped sidebar. Same day: one reviewer page — four family
 cards and two charts; personas are not a view selector (slice 9). Same day: v1 UI ingest is
 Load demo data; capability preview is API-only and disclosed in place (slice 8).
@@ -557,4 +557,5 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 8. Ingest chrome — one sidebar ingest path; ingested-file list and CSV conversion mark
 9. Reviewer-facing UI — four family cards, selected-family overlay, picture below VWAP
 10. Reviewer chrome after click-test — cards as the family control, no score line, zoom + legend, grouped sidebar (`plans/10-reviewer-chrome.md`)
-11. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page after slice 10
+11. Grain-honest review — explicit quality frequency, source-aligned evidence, honest Invalid/pattern pictures, VWAP zoom (`plans/11-grain-honest-review.md`)
+12. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page after slice 11
