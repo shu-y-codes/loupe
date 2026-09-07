@@ -1,23 +1,26 @@
-# 10 — README walkthrough
+# 11 — README walkthrough
 
 **Goal.** The delivered README a reviewer reads first: philosophy, architecture, trade-offs,
 limitations, extensibility, and a walkthrough against real `ESZ25` (solution brief §16).
 
-**Status.** pending — blocked on [09-reviewer-ui.md](09-reviewer-ui.md)
+**Status.** pending — blocked on [10-reviewer-chrome.md](10-reviewer-chrome.md)
 
 Written 2026-09-07, after slice 6 shipped and after the integration tier went in; renumbered
 from 07 when the demo-corpus work was split out ahead of it, then from 08 when ingest chrome
-was inserted ahead of that, then to 10 so the reviewer-facing UI could ship as slice 9.
-Slice 9 replaced the persona Summary / Specifics page; this walkthrough describes **that**
-page, so it runs after 9, not in parallel.
+was inserted ahead of that, then to 10 so the reviewer-facing UI could ship as slice 9, then
+to 11 so click-test chrome could ship as slice 10.
+Slice 9 replaced the persona Summary / Specifics page; slice 10 is the chrome a click-test
+asked for. This walkthrough describes **that** page, so it runs after 10, not in parallel
+and not against the score caption or a separate Check control.
 
-**Slices 7, 8 and 9 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
-corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md) there is no
-CSV file to name, no demo button to describe, and no answer to "what does a reviewer see first".
-Until [08-ingest-chrome.md](08-ingest-chrome.md) that sidebar still offers Upload files and does
-not show what was loaded. Until [09-reviewer-ui.md](09-reviewer-ui.md) the main column is still
-persona Summary / Specifics, which is not what the walkthrough should teach. Write this after
-all three, not alongside them.
+**Slices 7, 8, 9 and 10 are hard dependencies, not a nicety.** The walkthrough is prose
+*about* a corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md)
+there is no CSV file to name, no demo button to describe, and no answer to "what does a
+reviewer see first". Until [08-ingest-chrome.md](08-ingest-chrome.md) that sidebar still
+offers Upload files and does not show what was loaded. Until
+[09-reviewer-ui.md](09-reviewer-ui.md) the main column is still persona Summary / Specifics.
+Until [10-reviewer-chrome.md](10-reviewer-chrome.md) the page still has a score caption and
+a second Check control. Write this after all four, not alongside them.
 
 ## Done when
 
@@ -25,9 +28,9 @@ all three, not alongside them.
    reference data and the rule catalogue, and `loupe.api.app:bootstrapped_app` is the
    zero-argument factory `uvicorn --factory` needs. Slice 7 adds the demo-data button and
    slice 8 is the sidebar around it, so the documented path is: two commands, one click,
-   findings on real vendor data, the loaded files visible (CSV conversions marked). Verify
-   by hand on a fresh clone with an empty `data/`. Anything that needs a Python REPL before
-   the app works is a bug, not a step to document.
+   findings on real vendor data, the loaded files visible (CSV conversions marked; coverage
+   groups from slice 10). Verify by hand on a fresh clone with an empty `data/`. Anything
+   that needs a Python REPL before the app works is a bug, not a step to document.
 2. **Philosophy, architecture and trade-offs**, in the reviewer's reading order rather than the
    build order. The locked decisions (`specs/loupe-solution-design.md` §3) are the spine: say
    what was chosen, what was rejected, and what the choice costs. A trade-off with no cost
@@ -35,9 +38,10 @@ all three, not alongside them.
 3. **Limitations, stated rather than implied.** The list is known and each has a spec reference,
    so this is assembly rather than discovery — see "Limitations already established" below.
 4. **The walkthrough itself, on real data**, against `ESZ25` or a chosen volatile window: fetch,
-   ingest both grains, re-run corpus-wide, read the score caption, select a family card and
-   see the overlay and picture, read one standing pattern. Real numbers, and no screenshot
-   that the code cannot reproduce.
+   ingest both grains, re-run corpus-wide, select a family **card** (the card is the control),
+   see the overlay, legend, and picture, read one standing pattern. Real numbers, and no
+   screenshot that the code cannot reproduce. Do not teach a score caption if slice 10
+   removed it from the page (`scope_signature` remains an API / scoring rule).
 5. **Extensibility**: what a new rule, a new vendor profile and a new venue each cost, and which
    named extensions (§14) were deliberately left out — suggestion apply, finding override, AI
    narratives, async ingest.
@@ -59,9 +63,10 @@ never hits this. It remains true of the API. The walkthrough should not teach a 
 path; name it as an API limitation if it is named at all.
 
 **The score is absent, not zero, below `min_records`.** A small demo file scores `None` with
-`insufficient_data` set (§11.5). The walkthrough should either use enough data to score or show
-the insufficient-data state deliberately, because a reviewer seeing an em dash where they
-expected a number will read it as a bug.
+`insufficient_data` set (§11.5). If the page no longer shows a score, this stays an API /
+limitations sentence, not a click. If a score is still shown anywhere, either use enough
+data to score or show the insufficient-data state deliberately — a reviewer seeing an em
+dash where they expected a number will read it as a bug.
 
 **Reconciliation's close branch is noisier per session than §6.3's median suggests.** On the
 real ES corpus, over 67 coverage-gated sessions: zero `open`/`high`/`low` disagreements — the
@@ -78,7 +83,9 @@ Each of these is decided and referenced; the slice writes them up, it does not r
   (`CAP.FREQUENCY_UNAVAILABLE`). Settlement still lives in the daily file; a minute-only
   contract has no vendor settlement row to miss (`specs/analytics-semantics.md` §3.4).
 - **Mixed scope is the default, not an edge case.** 32 of 40 contracts score over five
-  dimensions and 8 over six, so the score caption must carry `scope_signature` (§11.3).
+  dimensions and 8 over six, so a displayed score must carry `scope_signature` (§11.3).
+  Slice 10 may take the score off the reviewer page; the limitation remains true of the
+  number on the wire.
 - **Two pattern dimensions are not computed.** `field` and `rule` have no exposure denominator,
   so lift is undefined for them; the off-tick case is reachable through `frequency` instead
   (`src/loupe/quality/patterns.py`).
@@ -106,7 +113,7 @@ to catch.
 No new tier. The claims the README makes are already covered — the two-command start by
 `tests/integration/test_cold_start.py`, the ingest round trip and the reconciled book by
 `tests/integration/test_walkthrough.py`, the endpoint table by `tests/api/test_openapi.py`,
-the sidebar list and CSV mark by slice 8's UI tests.
+the sidebar list and CSV mark by slice 8's UI tests, card-as-control by slice 10.
 
 What this slice owes is a **manual pass on a clean clone**: `git clone`, `uv sync`, run the two
 commands, click Load demo data, follow the walkthrough as written, and fix the README where
@@ -121,6 +128,8 @@ that a stranger can start it — is the one thing not being tested.
 - `specs/dq-rules-and-scoring.md` §11.5 (the score is a navigation tool, not a grade)
 - `specs/sample-corpus.md` §1 (why the corpus is fetched and never committed)
 - [08-ingest-chrome.md](08-ingest-chrome.md) (the sidebar the walkthrough screenshots)
+- [09-reviewer-ui.md](09-reviewer-ui.md) (the page)
+- [10-reviewer-chrome.md](10-reviewer-chrome.md) (cards as control, no score line, grouped list)
 
 ## Non-goals
 

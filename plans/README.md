@@ -33,16 +33,18 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
 | 8 | ingest chrome | **done** | [08-ingest-chrome.md](08-ingest-chrome.md) |
 | 9 | reviewer-facing UI | **done** | [09-reviewer-ui.md](09-reviewer-ui.md) |
-| 10 | README walkthrough | pending | [10-readme-walkthrough.md](10-readme-walkthrough.md) |
+| 10 | reviewer chrome (click-test) | pending | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
+| 11 | README walkthrough | pending | [11-readme-walkthrough.md](11-readme-walkthrough.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
 was split out again once the ingest path itself changed — dropping the uploader and listing
 what loaded is chrome the walkthrough would otherwise describe wrongly. Slice 9 rebuilds the
-main page around the brief’s four checks and two charts (no persona selector); slice 10 then
-carries three findings from slice 6's integration tier and a limitations list that is already
-decided, so it is assembly rather than discovery — and it must describe the page slice 9
-ships, not Summary / Specifics by persona.
+main page around the brief’s four checks and two charts (no persona selector). Slice 10 is
+chrome a click-test of 9 asked for (cards as the control, no score line, zoom + legend,
+grouped sidebar). Slice 11 then carries three findings from slice 6's integration tier and
+a limitations list that is already decided, so it is assembly rather than discovery — and
+it must describe the page after slice 10, not the score caption or Summary / Specifics.
 
 ## Archive
 

@@ -2,9 +2,10 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-07: one reviewer page — four family cards and two charts; personas are
-not a view selector (slice 9). Same day: v1 UI ingest is Load demo data; capability
-preview is API-only and disclosed in place (slice 8).
+Revised 2026-09-07: §17 inserts slice 10 (reviewer chrome) and moves the README
+walkthrough to 11. Same day: one reviewer page — four family cards and two charts;
+personas are not a view selector (slice 9). Same day: v1 UI ingest is Load demo data;
+capability preview is API-only and disclosed in place (slice 8).
 Revised 2026-09-06: `specs/api-contract.md` promoted (slice 4 done-when 1).
 Revised 2026-09-05: `specs/analytics-semantics.md` promoted (slice 3 done-when 1).
 `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs (`data-model.md`,
@@ -541,4 +542,5 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 7. Demo corpus — fetch, CSV conversion, Load demo data and Inject
 8. Ingest chrome — one sidebar ingest path; ingested-file list and CSV conversion mark
 9. Reviewer-facing UI — four family cards, selected-family overlay, picture below VWAP
-10. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page slice 9 ships
+10. Reviewer chrome after click-test — cards as the family control, no score line, zoom + legend, grouped sidebar (`plans/10-reviewer-chrome.md`)
+11. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page after slice 10
