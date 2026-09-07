@@ -2,8 +2,9 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-08: §17 inserts slice 11 (grain-honest review) and moves the README
-walkthrough to 12. Revised 2026-09-07: reviewer chrome — cards are the family selector, no score
+Revised 2026-09-08: §12 makes grain/source, selected-family issues, pattern evidence and
+chart identity explicit; §17 inserts slice 11 and moves the README walkthrough to 12.
+Revised 2026-09-07: reviewer chrome — cards are the family selector, no score
 caption, OHLCV legend + zoom, grouped sidebar. Same day: one reviewer page — four family
 cards and two charts; personas are not a view selector (slice 9). Same day: v1 UI ingest is
 Load demo data; capability preview is API-only and disclosed in place (slice 8).
@@ -376,19 +377,26 @@ Full contract: `specs/api-contract.md`.
 Wireframes, overlay grammar, and tooltip copy: `specs/loupe-ui-design.md`. Journeys
 (historical, locked): `_notes/founding/loupe-solution-design.md` (App Usage).
 
-**One page.** Sidebar: contract picker, trade dates, Load demo data, ingested files grouped
+**One page.** Sidebar: contract picker, explicit Quality grain for dual-grain contracts
+(Minute default; single-grain is quiet context), trade dates, Load demo data, ingested files grouped
 by contract coverage (Daily + minute / Daily-only / Minute-only). No persona radio. Main
 column, in this order: four family cards (Gaps, Duplicates, Invalid values, Recurring
 patterns) — the cards *are* the family selector, no Check control and no score caption;
-Daily OHLCV then 15-minute VWAP, full width, **selected-family** marks (not `max_severity`)
-with an OHLCV legend, pan/zoom on OHLCV + volume with shared x; picture of the selected
-family **below** VWAP; aggregated issues (What / Days / Records / What we did). Report-only:
+Daily OHLCV then 15-minute VWAP, full width, **selected-grain and selected-family** marks
+(not `max_severity`) with an OHLCV legend, independent pan/zoom (shared x across OHLCV +
+volume); picture of the selected family **below** VWAP; selected-family aggregated issues
+(What / Days / Records / What we did). Report-only:
 no apply or override.
 
 Invariants the chrome must keep:
 
 - Cards *are* the selector. Clicking a card selects the overlay and the picture. Zero on a
   card means the check ran. Help on the count, not the family name.
+- Cards, patterns, issues, overlay, picture and OHLCV use one explicit Quality grain and
+  source: Minute → derived bars; Daily → supplied vendor bars. Changing family keeps grain.
+- Invalid evidence names its actual subject field and carries the finding grain/source.
+- Pattern picture prose and chart are one `(rule_id, dimension)` group with exposure shares,
+  lift, support and days supplied by the API.
 - No score caption on this page (`score` / `scope_signature` may still arrive on
   `GET /v1/dq/checks`).
 - A gap can mark an absent day with **no** bar row. Never a zero-filled settlement candle.
@@ -396,7 +404,10 @@ Invariants the chrome must keep:
 - `OUT.*` stays off the strip. Rule IDs are captions, not headlines.
 - Daily-only keeps the VWAP panel and says “needs minute bars”.
 - OHLCV marks are a legend, not a caption. Daily OHLCV and the volume pane pan/zoom on a
-  shared x; double-click resets. VWAP and the picture ribbon do not zoom.
+  shared x; VWAP zooms independently; double-click resets both. Contract, grain, or date
+  scope changes reset chart identity to the returned extent; family-only changes preserve it.
+- VWAP remains minute. Daily Quality grain on a dual-grain contract labels it context-only
+  and suppresses daily-family marks; daily-only still says “needs minute bars”.
 - Ingested files group by contract coverage. Planted defects group by strip family, with
   **Other (off the strip)** for injectable rules that are not on the four cards.
 - Widgets call HTTP only. They do not group `findings[]` to build cards or overlay marks.

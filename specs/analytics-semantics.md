@@ -6,6 +6,7 @@ rolling 15-minute VWAP, and the MAD method for `OUT.*`. Promoted from research
 §8. Storage: `specs/data-model.md`. Sample and oracle claims cited here are owned by
 `specs/sample-corpus.md`. Rule IDs and severities: `specs/dq-rules-and-scoring.md`.
 
+Revised 2026-09-08: the reviewer passes one explicit frequency/source to checks and bars.
 Revised 2026-09-07: the reviewer overlay is not the `max_severity` join (§3.3).
 Revised 2026-09-05: promoted from research; first normative version. Same day: §3.1 defines
 `open_interest` on a derived bar (last reported, never summed) — `mart.bar_daily` carried the
@@ -424,6 +425,11 @@ Vendor-supplied daily bars are not this aggregation: they are loaded as
 `close_convention = 'settlement'` for this corpus. The definition above is
 `source = 'derived'`, `source_frequency = 'minute'`, `close_convention = 'last_trade'`.
 Columns: `specs/data-model.md` §5.
+
+The reviewer page makes this choice explicit and keeps evidence aligned with it:
+`frequency=minute` means the derived source; `frequency=daily` means the supplied vendor
+source. It passes the same frequency to `/v1/dq/checks` and `/v1/analytics/bars/daily`;
+neither route may silently choose a different source for a selected family.
 
 ### 3.2 SQL
 

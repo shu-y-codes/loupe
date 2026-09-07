@@ -20,6 +20,7 @@ from .catalogue import (
     DUPLICATE_RULES,
     GAPS_RULES,
     INVALID_RULES,
+    RULE_SUBJECT_FIELD,
     STRIP_FAMILIES,
     VOLUME_INVALID_RULES,
     strip_family,
@@ -60,6 +61,8 @@ class ReviewPage:
     scope_signature: str | None
     dimensions_not_in_scope: list[dict[str, str]]
     frequencies: list[str]
+    frequency: str
+    frequency_defaulted: bool
     checked: bool
     families: list[dict[str, Any]]
     issues: list[dict[str, Any]]
@@ -73,6 +76,8 @@ class ReviewPage:
             "scope_signature": self.scope_signature,
             "dimensions_not_in_scope": self.dimensions_not_in_scope,
             "frequencies": self.frequencies,
+            "frequency": self.frequency,
+            "frequency_defaulted": self.frequency_defaulted,
             "checked": self.checked,
             "families": self.families,
             "issues": self.issues,
@@ -89,6 +94,7 @@ def review_checks(
     end: date | None = None,
     family: str = "gaps",
     basis: str = "clean",
+    frequency: str | None = None,
 ) -> ReviewPage:
     """Cards, overlay, picture and issues for one contract × window × selected family."""
     if family not in STRIP_FAMILIES:
@@ -96,22 +102,48 @@ def review_checks(
 
     run_id = latest_run(con)
     if run_id is None:
-        return _empty(contract_id, family, checked=False, reason="No completed validation run.")
+        resolved = frequency or "minute"
+        return _empty(
+            contract_id,
+            family,
+            checked=False,
+            reason="No completed validation run.",
+            frequency=resolved,
+            frequency_defaulted=frequency is None,
+        )
 
-    findings = _findings(con, run_id, contract_id, start, end)
-    patterns = find_patterns(con, contracts=[contract_id], start=start, end=end, run_id=run_id)
-    actions = _actions(con, run_id, contract_id, start, end)
-    score_block = _score(con, run_id, contract_id)
+    inventory = _score(con, run_id, contract_id)
+    resolved = frequency or ("minute" if "minute" in inventory["frequencies"] else "daily")
+    if resolved not in inventory["frequencies"]:
+        raise ValueError(
+            f"frequency {resolved!r} is unavailable for {contract_id}; "
+            f"held: {', '.join(inventory['frequencies']) or 'none'}"
+        )
+    findings = _findings(con, run_id, contract_id, start, end, resolved)
+    patterns = find_patterns(
+        con,
+        contracts=[contract_id],
+        start=start,
+        end=end,
+        run_id=run_id,
+        frequency=resolved,
+    )
+    actions = _actions(con, run_id, contract_id, start, end, resolved)
+    score_block = _score(con, run_id, contract_id, resolved)
     families = _cards(findings, patterns)
-    issues = _issues(findings, patterns, actions)
-    overlay = _overlay(con, contract_id, family, findings, patterns, start, end, basis)
+    issues = _issues(findings, patterns, actions, family)
+    overlay = _overlay(
+        con, contract_id, family, findings, patterns, start, end, basis, resolved
+    )
 
     return ReviewPage(
         contract_id=contract_id,
         score=score_block["score"],
         scope_signature=score_block["scope_signature"],
         dimensions_not_in_scope=score_block["dimensions_not_in_scope"],
-        frequencies=score_block["frequencies"],
+        frequencies=inventory["frequencies"],
+        frequency=resolved,
+        frequency_defaulted=frequency is None,
         checked=True,
         families=families,
         issues=issues,
@@ -120,13 +152,23 @@ def review_checks(
     )
 
 
-def _empty(contract_id: str, family: str, *, checked: bool, reason: str) -> ReviewPage:
+def _empty(
+    contract_id: str,
+    family: str,
+    *,
+    checked: bool,
+    reason: str,
+    frequency: str,
+    frequency_defaulted: bool,
+) -> ReviewPage:
     return ReviewPage(
         contract_id=contract_id,
         score=None,
         scope_signature=None,
         dimensions_not_in_scope=[],
         frequencies=[],
+        frequency=frequency,
+        frequency_defaulted=frequency_defaulted,
         checked=checked,
         families=[
             {
@@ -160,9 +202,15 @@ def _findings(
     contract_id: str,
     start: date | None,
     end: date | None,
+    frequency: str,
 ) -> list[dict[str, Any]]:
-    clauses = ["f.run_id = ?", "f.contract_id = ?", "f.status = 'open'"]
-    args: list[Any] = [run_id, contract_id]
+    clauses = [
+        "f.run_id = ?",
+        "f.contract_id = ?",
+        "f.status = 'open'",
+        "f.frequency = ?",
+    ]
+    args: list[Any] = [run_id, contract_id, frequency]
     if start is not None:
         clauses.append("f.trade_date >= ?")
         args.append(start)
@@ -207,21 +255,30 @@ def _actions(
     contract_id: str,
     start: date | None,
     end: date | None,
+    frequency: str,
 ) -> dict[str, list[tuple[str, int]]]:
     entries, _total = changelog(
         con, run_id, contracts=[contract_id], start=start, end=end, limit=1000, offset=0
     )
     by_rule: dict[str, dict[str, int]] = {}
     for entry in entries:
-        if not entry.rule_id:
+        if not entry.rule_id or entry.frequency != frequency:
             continue
         bucket = by_rule.setdefault(entry.rule_id, {})
         bucket[entry.action] = bucket.get(entry.action, 0) + entry.records
     return {rule: list(actions.items()) for rule, actions in by_rule.items()}
 
 
-def _score(con: duckdb.DuckDBPyConnection, run_id: str, contract_id: str) -> dict[str, Any]:
-    scope = RunScope(contract_ids=(contract_id,), frequencies=None)
+def _score(
+    con: duckdb.DuckDBPyConnection,
+    run_id: str,
+    contract_id: str,
+    frequency: str | None = None,
+) -> dict[str, Any]:
+    scope = RunScope(
+        contract_ids=(contract_id,),
+        frequencies=(frequency,) if frequency is not None else None,
+    )
     with scoped(con, scope) as (_inputs, _rows, _records):
         pairs = con.execute(
             "SELECT DISTINCT contract_id, frequency FROM dq_scope_records ORDER BY 1, 2"
@@ -346,11 +403,12 @@ def _issues(
     findings: list[dict[str, Any]],
     patterns: list[Any],
     actions: dict[str, list[tuple[str, int]]],
+    selected_family: str,
 ) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
     for finding in findings:
         family = finding["family"]
-        if family == "off_strip":
+        if family != selected_family:
             continue
         key = (family, finding["rule_id"], finding["label"])
         bucket = grouped.setdefault(
@@ -377,16 +435,17 @@ def _issues(
                 "what_we_did": _what_we_did(actions.get(rule_id, [])),
             }
         )
-    for pattern in patterns:
-        rows.append(
-            {
-                "family": "patterns",
-                "what": pattern.narrative,
-                "days": pattern.distinct_days,
-                "records": pattern.support,
-                "what_we_did": "Reported; not applied",
-            }
-        )
+    if selected_family == "patterns":
+        for pattern in patterns:
+            rows.append(
+                {
+                    "family": "patterns",
+                    "what": pattern.narrative,
+                    "days": pattern.distinct_days,
+                    "records": pattern.support,
+                    "what_we_did": "Reported; not applied",
+                }
+            )
     family_order = {name: i for i, name in enumerate(STRIP_FAMILIES)}
     return sorted(rows, key=lambda r: (family_order.get(r["family"], 9), -r["days"], r["what"]))
 
@@ -409,8 +468,9 @@ def _overlay(
     start: date | None,
     end: date | None,
     basis: str,
+    frequency: str,
 ) -> dict[str, Any]:
-    bar_dates = _bar_dates(con, contract_id, start, end, basis)
+    bar_dates = _bar_dates(con, contract_id, start, end, basis, frequency)
     pattern_dates = _pattern_dates(findings, patterns)
     by_date: dict[date, dict[str, Any]] = {}
 
@@ -461,7 +521,7 @@ def _overlay(
             mark["pattern_member"] = True
 
     ohlcv = [_overlay_row(by_date[day]) for day in sorted(by_date)]
-    picture = _picture(con, contract_id, family, findings, patterns, bar_dates)
+    picture = _picture(con, contract_id, family, findings, patterns, bar_dates, frequency, basis)
     pattern_hours = [
         p.bucket for p in patterns if p.dimension == "hour_of_day"
     ]
@@ -469,7 +529,7 @@ def _overlay(
         "family": family,
         "ohlcv": ohlcv,
         "vwap": {
-            "pattern_hours": pattern_hours,
+            "pattern_hours": pattern_hours if frequency == "minute" else [],
             "name_breaks": family in {"gaps", "patterns", "invalid"},
         },
         "picture": picture,
@@ -496,9 +556,11 @@ def _bar_dates(
     start: date | None,
     end: date | None,
     basis: str,
+    frequency: str,
 ) -> set[date]:
-    clauses = ["contract_id = ?", "basis = ?"]
-    args: list[Any] = [contract_id, basis]
+    source = "derived" if frequency == "minute" else "vendor"
+    clauses = ["contract_id = ?", "basis = ?", "source = ?"]
+    args: list[Any] = [contract_id, basis, source]
     if start is not None:
         clauses.append("trade_date >= ?")
         args.append(start)
@@ -533,6 +595,8 @@ def _picture(
     findings: list[dict[str, Any]],
     patterns: list[Any],
     bar_dates: set[date],
+    frequency: str,
+    basis: str,
 ) -> dict[str, Any]:
     empty = {
         "kind": "empty",
@@ -555,7 +619,7 @@ def _picture(
         return _gap_picture(con, mine, bar_dates)
     if family == "duplicates":
         return _duplicate_picture(con, mine)
-    return _invalid_picture(con, mine, contract_id)
+    return _invalid_picture(con, mine, contract_id, frequency, basis)
 
 
 def _gap_picture(
@@ -693,27 +757,47 @@ def _record_row(which: str, row: tuple[Any, ...]) -> dict[str, Any]:
 
 
 def _invalid_picture(
-    con: duckdb.DuckDBPyConnection, findings: list[dict[str, Any]], contract_id: str
+    con: duckdb.DuckDBPyConnection,
+    findings: list[dict[str, Any]],
+    contract_id: str,
+    frequency: str,
+    basis: str,
 ) -> dict[str, Any]:
     pick = findings[0]
     day = pick["trade_date"]
-    bar = None
-    if day is not None:
+    evidence = None
+    evidence_source = (
+        "vendor"
+        if frequency == "daily"
+        else ("source_record" if pick["record_id"] is not None else "derived")
+    )
+    if pick["record_id"] is not None:
+        row = con.execute(
+            """
+            SELECT record_id, ts_utc, open, high, low, close, volume, source_row
+            FROM stage.market_record WHERE record_id = ?
+            """,
+            [pick["record_id"]],
+        ).fetchone()
+        if row:
+            evidence = _record_row("accused", row)
+            evidence["record_id"] = int(row[0])
+    elif day is not None:
+        source = "derived" if frequency == "minute" else "vendor"
         try:
             row = con.execute(
                 """
                 SELECT trade_date, open, high, low, close, volume
                 FROM mart.bar_daily
-                WHERE contract_id = ? AND trade_date = ? AND basis = 'clean'
-                ORDER BY source DESC
+                WHERE contract_id = ? AND trade_date = ? AND basis = ? AND source = ?
                 LIMIT 1
                 """,
-                [contract_id, day],
+                [contract_id, day, basis, source],
             ).fetchone()
         except duckdb.CatalogException:
             row = None
         if row:
-            bar = {
+            evidence = {
                 "trade_date": _iso(row[0]),
                 "open": row[1],
                 "high": row[2],
@@ -721,33 +805,53 @@ def _invalid_picture(
                 "close": row[4],
                 "volume": row[5],
             }
-    field = pick["details"].get("field") or "close"
+    field = pick["details"].get("field") or RULE_SUBJECT_FIELD.get(pick["rule_id"]) or "unknown"
     return {
         "kind": "invalid_cell",
         "trade_date": _iso(day),
         "caption": pick["label"],
         "rule_ids": [pick["rule_id"]],
         "field": field,
-        "bar": bar,
+        "bar": evidence,
+        "evidence_frequency": pick["frequency"] or frequency,
+        "evidence_source": evidence_source,
     }
 
 
 def _pattern_picture(patterns: list[Any]) -> dict[str, Any]:
     top = patterns[0]
-    hourly = [p for p in patterns if p.dimension == "hour_of_day"] or [top]
+    focused = [
+        p for p in patterns if p.rule_id == top.rule_id and p.dimension == top.dimension
+    ]
     buckets = [
         {
             "label": p.bucket,
             "share_of_findings": p.share_of_findings,
             "share_of_records": p.share_of_records,
+            "lift": p.lift,
+            "support": p.support,
+            "distinct_days": p.distinct_days,
         }
-        for p in hourly[:8]
+        for p in focused[:8]
     ]
+    axis_labels = {
+        "hour_of_day": "Hour of day, exchange local",
+        "day_of_week": "Day of week",
+        "trade_date": "Trade date",
+        "contract": "Contract",
+        "frequency": "Frequency",
+        "batch": "Source file",
+    }
     return {
         "kind": "pattern_histogram",
         "trade_date": None,
         "caption": top.narrative,
         "rule_ids": [top.rule_id],
+        "rule_id": top.rule_id,
+        "dimension": top.dimension,
+        "axis_label": axis_labels.get(top.dimension, top.dimension.replace("_", " ").title()),
+        "patterns_total": len(patterns),
+        "buckets_shown": len(buckets),
         "buckets": buckets,
     }
 

@@ -28,8 +28,10 @@ _FAMILY_LABEL = {
 
 def render_review(
     checks: dict[str, Any],
-    bars: list[dict[str, Any]],
+    bars: dict[str, Any] | list[dict[str, Any]],
     vwap: dict[str, Any] | ApiProblem | None,
+    *,
+    scope_identity: dict[str, Any] | None = None,
 ) -> None:
     """Cards, Daily OHLCV, VWAP, picture, issues — that order is load-bearing."""
     family = _selected_family()
@@ -40,15 +42,34 @@ def render_review(
         return
 
     overlay = checks.get("overlay") or {}
+    frequency = (checks.get("scope") or {}).get("frequency") or (
+        scope_identity or {}
+    ).get("frequency")
+    bar_rows = bars.get("data", []) if isinstance(bars, dict) else bars
+    bar_meta = bars.get("meta", {}) if isinstance(bars, dict) else {}
+    source = bar_meta.get("bar_source") or (
+        "derived_from_minute" if frequency == "minute" else "supplied_daily"
+    )
     st.subheader("Daily OHLCV")
-    st.caption("Clean series · selected family. Rule IDs stay off the candle.")
-    charts.candles(bars, overlay, family=family)
+    source_label = (
+        "Derived from minute" if source == "derived_from_minute" else "Supplied daily"
+    )
+    st.caption(
+        f"{source_label} · {str(frequency or '').title()} quality grain · selected family. "
+        "Rule IDs stay off the candle."
+    )
+    charts.candles(
+        bar_rows,
+        overlay,
+        family=family,
+        scope_key=charts.chart_scope_key(scope_identity, bar_rows, "trade_date"),
+    )
 
     st.subheader("Rolling 15-minute VWAP")
-    _vwap_panel(vwap, overlay, family)
+    _vwap_panel(vwap, overlay, family, frequency, scope_identity)
 
     _picture(overlay.get("picture") or {}, family)
-    _issues(checks.get("issues") or [])
+    _issues(checks.get("issues") or [], family)
 
 
 def _selected_family() -> str:
@@ -106,6 +127,8 @@ def _vwap_panel(
     vwap: dict[str, Any] | ApiProblem | None,
     overlay: dict[str, Any],
     family: str,
+    quality_frequency: str | None,
+    scope_identity: dict[str, Any] | None,
 ) -> None:
     """The panel stays and explains itself; it never silently renders empty."""
     if isinstance(vwap, ApiProblem):
@@ -117,7 +140,17 @@ def _vwap_panel(
     if vwap is None:
         st.caption("No VWAP points in this window.")
         return
-    charts.vwap_line(vwap.get("data") or [], overlay, family=family)
+    points = vwap.get("data") or []
+    context_only = quality_frequency == "daily"
+    if context_only:
+        st.caption("Minute tape · context only for Daily quality grain")
+    charts.vwap_line(
+        points,
+        overlay,
+        family=family,
+        show_family_marks=not context_only,
+        scope_key=charts.chart_scope_key(scope_identity, points, "ts_utc"),
+    )
 
 
 def _picture(picture: dict[str, Any], family: str) -> None:
@@ -148,15 +181,36 @@ def _picture(picture: dict[str, Any], family: str) -> None:
         field = picture.get("field")
         if field:
             st.markdown(f"Broken cell: **{field}**")
+        evidence_frequency = picture.get("evidence_frequency")
+        evidence_source = picture.get("evidence_source")
+        if evidence_frequency or evidence_source:
+            st.caption(
+                "Evidence · "
+                + " · ".join(
+                    str(value)
+                    for value in (evidence_frequency, evidence_source)
+                    if value
+                )
+            )
         bar = picture.get("bar")
         if bar:
             st.dataframe(pd.DataFrame([bar]), hide_index=True, width="stretch")
     elif kind == "pattern_histogram":
-        charts.pattern_histogram(picture.get("buckets") or [])
+        shown = picture.get("buckets_shown") or len(picture.get("buckets") or [])
+        total = picture.get("patterns_total") or shown
+        st.caption(f"Showing {shown} of {total} standing patterns")
+        charts.pattern_histogram(
+            picture.get("buckets") or [],
+            axis_label=picture.get("axis_label") or picture.get("dimension") or "Bucket",
+        )
+        st.caption(
+            "A findings share much larger than record exposure is over-representation. "
+            "The configured standing threshold, not raw count alone, determines inclusion."
+        )
 
 
-def _issues(issues: list[dict[str, Any]]) -> None:
-    st.subheader("Issues in this window")
+def _issues(issues: list[dict[str, Any]], family: str) -> None:
+    st.subheader(f"Issues in selected family · {_FAMILY_LABEL.get(family, family)}")
     if not issues:
         st.success("This check ran. Nothing in this window.")
         return

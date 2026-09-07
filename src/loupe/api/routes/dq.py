@@ -202,6 +202,7 @@ def checks(
         ),
     ] = "gaps",
     basis: BasisParam = "clean",
+    frequency: FrequencyParam = None,
 ) -> DqChecksResponse:
     """Cards, overlay marks, picture and aggregated issues for one contract.
 
@@ -209,15 +210,22 @@ def checks(
     """
     try:
         page = review_checks(
-            con, contract, start=start, end=end, family=family, basis=basis
+            con,
+            contract,
+            start=start,
+            end=end,
+            family=family,
+            basis=basis,
+            frequency=frequency,
         )
     except ValueError as exc:
+        unavailable = "is unavailable" in str(exc)
         raise ProblemError(
-            status=400,
-            title="Unknown family",
+            status=422 if unavailable else 400,
+            title="Frequency unavailable" if unavailable else "Unknown family",
             detail=str(exc),
-            code="STR.INVALID_REQUEST",
-            type_="/errors/invalid-request",
+            code="CAP.FREQUENCY_UNAVAILABLE" if unavailable else "STR.INVALID_REQUEST",
+            type_="/errors/frequency-unavailable" if unavailable else "/errors/invalid-request",
         ) from exc
     overlay = page.overlay
     return DqChecksResponse(
@@ -226,6 +234,8 @@ def checks(
             start=start,
             end=end,
             basis=basis,
+            frequency=page.frequency,
+            frequency_defaulted=page.frequency_defaulted,
         ),
         contract_id=page.contract_id,
         score=page.score,

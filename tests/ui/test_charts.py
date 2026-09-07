@@ -13,9 +13,13 @@ from ui_helpers import BARS, OHLCV_MARKS
 
 from loupe.ui.charts import (
     OHLCV_ZOOM_CAPTION,
+    VWAP_ZOOM_CAPTION,
+    chart_scope_key,
     ohlcv_chart,
     overlay_legend_entries,
     overlay_status,
+    pattern_histogram_chart,
+    vwap_chart,
 )
 
 
@@ -102,3 +106,85 @@ def test_volume_tooltip_excludes_fill_field_name():
     assert '"title": "Volume"' in spec or '"title":"Volume"' in spec
     # Colour encoding must not leak the field name `fill` into tooltips.
     assert '"field": "fill"' not in spec and '"field":"fill"' not in spec
+
+
+def test_vwap_has_an_independent_scope_bound_zoom():
+    points = [
+        {"ts_utc": "2025-12-12T15:00:00Z", "vwap": 410.5},
+        {"ts_utc": "2025-12-12T15:15:00Z", "vwap": 411.0},
+    ]
+    chart = vwap_chart(
+        points,
+        {"vwap": {"name_breaks": True}},
+        family="invalid",
+        scope_key="contract_grain_dates",
+    )
+    assert chart is not None
+    spec = json.dumps(chart.to_dict())
+    assert "vwap_x_contract_grain_dates" in spec
+    assert "scales" in spec
+    assert "double-click" in VWAP_ZOOM_CAPTION.lower()
+
+
+def test_daily_quality_context_suppresses_vwap_family_marks():
+    points = [
+        {"ts_utc": "2025-12-12T15:00:00Z", "vwap": None},
+        {"ts_utc": "2025-12-12T15:15:00Z", "vwap": 411.0},
+    ]
+    overlay = {"vwap": {"name_breaks": True}}
+    marked = json.dumps(
+        vwap_chart(points, overlay, family="invalid", show_family_marks=True).to_dict()
+    )
+    context = json.dumps(
+        vwap_chart(points, overlay, family="invalid", show_family_marks=False).to_dict()
+    )
+    assert '"shape": "cross"' in marked
+    assert '"shape": "cross"' not in context
+
+
+def test_pattern_chart_names_exposure_percentages_lift_and_hover():
+    chart = pattern_histogram_chart(
+        [
+            {
+                "label": "12:00-13:00 America/Chicago",
+                "share_of_findings": 0.82,
+                "share_of_records": 0.04,
+                "lift": 20.5,
+                "support": 412,
+                "distinct_days": 61,
+            }
+        ],
+        axis_label="Hour of day, exchange local",
+    )
+    assert chart is not None
+    spec = json.dumps(chart.to_dict())
+    for text in (
+        "Hour of day, exchange local",
+        "Share (%)",
+        "Findings",
+        "Records (exposure)",
+        "Bucket",
+        "Findings share",
+        "Records share",
+        "Lift",
+        "Support",
+        "Distinct days",
+    ):
+        assert text in spec
+    assert "20.5\\u00d7" in spec
+    assert '"format": "%"' in spec or '"format":"%"' in spec
+
+
+def test_chart_scope_identity_changes_only_with_data_scope():
+    rows = [
+        {"trade_date": "2025-01-02"},
+        {"trade_date": "2025-01-03"},
+    ]
+    base = {"contract": "ESZ25", "frequency": "minute", "start": None, "end": None}
+    identity = chart_scope_key(base, rows, "trade_date")
+
+    assert chart_scope_key(base, rows, "trade_date") == identity
+    assert chart_scope_key({**base, "contract": "CLG26"}, rows, "trade_date") != identity
+    assert chart_scope_key({**base, "frequency": "daily"}, rows, "trade_date") != identity
+    assert chart_scope_key({**base, "start": "2025-01-03"}, rows[1:], "trade_date") != identity
+    assert chart_scope_key(base, rows[1:], "trade_date") != identity

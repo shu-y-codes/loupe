@@ -7,6 +7,8 @@ and never a number the API decided.
 
 from __future__ import annotations
 
+from datetime import date
+
 from ui_helpers import (
     BATCHES,
     CHANGELOG,
@@ -99,6 +101,56 @@ def test_the_sidebar_holds_contract_and_dates_and_no_persona_or_uploader(app):
     assert [d.label for d in test.sidebar.date_input] == ["From", "To"]
     assert not test.file_uploader
     assert not test.sidebar.file_uploader
+
+
+def test_dual_grain_contract_defaults_minute_and_passes_it_explicitly(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(app(client=client))
+
+    grain = test.sidebar.segmented_control(key="quality_grain_display")
+    assert grain.value == "Minute"
+    assert "Minute quality grain" in " ".join(c.value for c in test.caption)
+    assert any(
+        params.get("frequency") == "minute"
+        for name, params in client.calls
+        if name in {"checks", "bars_daily"}
+    )
+
+
+def test_daily_quality_grain_labels_vwap_context_and_preserves_dates(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(
+        app(
+            client=client,
+            quality_grain="daily",
+            quality_grain_display="Daily",
+            start=None,
+            end=None,
+        )
+    )
+
+    assert test.sidebar.segmented_control(key="quality_grain_display").value == "Daily"
+    assert any("context only for Daily quality grain" in c.value for c in test.caption)
+    assert all(
+        params.get("frequency") == "daily"
+        for name, params in client.calls
+        if name in {"checks", "bars_daily"}
+    )
+
+
+def test_explicit_dates_survive_contract_change(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(app(client=client))
+    test.sidebar.date_input(key="start").set_value(date(2025, 1, 2))
+    test.sidebar.date_input(key="end").set_value(date(2025, 1, 3))
+    test = _no_exception(test.run())
+    test = _no_exception(test.sidebar.selectbox(key="contract").select("ZCZ25").run())
+
+    assert test.sidebar.date_input(key="start").value == date(2025, 1, 2)
+    assert test.sidebar.date_input(key="end").value == date(2025, 1, 3)
+    last_checks = [params for name, params in client.calls if name == "checks"][-1]
+    assert last_checks["start"] == date(2025, 1, 2)
+    assert last_checks["end"] == date(2025, 1, 3)
 
 
 # ------------------------------------------------------------- family cards

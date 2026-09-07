@@ -35,6 +35,14 @@ def contract_ids(client: LoupeClient) -> list[str]:
     ]
 
 
+def contract_catalogue(client: LoupeClient) -> list[dict[str, Any]]:
+    """Loaded contracts with their held grains for the Quality grain control."""
+    try:
+        return list(client.contracts().get("data", []))
+    except (ApiProblem, ApiUnavailable):
+        return []
+
+
 def read_health(client: LoupeClient) -> dict[str, Any] | None:
     """Ask `/health` before anything else, and hand the answer back rather than a verdict.
 
@@ -82,10 +90,16 @@ def store_is_ready(health: dict[str, Any]) -> bool:
 
 
 def load_checks(
-    client: LoupeClient, contract: str, start, end, family: str
+    client: LoupeClient, contract: str, start, end, family: str, frequency: str
 ) -> dict[str, Any] | None:
     try:
-        return client.checks(contract=contract, start=start, end=end, family=family)
+        return client.checks(
+            contract=contract,
+            start=start,
+            end=end,
+            family=family,
+            frequency=frequency,
+        )
     except ApiUnavailable as exc:
         st.error(str(exc))
         return None
@@ -94,17 +108,23 @@ def load_checks(
         return None
 
 
-def load_bars(client: LoupeClient, contract: str, start, end) -> list[dict[str, Any]]:
+def load_bars(
+    client: LoupeClient, contract: str, start, end, frequency: str
+) -> dict[str, Any]:
     try:
         return client.bars_daily(
-            contract=contract, start=start, end=end, basis="clean"
-        ).get("data", [])
+            contract=contract,
+            start=start,
+            end=end,
+            basis="clean",
+            frequency=frequency,
+        )
     except ApiProblem as problem:
         st.warning(str(problem))
-        return []
+        return {"data": []}
     except ApiUnavailable as exc:
         st.warning(str(exc))
-        return []
+        return {"data": []}
 
 
 def load_vwap(
@@ -131,8 +151,14 @@ def main() -> None:
     if health is None:
         return
 
-    contracts = contract_ids(client)
-    state = render_sidebar(contracts)
+    contract_rows = contract_catalogue(client)
+    contracts = [row["contract_id"] for row in contract_rows if row.get("contract_id")]
+    frequencies = {
+        row["contract_id"]: list(row.get("frequencies_available") or [])
+        for row in contract_rows
+        if row.get("contract_id")
+    }
+    state = render_sidebar(contracts, frequencies)
     # Demo ingest is the only UI path into the store; the ingested-file list sits with it.
     render_demo(client, health)
     render_header(state)
@@ -149,16 +175,33 @@ def main() -> None:
             "No contracts loaded yet. Load demo data from the sidebar to see quality for it."
         )
         return
+    if not state.frequency:
+        st.warning("The selected contract does not report a held quality grain.")
+        return
 
     st.session_state.setdefault("family", "gaps")
     family = st.session_state.get("family") or "gaps"
-    checks = load_checks(client, state.contract, state.start, state.end, family)
+    checks = load_checks(
+        client, state.contract, state.start, state.end, family, state.frequency
+    )
     if checks is None:
         return
 
-    bars = load_bars(client, state.contract, state.start, state.end)
+    bars = load_bars(
+        client, state.contract, state.start, state.end, state.frequency
+    )
     vwap = load_vwap(client, state.contract, state.start, state.end)
-    render_review(checks, bars, vwap)
+    render_review(
+        checks,
+        bars,
+        vwap,
+        scope_identity={
+            "contract": state.contract,
+            "frequency": state.frequency,
+            "start": state.start,
+            "end": state.end,
+        },
+    )
 
 
 main()

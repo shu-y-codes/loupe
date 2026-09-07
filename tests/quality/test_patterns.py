@@ -118,3 +118,12 @@ def test_a_scope_filter_narrows_the_report(hourly, fixture_path):
     """
     assert _off_tick(find_patterns(hourly))
     assert find_patterns(hourly, contracts=["CLZ25"]) == []
+
+
+def test_frequency_scope_filters_findings_and_exposure_together(hourly):
+    """A minute pattern cannot leak into a Daily quality-grain request."""
+    minute = _off_tick(find_patterns(hourly, frequency="minute"))
+    daily = _off_tick(find_patterns(hourly, frequency="daily"))
+
+    assert minute
+    assert daily == []

@@ -14,7 +14,9 @@ could ship as slice 11.
 Slice 9 replaced the persona Summary / Specifics page; slice 10 is the chrome a click-test
 asked for; slice 11 aligns cards, evidence and charts on an explicit frequency and clarifies
 the pattern picture. This walkthrough describes **that** page, so it runs after 11, not in
-parallel.
+parallel. [13-compare-page.md](13-compare-page.md) adds a Compare sibling. If 13 has
+shipped when this is written, name the Review / Compare switch; do not wait on 13 to
+describe Review.
 
 **Slices 7–11 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
 corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md) there is
@@ -106,6 +108,7 @@ click Load demo data, and follow the walkthrough exactly. Fix prose where realit
 - [09-reviewer-ui.md](09-reviewer-ui.md)
 - [10-reviewer-chrome.md](10-reviewer-chrome.md)
 - [11-grain-honest-review.md](11-grain-honest-review.md)
+- [13-compare-page.md](13-compare-page.md) — name the switch if that slice has shipped
 
 ## Non-goals
 

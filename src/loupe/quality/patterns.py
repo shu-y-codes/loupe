@@ -131,6 +131,7 @@ def _scope(
     end: date | None,
     *,
     prefix: str,
+    frequency: str | None = None,
 ) -> tuple[str, list[Any]]:
     clauses = ["TRUE"]
     args: list[Any] = []
@@ -144,6 +145,9 @@ def _scope(
     if end is not None:
         clauses.append(f"{prefix}trade_date <= ?")
         args.append(end)
+    if frequency is not None:
+        clauses.append(f"{prefix}frequency = ?")
+        args.append(frequency)
     return " AND ".join(clauses), args
 
 
@@ -158,6 +162,7 @@ def find_patterns(
     min_support: int = DEFAULT_MIN_SUPPORT,
     min_periods: int = DEFAULT_MIN_PERIODS,
     dimensions: tuple[str, ...] = DIMENSIONS,
+    frequency: str | None = None,
 ) -> list[Pattern]:
     """Every `(rule, dimension, bucket)` whose findings concentrate beyond `lift`.
 
@@ -170,10 +175,10 @@ def find_patterns(
     if unknown:
         raise ValueError(f"unknown pattern dimension(s) {unknown}")
 
-    rule_totals = _rule_totals(con, contracts, start, end, run_id)
+    rule_totals = _rule_totals(con, contracts, start, end, run_id, frequency)
     if not rule_totals:
         return []
-    records = _record_exposure(con, contracts, start, end, dimensions)
+    records = _record_exposure(con, contracts, start, end, dimensions, frequency)
 
     patterns: list[Pattern] = []
     for dimension in dimensions:
@@ -182,7 +187,7 @@ def find_patterns(
         if not record_total:
             continue
         for (rule_id, bucket), (support, days) in _finding_tallies(
-            con, contracts, start, end, run_id, dimension
+            con, contracts, start, end, run_id, dimension, frequency
         ).items():
             rule_total = rule_totals.get(rule_id, 0)
             if not rule_total or bucket is None:
@@ -224,9 +229,10 @@ def _record_exposure(
     start: date | None,
     end: date | None,
     dimensions: tuple[str, ...],
+    frequency: str | None,
 ) -> dict[str, dict[str, int]]:
     """How the records themselves fall into each dimension's buckets — the denominator."""
-    where, args = _scope(contracts, start, end, prefix="r.")
+    where, args = _scope(contracts, start, end, prefix="r.", frequency=frequency)
     out: dict[str, dict[str, int]] = {}
     for dimension in dimensions:
         expression = _BUCKETS[dimension][1]
@@ -254,9 +260,10 @@ def _finding_tallies(
     end: date | None,
     run_id: str | None,
     dimension: str,
+    frequency: str | None,
 ) -> dict[tuple[str, str], tuple[int, int]]:
     """Findings per `(rule, bucket)`, with the number of distinct days they span."""
-    where, args = _scope(contracts, start, end, prefix="f.")
+    where, args = _scope(contracts, start, end, prefix="f.", frequency=frequency)
     if run_id is not None:
         where += " AND f.run_id = ?"
         args.append(run_id)
@@ -288,8 +295,9 @@ def _rule_totals(
     start: date | None,
     end: date | None,
     run_id: str | None,
+    frequency: str | None,
 ) -> dict[str, int]:
-    where, args = _scope(contracts, start, end, prefix="f.")
+    where, args = _scope(contracts, start, end, prefix="f.", frequency=frequency)
     if run_id is not None:
         where += " AND f.run_id = ?"
         args.append(run_id)

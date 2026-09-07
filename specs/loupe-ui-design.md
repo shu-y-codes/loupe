@@ -1,6 +1,8 @@
 # Loupe UI design
 
-Revised 2026-09-08: click-test polish — card count/detail type hierarchy; OHLCV hover
+Revised 2026-09-08: grain-honest review — explicit Quality grain, source-aligned evidence,
+selected-family issues, pattern exposure chart, independent VWAP zoom and scope-keyed chart
+identity. Earlier the same day: click-test polish — card count/detail type hierarchy; OHLCV hover
 (date, OHLC, status); on-chart **absent** label; volume tooltip without colour-field
 noise; sidebar synthetic warning lists planted file(s) by strip family. Same day prior:
 reviewer chrome — cards *are* the family control (no Check row), no score line, OHLCV
@@ -108,12 +110,21 @@ composed in `quality`.
 
 ## Sidebar
 
-Trade dates, contract picker, and demo ingest. There is **no file uploader** and **no
+Trade dates, contract picker, Quality grain, and demo ingest. There is **no file uploader** and **no
 persona radio**.
 
 **Contract.** One selected contract for the four cards, both charts, the picture, and the
 issues table. The picker lists loaded contracts (`GET /v1/contracts`). An empty store has
 no picker.
+
+**Quality grain.** A contract holding both `minute` and `daily` shows a two-option
+**Quality grain** segmented control and defaults to **Minute**. The current selection persists
+when the contract changes if that grain is available; otherwise it resolves to Minute when
+available, then Daily. A single-grain contract has no choice control and instead shows the held
+grain as quiet context. The page header and OHLCV subtitle always name the resolved grain.
+Cards, patterns, selected-family issues, picture, overlays and OHLCV all use that grain:
+Minute reads derived daily bars from the minute tape; Daily reads supplied vendor daily bars.
+Changing family never changes grain.
 
 **Load demo data** is the only v1 UI ingest path. Locked decision 9 already named the
 button; it is chrome here, not only a sentence in the solution brief. It posts files
@@ -203,7 +214,8 @@ score line** under the cards.
 HTTP: `GET /v1/dq/checks` for cards, overlay marks, picture payload, and issues;
 `GET /v1/analytics/bars/daily` for OHLCV; `GET /v1/analytics/vwap` for the line. The page
 joins overlay marks to bars **by `trade_date`**. It does not group `findings[]`. The
-envelope may still include `score` / `scope_signature`; this page does not draw them.
+page passes Quality grain explicitly to checks and daily bars. The envelope may still include
+`score` / `scope_signature`; this page does not draw them.
 
 ### Family cards
 
@@ -253,9 +265,14 @@ change. Rule IDs stay off the candle; they may still caption the picture.
 (see Tooltips). Absent columns have no OHLC; their hover/status is the session-missing
 defect type.
 
-**Zoom.** Daily OHLCV **and** the volume pane pan and zoom together on a **shared x**
-(trade date). Drag to pan or zoom the dates; **double-click to reset**. VWAP and the
-picture ribbon do not zoom in v1.
+**Source.** The subtitle says **Derived from minute** at minute Quality grain and
+**Supplied daily** at daily Quality grain.
+
+**Zoom and identity.** Daily OHLCV **and** the volume pane pan and zoom together on a
+**shared x** (trade date). Drag to pan or zoom the dates; **double-click to reset**. Initial
+render fits the returned extent. Contract, Quality grain, or From / To changes create a new
+chart identity and reset to that filtered extent; a family-only change keeps the same identity
+and preserves zoom. Explicit date filters remain authoritative across contract changes.
 
 ### Rolling 15-minute VWAP
 
@@ -268,6 +285,12 @@ cleaning dropped the window.
 **Daily-only keeps the panel** and says "needs minute bars" — the structured
 `CAP.FREQUENCY_UNAVAILABLE` refusal, not an empty chart and not a 15-day VWAP.
 
+VWAP has its own scale-bound x selection: drag to pan or zoom and double-click to reset.
+Its chart identity changes with contract or From / To, but not family. When Quality grain is
+Daily and the contract also holds minute records, keep the line and label it
+**Minute tape · context only for Daily quality grain**; suppress daily selected-family marks.
+At Minute quality grain the selected-family marks return.
+
 ### Picture of the selected family
 
 Same family as the cards and overlay. Lives **below VWAP**.
@@ -276,15 +299,16 @@ Same family as the cards and overlay. Lives **below VWAP**.
 |---|---|
 | Gaps | Ribbon of expected minute slots around the hole (present vs missing). An absent settlement is a sentence: the column never arrived; Loupe did not invent a bar. Draw the ribbon with a Vega chart, not SVG via `st.html`. |
 | Duplicates | Two-row table: kept vs dropped, same timestamp. |
-| Invalid values | The broken bar, with the impossible cell obvious (close above high, negative volume, …). |
-| Recurring patterns | The pattern sentence plus a histogram of share-of-findings vs share-of-records. |
+| Invalid values | The accused stage record or source-aligned bar, naming the actual subject field and evidence grain/source. A volume rule never falls back to `close`. |
+| Recurring patterns | One focused `(rule_id, dimension)` group: sentence, rule ID and chart all refer to it. Say **Showing 1 of N standing patterns** (or how many related buckets are shown). The x title is the plain dimension; y is **Share (%)**; paired series are **Findings** and **Records (exposure)**; each bucket carries a lift label. Hover includes bucket, both shares, lift, support and distinct days. Explain that over-representation is findings share above record exposure and that the standing threshold, not count alone, admits a pattern. |
 
 When the family is empty (check ran, count is zero): the picture says so. Do not render
 an empty ribbon that looks like a full session.
 
 ### Aggregated issues
 
-One row per *(family, plain-language issue)* in the window — not one row per finding and
+Heading: **Issues in selected family** (the label may be included). One row per
+*(selected family, plain-language issue)* in the window — not one row per finding and
 not Why-as-code (`OUT.RETURN_MAD · date`).
 
 | Column | Source |

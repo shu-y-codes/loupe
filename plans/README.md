@@ -36,6 +36,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 10 | reviewer chrome (click-test) | **done** | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
 | 11 | grain-honest review | pending | [11-grain-honest-review.md](11-grain-honest-review.md) |
 | 12 | README walkthrough | pending | [12-readme-walkthrough.md](12-readme-walkthrough.md) |
+| 13 | compare page | pending | [13-compare-page.md](13-compare-page.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
@@ -47,7 +48,9 @@ grouped sidebar). Slice 11 makes the selected quality grain explicit, aligns car
 evidence with the plotted source, fixes Invalid and pattern pictures, and adds VWAP zoom.
 Slice 12 then carries three findings from slice 6's integration tier and a limitations list
 that is already decided, so it is assembly rather than discovery — and it must describe
-the page after slice 11.
+the page after slice 11. Slice 13 adds a **Compare** sibling (corpus family-tile table)
+without changing Review’s main column; it waits on 11 for honest grain rows. If 12 writes
+after 13, name the Review / Compare switch; if 12 has already shipped, 13 patches it.
 
 ## Archive
 
