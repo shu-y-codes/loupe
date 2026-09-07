@@ -4,7 +4,7 @@
 family control, help on the count, no score line on the page, zoomable OHLCV + volume, a
 chart legend, and a grouped sidebar (ingested files by grain; planted defects by family).
 
-**Status.** done — 2026-09-07; **follow-on pending** (click-test polish below)
+**Status.** done — 2026-09-08 (follow-on click-test polish)
 
 Written 2026-09-07, after a demo-load click-test of [09-reviewer-ui.md](09-reviewer-ui.md).
 09 stays **done**. Do not reopen it except the pointer in that file. Do not reopen
@@ -12,7 +12,7 @@ Written 2026-09-07, after a demo-load click-test of [09-reviewer-ui.md](09-revie
 pointed at.
 
 [11-readme-walkthrough.md](11-readme-walkthrough.md) stays pending and must describe **this**
-chrome **after the follow-on**. Write 11 after the follow-on, not against the score caption
+chrome **including the follow-on**. Write 11 after this slice, not against the score caption
 or the extra Check control.
 
 ## The change
@@ -148,7 +148,7 @@ README walkthrough against the score caption.
 
 ---
 
-## Follow-on — click-test polish (pending)
+## Follow-on — click-test polish (done — 2026-09-08)
 
 Notes from a browser pass of the shipped chrome (`_notes/dev/markups.txt`; scrapbook only
 until promoted). Tiny UI polish. No new route, no overlay payload change, no score formula.
@@ -171,15 +171,13 @@ Promote into the UI spec before widgets:
 ### Done when (follow-on)
 
 1. **`specs/loupe-ui-design.md`** — one-line revision; Family cards type hierarchy; OHLCV
-   hover + on-chart absent label; volume tooltip; sidebar synthetic warning wording.
+   hover + on-chart absent label; volume tooltip; sidebar synthetic warning wording. **done**
 2. **`ui`:** card typography; Altair tooltips + absent `mark_text` (or equivalent);
    volume tooltip without `fill`; sidebar warning lists planted file under Gaps /
-   Duplicates / Invalid / Other (off the strip). Reuse `group_planted_by_family`.
+   Duplicates / Invalid / Other (off the strip). Reuse `group_planted_by_family`. **done**
 3. **Tests.** Chart helper: status tooltip fields / absent label present in the Vega
    spec; volume tooltip excludes `fill`. AppTest or demo helper: sidebar synthetic copy
    does not say “findings below”; grouped family labels appear when a stubbed manifest
-   is present.
+   is present. **done**
 
-When the follow-on lands: flip this section to **done** with the date; set the plan
-**Status** back to plain **done**; update `plans/README.md` if it still says follow-on
-pending. Then start [11-readme-walkthrough.md](11-readme-walkthrough.md).
+Follow-on landed 2026-09-08. Next: [11-readme-walkthrough.md](11-readme-walkthrough.md).

@@ -298,6 +298,24 @@ def test_planted_rows_group_under_strip_families_with_off_strip(app, tmp_path):
     assert "TIM.OUT_OF_ORDER" in rules
 
 
+def test_sidebar_synthetic_lists_planted_files_by_family_not_findings_below(
+    app, tmp_path
+):
+    """Sidebar warning drops 'findings below' and nests the planted file under families."""
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(PLANTED_MANIFEST))
+    client = FakeClient(health=SYNTHETIC_HEALTH)
+    test = _no_exception(app(client=client, injected_manifest=str(path)))
+    warnings = " ".join(w.value for w in test.warning)
+    assert "findings below" not in warnings.lower()
+    assert "synthetic records" in warnings.lower()
+    captions = " ".join(c.value for c in test.caption)
+    assert "Planted in:" in captions
+    markdown = " ".join(m.value for m in test.markdown)
+    assert "**Gaps**" in markdown
+    assert "SR3G26.injected.csv" in captions
+
+
 def test_group_batches_by_coverage_puts_dual_grain_files_together():
     from loupe.ui.demo import (
         COVERAGE_BOTH,

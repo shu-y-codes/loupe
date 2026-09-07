@@ -362,8 +362,9 @@ def _render_remove(client: LoupeClient, health: dict[str, Any]) -> None:
     """The way back. A demo that can only be undone with `rm` is one nobody presses."""
     st.sidebar.warning(
         f"{SYNTHETIC_MARK} **{health.get('synthetic_records', 0):,} synthetic records** are "
-        "loaded. Some findings below were planted."
+        "loaded."
     )
+    _render_sidebar_planted()
     if not st.sidebar.button("Remove demo defects", key="remove-demo"):
         return
 
@@ -386,6 +387,23 @@ def _render_remove(client: LoupeClient, health: dict[str, Any]) -> None:
         )
     st.session_state.pop("injected_manifest", None)
     st.rerun()
+
+
+def _render_sidebar_planted() -> None:
+    """Planted file(s) under strip families — nothing says 'findings below'."""
+    path = st.session_state.get("injected_manifest")
+    if not path or not Path(path).exists():
+        return
+    payload = json.loads(Path(path).read_text())
+    filename = Path(str(payload.get("output") or "")).name
+    groups = group_planted_by_family(list(payload.get("defects") or []))
+    if not groups:
+        return
+    st.sidebar.caption("Planted in:")
+    for label, _rows in groups:
+        st.sidebar.markdown(f"**{label}**")
+        if filename:
+            st.sidebar.caption(f"`{filename}`")
 
 
 def _restore_clean(client: LoupeClient, status) -> bool:

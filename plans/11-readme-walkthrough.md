@@ -3,8 +3,8 @@
 **Goal.** The delivered README a reviewer reads first: philosophy, architecture, trade-offs,
 limitations, extensibility, and a walkthrough against real `ESZ25` (solution brief §16).
 
-**Status.** pending — blocked on [10-reviewer-chrome.md](10-reviewer-chrome.md) follow-on
-(click-test polish)
+**Status.** pending — blocked on [10-reviewer-chrome.md](10-reviewer-chrome.md)
+(including follow-on polish, now done)
 
 Written 2026-09-07, after slice 6 shipped and after the integration tier went in; renumbered
 from 07 when the demo-corpus work was split out ahead of it, then from 08 when ingest chrome

@@ -7,6 +7,7 @@ the family control; there is no Check row and no score caption.
 
 from __future__ import annotations
 
+import html
 from typing import Any
 
 import pandas as pd
@@ -63,7 +64,7 @@ def _select_family(name: str) -> None:
 
 
 def _family_cards(checks: dict[str, Any], selected: str) -> None:
-    """The four cells are the family control. Help hangs on the count, not the title."""
+    """The four cells are the family control. Count leads; detail is body size."""
     families = checks.get("families") or []
     by_id = {row["family"]: row for row in families}
     columns = st.columns(4)
@@ -88,11 +89,17 @@ def _family_cards(checks: dict[str, Any], selected: str) -> None:
             )
             unit = card.get("unit") or ""
             count_label = f"{card.get('count', 0)} {unit}".strip()
-            st.metric(
-                count_label,
-                card.get("detail") or " ",
+            # Count slightly larger than body; detail is regular — not st.metric's inverted
+            # hierarchy (label small / value huge).
+            st.markdown(
+                f'<p style="font-size:1.125rem;font-weight:600;margin:0.25rem 0 0 0">'
+                f"{html.escape(count_label)}</p>",
+                unsafe_allow_html=True,
                 help=helptext.CARDS.get(name),
             )
+            detail = (card.get("detail") or "").strip()
+            if detail:
+                st.markdown(detail)
 
 
 def _vwap_panel(

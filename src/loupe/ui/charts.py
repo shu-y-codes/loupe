@@ -27,12 +27,57 @@ _VOLUME = "#94a3b8"
 #: How to reset the shared-x zoom on Daily OHLCV + volume (`specs/loupe-ui-design.md`).
 OHLCV_ZOOM_CAPTION = "Drag the dates to pan or zoom. Double-click to reset."
 
+_OHLCV_TOOLTIP = [
+    alt.Tooltip("trade_date:T", title="Date"),
+    alt.Tooltip("open:Q", title="Open"),
+    alt.Tooltip("high:Q", title="High"),
+    alt.Tooltip("low:Q", title="Low"),
+    alt.Tooltip("close:Q", title="Close"),
+    alt.Tooltip("status:N", title="Status"),
+]
+
 
 def _date_str(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return str(value)[:10]
     text = str(value)
     return text[:10] if text else text
+
+
+def overlay_status(family: str, row: Any) -> str:
+    """Plain status for chart hover — selected-family marks, not max_severity."""
+    session = getattr(row, "session", None)
+    if session is None and isinstance(row, dict):
+        session = row.get("session")
+        partial = bool(row.get("partial_gap"))
+        duplicate = bool(row.get("duplicate"))
+        invalid = bool(row.get("invalid"))
+        invalid_volume = bool(row.get("invalid_volume"))
+        pattern_member = bool(row.get("pattern_member"))
+    else:
+        partial = bool(getattr(row, "partial_gap", False))
+        duplicate = bool(getattr(row, "duplicate", False))
+        invalid = bool(getattr(row, "invalid", False))
+        invalid_volume = bool(getattr(row, "invalid_volume", False))
+        pattern_member = bool(getattr(row, "pattern_member", False))
+
+    if family == "gaps":
+        if session == "absent":
+            return "gap: session missing"
+        if partial:
+            return "gap: session-open hole"
+    elif family == "duplicates":
+        if duplicate:
+            return "duplicate"
+    elif family == "invalid":
+        if invalid_volume and not invalid:
+            return "volume defect"
+        if invalid:
+            return "invalid value"
+    elif family == "patterns":
+        if pattern_member:
+            return "pattern member"
+    return "clean"
 
 
 def overlay_frame(bars: list[dict[str, Any]], marks: list[dict[str, Any]]) -> pd.DataFrame:
@@ -134,6 +179,12 @@ def _x_zoom() -> alt.Parameter:
     return alt.selection_interval(bind="scales", encodings=["x"], name="ohlcv_x")
 
 
+def _with_status(frame: pd.DataFrame, family: str) -> pd.DataFrame:
+    out = frame.copy()
+    out["status"] = [overlay_status(family, row) for row in out.itertuples()]
+    return out
+
+
 def ohlcv_chart(
     bars: list[dict[str, Any]],
     overlay: dict[str, Any] | None,
@@ -146,6 +197,7 @@ def ohlcv_chart(
     frame = overlay_frame(bars, marks)
     if frame.empty:
         return None
+    frame = _with_status(frame, family)
 
     present = frame.dropna(subset=["open", "high", "low", "close"])
     layers: list[alt.Chart] = []
@@ -167,22 +219,25 @@ def ohlcv_chart(
     if not present.empty:
         paint = family == "invalid"
         present = present.copy()
-        present["fill"] = [
+        present["bar_color"] = [
             _INVALID if paint and bool(row.invalid) else _NEUTRAL for row in present.itertuples()
         ]
-        base = alt.Chart(present).encode(x=alt.X("trade_date:T", title=None))
+        base = alt.Chart(present).encode(
+            x=alt.X("trade_date:T", title=None),
+            tooltip=_OHLCV_TOOLTIP,
+        )
         layers.append(
             base.mark_rule().encode(
                 y=alt.Y("low:Q", title="Price", scale=alt.Scale(zero=False)),
                 y2="high:Q",
-                color=alt.Color("fill:N", scale=None, legend=None),
+                color=alt.Color("bar_color:N", scale=None, legend=None),
             )
         )
         layers.append(
             base.mark_bar(size=6).encode(
                 y="open:Q",
                 y2="close:Q",
-                color=alt.Color("fill:N", scale=None, legend=None),
+                color=alt.Color("bar_color:N", scale=None, legend=None),
             )
         )
 
@@ -192,7 +247,7 @@ def ohlcv_chart(
             layers.append(
                 alt.Chart(holes)
                 .mark_point(shape="triangle-up", size=90, color=_GAP, filled=True)
-                .encode(x="trade_date:T", y="high:Q")
+                .encode(x="trade_date:T", y="high:Q", tooltip=_OHLCV_TOOLTIP)
             )
         absent = frame[frame["session"] == "absent"]
         if not absent.empty:
@@ -201,10 +256,21 @@ def ohlcv_chart(
             dashed = absent.copy()
             dashed["y"] = y_lo
             dashed["y2"] = y_hi
+            dashed["label_y"] = y_hi
+            absent_tip = [
+                alt.Tooltip("trade_date:T", title="Date"),
+                alt.Tooltip("status:N", title="Status"),
+            ]
             layers.append(
                 alt.Chart(dashed)
                 .mark_rule(strokeDash=[4, 3], color=_ABSENT, strokeWidth=2)
-                .encode(x="trade_date:T", y="y:Q", y2="y2:Q")
+                .encode(x="trade_date:T", y="y:Q", y2="y2:Q", tooltip=absent_tip)
+            )
+            # Canvas-style on-chart label — Vega legends do not show stroke-dash well.
+            layers.append(
+                alt.Chart(dashed)
+                .mark_text(text="absent", dy=-8, fontSize=10, fontWeight="bold", color=_ABSENT)
+                .encode(x="trade_date:T", y="label_y:Q", tooltip=absent_tip)
             )
 
     if family == "duplicates" and not present.empty:
@@ -213,7 +279,7 @@ def ohlcv_chart(
             layers.append(
                 alt.Chart(pins)
                 .mark_point(shape="diamond", size=80, color=_DUP, filled=True)
-                .encode(x="trade_date:T", y="close:Q")
+                .encode(x="trade_date:T", y="close:Q", tooltip=_OHLCV_TOOLTIP)
             )
 
     if not layers:
@@ -252,9 +318,16 @@ def _volume_chart(frame: pd.DataFrame, family: str) -> alt.Chart | None:
     if present.empty:
         return None
     present = present.copy()
-    present["fill"] = [
+    if "status" not in present.columns:
+        present = _with_status(present, family)
+    present["bar_color"] = [
         _VOLUME_BAD if family == "invalid" and bool(row.invalid_volume) else _VOLUME
         for row in present.itertuples()
+    ]
+    tip = [
+        alt.Tooltip("trade_date:T", title="Date"),
+        alt.Tooltip("volume:Q", title="Volume"),
+        alt.Tooltip("status:N", title="Status"),
     ]
     return (
         alt.Chart(present)
@@ -262,7 +335,8 @@ def _volume_chart(frame: pd.DataFrame, family: str) -> alt.Chart | None:
         .encode(
             x=alt.X("trade_date:T", title=None),
             y=alt.Y("volume:Q", title="Volume"),
-            color=alt.Color("fill:N", scale=None, legend=None),
+            color=alt.Color("bar_color:N", scale=None, legend=None),
+            tooltip=tip,
         )
         .properties(height=90)
     )

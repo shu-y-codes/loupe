@@ -1,10 +1,13 @@
 # Loupe UI design
 
-Revised 2026-09-07: reviewer chrome — cards *are* the family control (no Check row), no
-score line, OHLCV legend + shared-x zoom, ingested files grouped by contract coverage,
-planted defects grouped by strip family. Same day: one reviewer page — four family cards,
-Daily OHLCV then 15-minute VWAP with selected-family overlays, picture of the selected
-family below VWAP. No persona selector. Sidebar ingest is still **Load demo data**.
+Revised 2026-09-08: click-test polish — card count/detail type hierarchy; OHLCV hover
+(date, OHLC, status); on-chart **absent** label; volume tooltip without colour-field
+noise; sidebar synthetic warning lists planted file(s) by strip family. Same day prior:
+reviewer chrome — cards *are* the family control (no Check row), no score line, OHLCV
+legend + shared-x zoom, ingested files grouped by contract coverage, planted defects
+grouped by strip family. Same day: one reviewer page — four family cards, Daily OHLCV
+then 15-minute VWAP with selected-family overlays, picture of the selected family below
+VWAP. No persona selector. Sidebar ingest is still **Load demo data**.
 
 ## UI philosophy
 
@@ -18,8 +21,14 @@ It provides **report-only** evidence. Findings and suggestions are identified, n
 
 Help on **named boxes** (family-card **counts**, KPI-style tiles, column headers), not on
 every grid cell. One sentence, in this page’s language — not a persona dialect. Streamlit:
-`st.metric(..., help=...)` on the count, dataframe column `help`. Overlay marks are a chart
-legend, not a hover glossary.
+help on the count line, dataframe column `help`. Overlay marks are a chart legend, not a
+hover glossary.
+
+**Chart hover** (Daily OHLCV and markers): date, open, high, low, close, and **status**
+(`clean`, or a plain defect type such as `gap: session-open hole` / `gap: session missing`
+/ `duplicate` / `invalid value` / `volume defect` / `pattern member`). Status comes from
+the selected-family overlay marks, not `max_severity`. Volume pane hover: date, volume,
+and status when relevant — never the raw colour encoding field name (`fill`).
 
 **Attach help**
 
@@ -35,7 +44,7 @@ did, from the changelog. This page does not apply a new rule.”
 **Skip**
 
 - Aggregated-issue What cells and picture sentences — those *are* the explanation
-- Candle bodies once the selected-family marks are labelled on the chart
+- Glossary sentences on candle bodies (the legend + status hover cover that)
 - Rule IDs or expected-effect JSON in a hover. Rule IDs are a **caption**, never the
   headline
 
@@ -203,6 +212,10 @@ second button row. Clicking a card selects the overlay, the OHLCV legend, and th
 Selected state lives on the card. Family names are labels without `?`. Help attaches to
 the **count** (`42 runs`), not the title.
 
+**Type hierarchy.** The count / unit line leads and is **slightly larger** than body text.
+The detail line under it (e.g. `0 exact copies · 0 key conflicts`) is **regular** body
+size — not a competing KPI number.
+
 Zero is a real answer: the check ran and found nothing in this contract × window. Rule IDs
 do not headline the card; they may appear in a caption on the picture.
 
@@ -220,8 +233,10 @@ The **clean** series. Overlay marks from `checks.overlay.ohlcv` for the selected
 
 - **Gaps, present bar, partial hole:** triangle / pin on the candle. The body stays the
   clean series — the defect is missing time, not a bad close.
-- **Gaps, absent settlement:** dashed column labelled absent. No OHLC. Never a
-  zero-filled candle.
+- **Gaps, absent settlement:** dashed column with an on-chart **absent** label (canvas-style
+  annotation). No OHLC. Never a zero-filled candle. The legend may keep a colour entry for
+  “Settlement never arrived”; Vega legends do not show stroke-dash well, so the on-chart
+  label is the readable mark.
 - **Duplicates:** pin on the kept timestamp. Do not recolor the body.
 - **Invalid values:** paint that candle. Volume defects sit on the volume pane.
 - **Patterns:** shaded band on every participating session, including absences that
@@ -233,6 +248,10 @@ no finding is not an absent settlement.
 **Legend, not caption.** Pin / triangle, dashed absent, paint, volume-pane defect, and
 pattern band for the **selected family** are a chart legend. Overlay grammar does not
 change. Rule IDs stay off the candle; they may still caption the picture.
+
+**Hover.** Candles and overlay markers show date, open, high, low, close, and status
+(see Tooltips). Absent columns have no OHLC; their hover/status is the session-missing
+defect type.
 
 **Zoom.** Daily OHLCV **and** the volume pane pan and zoom together on a **shared x**
 (trade date). Drag to pan or zoom the dates; **double-click to reset**. VWAP and the
@@ -307,3 +326,9 @@ bucket for that card.
 **Off-strip** planted rules (`TIM.OUT_OF_ORDER`, and anything else injection can plant that
 is not on the strip) get a named group **Other (off the strip)** — not dropped, not a
 fifth card.
+
+**Sidebar warning.** When synthetic batches are loaded, the sidebar says how many synthetic
+records are loaded and lists the planted **file(s) grouped by strip family** (same map /
+filename nest as above). Do **not** say “findings below were planted” — nothing follows
+that sentence in the sidebar. The main-column expander may still show the full planted
+table for evidence.

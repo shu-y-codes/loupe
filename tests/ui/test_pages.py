@@ -132,17 +132,28 @@ def test_the_page_does_not_draw_a_score_caption(app):
 def test_zero_on_a_card_is_a_real_answer(app):
     """Duplicates is 0 in the stub because the check ran, not because it is hidden."""
     test = _no_exception(app())
-    dup = next(m for m in test.metric if m.label == "0 records")
-    assert dup.value.startswith("0")
+    counts = " ".join(m.value for m in test.markdown)
+    assert "0 records" in counts
+    assert "0 exact copies" in counts
 
 
 def test_every_family_card_carries_one_sentence_of_help_on_the_count(app):
     test = _no_exception(app())
-    assert len(test.metric) == 4
-    for tile in test.metric:
-        assert tile.help, f"{tile.label} has no help"
-        assert tile.help.count(".") <= 2, f"{tile.label} help is not one line"
-    assert [m.label for m in test.metric] == ["2 runs", "0 records", "1 rows", "1 standing"]
+    # Count lines are markdown with help (not st.metric — count leads, detail is body).
+    count_tiles = [
+        m
+        for m in test.markdown
+        if m.help and any(unit in m.value for unit in ("runs", "records", "rows", "standing"))
+    ]
+    assert len(count_tiles) == 4
+    for tile in count_tiles:
+        assert tile.help.count(".") <= 2, f"{tile.value!r} help is not one line"
+    blob = " ".join(m.value for m in test.markdown)
+    assert "2 runs" in blob
+    assert "0 records" in blob
+    assert "1 rows" in blob
+    assert "1 standing" in blob
+    assert "1.125rem" in blob
 
 
 # ----------------------------------------------------------------- overlay
