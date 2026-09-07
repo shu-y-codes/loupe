@@ -30,12 +30,15 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 5 | ui | **done** | [05-ui.md](05-ui.md) |
 | 6 | rec / suggestions / demo | **done** | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
 | 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
-| 8 | README walkthrough | pending | [08-readme-walkthrough.md](08-readme-walkthrough.md) |
+| 8 | ingest chrome | pending | [08-ingest-chrome.md](08-ingest-chrome.md) |
+| 9 | README walkthrough | pending | [09-readme-walkthrough.md](09-readme-walkthrough.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
-then carries three findings from slice 6's integration tier and a limitations list that is
-already decided, so it is assembly rather than discovery.
+was split out again once the ingest path itself changed — dropping the uploader and listing
+what loaded is chrome the walkthrough would otherwise describe wrongly. Slice 9 then carries
+three findings from slice 6's integration tier and a limitations list that is already decided,
+so it is assembly rather than discovery.
 
 ## Archive
 

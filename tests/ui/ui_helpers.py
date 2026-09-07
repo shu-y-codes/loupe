@@ -316,8 +316,20 @@ BARS = [
 VWAP = [{"ts_utc": "2025-12-12T15:00:00Z", "vwap": 410.5}]
 
 COMPARE = [
-    {"trade_date": "2025-12-11", "raw": 410.0, "clean": 410.0},
-    {"trade_date": "2025-12-12", "raw": 412.0, "clean": 411.0},
+    {
+        "contract_id": "ZCZ25",
+        "trade_date": "2025-12-11",
+        "raw": {"open": 408.0, "high": 411.25, "low": 407.5, "close": 410.0, "volume": 18210},
+        "clean": {"open": 408.0, "high": 411.25, "low": 407.5, "close": 410.0, "volume": 18210},
+        "differs": False,
+    },
+    {
+        "contract_id": "ZCZ25",
+        "trade_date": "2025-12-12",
+        "raw": {"open": 410.25, "high": 410.0, "low": 407.0, "close": 412.0, "volume": 20104},
+        "clean": {"open": 410.25, "high": 410.0, "low": 407.0, "close": 411.0, "volume": 20104},
+        "differs": True,
+    },
 ]
 
 

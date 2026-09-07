@@ -8,7 +8,8 @@ stops saying it did.
 
 Written 2026-09-07, split out of the README walkthrough once it was clear the prose depends on
 it: there is nothing to describe until the corpus, the CSV file and the buttons exist.
-[08-readme-walkthrough.md](08-readme-walkthrough.md) follows this slice, not alongside it.
+[08-ingest-chrome.md](08-ingest-chrome.md) then
+[09-readme-walkthrough.md](09-readme-walkthrough.md) follow this slice, not alongside it.
 
 ## The two things this slice is balancing
 
@@ -61,12 +62,12 @@ spec." Ease that costs honesty is not a trade this slice may make.
    good.
 
    What is *not* recorded anywhere is which **rule families** the selection actually fires. Run
-   it and write the answer into §8, so slice 8's walkthrough can cite a measured list instead of
+   it and write the answer into §8, so slice 9's walkthrough can cite a measured list instead of
    guessing. Expect the answer to be partial, and expect that to be correct rather than a
    shortfall: §7.1 has the minute config effectively defect-free and §7.5 says the defects that
    exist are natural, not planted. **No vendor file in this repository will demonstrate
    `UNQ.KEY_CONFLICT` or `TIM.TIMEZONE_MISALIGNED`, because nothing is wrong with them.** Hunting
-   for one is the wrong response; done-when 4 is the right one, and the gap belongs in slice 8's
+   for one is the wrong response; done-when 4 is the right one, and the gap belongs in slice 9's
    limitations.
 
 4. **"Inject demo defects" is a separate button.** Not a step inside Load demo data, and not a

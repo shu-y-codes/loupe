@@ -1,4 +1,4 @@
-# 08 — README walkthrough
+# 09 — README walkthrough
 
 **Goal.** The delivered README a reviewer reads first: philosophy, architecture, trade-offs,
 limitations, extensibility, and a walkthrough against real `ESZ25` (solution brief §16).
@@ -6,23 +6,26 @@ limitations, extensibility, and a walkthrough against real `ESZ25` (solution bri
 **Status.** pending
 
 Written 2026-09-07, after slice 6 shipped and after the integration tier went in; renumbered
-from 07 when the demo-corpus work was split out ahead of it. Slices 1-6 each left the README a
-paragraph; this slice makes it the document the work is judged by. Three things are already
-known and should not be rediscovered — see "Carried in from slice 6".
+from 07 when the demo-corpus work was split out ahead of it, then from 08 when ingest chrome
+was inserted ahead of that. Slices 1-6 each left the README a paragraph; this slice makes it
+the document the work is judged by. Three things are already known and should not be
+rediscovered — see "Carried in from slice 6".
 
-**Slice 7 is a hard dependency, not a nicety.** The walkthrough is prose *about* a corpus, and
-until [07-demo-corpus.md](07-demo-corpus.md) lands there is no CSV file to name, no demo button
-to describe, and no answer to "what does a reviewer see first". Write this after that, not
-alongside it.
+**Slices 7 and 8 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
+corpus and a sidebar. Until [07-demo-corpus.md](07-demo-corpus.md) there is no CSV file to
+name, no demo button to describe, and no answer to "what does a reviewer see first". Until
+[08-ingest-chrome.md](08-ingest-chrome.md) that sidebar still offers Upload files and does
+not show what was loaded. Write this after both, not alongside them.
 
 ## Done when
 
 1. **The walkthrough runs from a clone with no setup step.** `bootstrap` seeds the schema,
    reference data and the rule catalogue, and `loupe.api.app:bootstrapped_app` is the
-   zero-argument factory `uvicorn --factory` needs. Slice 7 adds the demo-data button, so the
-   documented path is: two commands, one click, findings on real vendor data. Verify by hand on
-   a fresh clone with an empty `data/`. Anything that needs a Python REPL before the app works
-   is a bug, not a step to document.
+   zero-argument factory `uvicorn --factory` needs. Slice 7 adds the demo-data button and
+   slice 8 is the sidebar around it, so the documented path is: two commands, one click,
+   findings on real vendor data, the loaded files visible (CSV conversions marked). Verify
+   by hand on a fresh clone with an empty `data/`. Anything that needs a Python REPL before
+   the app works is a bug, not a step to document.
 2. **Philosophy, architecture and trade-offs**, in the reviewer's reading order rather than the
    build order. The locked decisions (`specs/loupe-solution-design.md` §3) are the spine: say
    what was chosen, what was rejected, and what the choice costs. A trade-off with no cost
@@ -45,13 +48,13 @@ alongside it.
 Three findings from the integration tier that this slice has to say out loud rather than
 leaving for the reviewer to hit.
 
-**Uploading a second grain does not put reconciliation in scope.**
-`POST /v1/ingest/batches` runs the rules scoped to *that batch*, so when the daily file lands
-the run has never seen the minute records. It takes a corpus-wide `POST /v1/dq/runs`. This is
-pinned by `tests/integration/test_walkthrough.py` and it will bite a reviewer who uploads two
-files and expects the score to move. Either the walkthrough names the re-run as a step, or the
-UI nudges after a second grain arrives — the second is better and is a small change to the
-upload flow, so decide which before writing the prose around it.
+**A batch-scoped run does not put reconciliation in scope.**
+`POST /v1/ingest/batches` runs the rules scoped to *that batch*, so when a second grain lands
+the run has never seen the other records. It takes a corpus-wide `POST /v1/dq/runs`. This is
+pinned by `tests/integration/test_walkthrough.py`. Slice 8 removes the upload widget, and Load
+demo data already finishes with that corpus-wide run, so a reviewer following the click path
+never hits this. It remains true of the API. The walkthrough should not teach a file_uploader
+path; name it as an API limitation if it is named at all.
 
 **The score is absent, not zero, below `min_records`.** A small demo file scores `None` with
 `insufficient_data` set (§11.5). The walkthrough should either use enough data to score or show
@@ -100,8 +103,9 @@ to catch.
 ## Tests
 
 No new tier. The claims the README makes are already covered — the two-command start by
-`tests/integration/test_cold_start.py`, the upload round trip and the reconciled book by
-`tests/integration/test_walkthrough.py`, the endpoint table by `tests/api/test_openapi.py`.
+`tests/integration/test_cold_start.py`, the ingest round trip and the reconciled book by
+`tests/integration/test_walkthrough.py`, the endpoint table by `tests/api/test_openapi.py`,
+the sidebar list and CSV mark by slice 8's UI tests.
 
 What this slice owes is a **manual pass on a clean clone**: `git clone`, `uv sync`, run the two
 commands, click Load demo data, follow the walkthrough as written, and fix the README where
@@ -115,10 +119,11 @@ that a stranger can start it — is the one thing not being tested.
 - `specs/api-contract.md` §9 (the endpoint-to-requirement table this README must carry)
 - `specs/dq-rules-and-scoring.md` §11.5 (the score is a navigation tool, not a grade)
 - `specs/sample-corpus.md` §1 (why the corpus is fetched and never committed)
+- [08-ingest-chrome.md](08-ingest-chrome.md) (the sidebar the walkthrough screenshots)
 
 ## Non-goals
 
 New features. If the walkthrough wants a capability that does not exist, the answer is a
-sentence in Limitations, not a slice 7 implementation. The one exception is a defect the
+sentence in Limitations, not a slice 8 implementation. The one exception is a defect the
 walkthrough surfaces in something already claimed to work — that gets fixed, because the
 README is the claim.

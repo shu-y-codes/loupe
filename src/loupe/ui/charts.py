@@ -81,11 +81,26 @@ def raw_vs_clean(rows: list[dict[str, Any]], *, value: str = "close") -> None:
         st.caption("Nothing to compare in this window.")
         return
     frame["trade_date"] = pd.to_datetime(frame["trade_date"])
-    columns = [c for c in (f"raw_{value}", f"clean_{value}", "raw", "clean") if c in frame]
-    if not columns:
+    plot_columns: list[str] = []
+    for side in ("raw", "clean"):
+        flat = f"{side}_{value}"
+        if flat not in frame.columns and side in frame.columns:
+            frame[flat] = frame[side].map(
+                lambda cell, key=value: cell.get(key) if isinstance(cell, dict) else cell
+            )
+        if flat in frame.columns and not any(
+            isinstance(v, dict) for v in frame[flat].tolist()
+        ):
+            plot_columns.append(flat)
+    if not plot_columns:
         st.caption("Nothing to compare in this window.")
         return
-    st.line_chart(frame.set_index("trade_date")[columns], height=200)
+    st.line_chart(
+        frame.set_index("trade_date")[plot_columns].rename(
+            columns={f"raw_{value}": "raw", f"clean_{value}": "clean"}
+        ),
+        height=200,
+    )
 
 
 def volume(bars: list[dict[str, Any]]) -> None:
