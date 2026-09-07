@@ -8,7 +8,7 @@ CSV.
 
 Written 2026-09-07, split out of the README walkthrough (again). Slice 7 shipped the fetch,
 the conversion and the two buttons; the sidebar still offers **Upload files** beside them, and
-it does not show which files landed. [09-readme-walkthrough.md](09-readme-walkthrough.md)
+it does not show which files landed. [10-readme-walkthrough.md](10-readme-walkthrough.md)
 describes what a reviewer sees — write that after this chrome exists, not against today's
 widget.
 
@@ -92,4 +92,4 @@ second way to do the same thing.
 Retiring `POST /v1/ingest/preview` or `POST /v1/ingest/batches`. Changing which files are
 fetched or converted. The rest of `_notes/dev/markups.txt` (Risk trust line, Specifics
 aggregation, chart widths, Analyst dropped-files). README prose —
-[09-readme-walkthrough.md](09-readme-walkthrough.md).
+[10-readme-walkthrough.md](10-readme-walkthrough.md).

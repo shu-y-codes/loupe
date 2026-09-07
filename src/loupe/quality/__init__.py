@@ -18,11 +18,18 @@ are reports: they read findings and propose, and they never mutate a rule or a c
 
 from .catalogue import (
     CATALOGUE,
+    DUPLICATE_RULES,
+    GAPS_RULES,
+    INVALID_RULES,
     RULE_SUBJECT_FIELD,
     RULES_ENFORCED_BY_ENGINE,
     SCORE_WEIGHTS,
     SETTLEMENT_RULES,
+    STRIP_FAMILIES,
+    STRIP_FAMILY_RULES,
+    VOLUME_INVALID_RULES,
     RuleSpec,
+    strip_family,
 )
 from .changelog import ChangelogEntry, changelog, latest_run
 from .cleaning import CleaningReport, apply_default_cleaning, exclusion_rate
@@ -43,6 +50,7 @@ from .reconciliation import (
     reconciliation_score,
 )
 from .registry import REGISTRY, Finding, RuleContext, RuleRefusal, RunScope
+from .review import ReviewPage, review_checks
 from .runner import RunResult, assess, run_rules, scoped
 from .scoring import (
     DimensionScore,
@@ -71,6 +79,9 @@ __all__ = [
     "DimensionScore",
     "Finding",
     "FindingRef",
+    "DUPLICATE_RULES",
+    "GAPS_RULES",
+    "INVALID_RULES",
     "Issue",
     "LoupeQualityError",
     "Pattern",
@@ -78,6 +89,7 @@ __all__ = [
     "RULES_ENFORCED_BY_ENGINE",
     "RULE_SUBJECT_FIELD",
     "ReconciliationScore",
+    "ReviewPage",
     "RollWindow",
     "RuleContext",
     "RuleRefusal",
@@ -89,8 +101,11 @@ __all__ = [
     "RunScope",
     "SCORE_WEIGHTS",
     "SETTLEMENT_RULES",
+    "STRIP_FAMILIES",
+    "STRIP_FAMILY_RULES",
     "SliceScore",
     "Suggestion",
+    "VOLUME_INVALID_RULES",
     "WorklistEntry",
     "apply_default_cleaning",
     "assess",
@@ -103,6 +118,7 @@ __all__ = [
     "persist_daily_metrics",
     "reconciliation_evidence",
     "reconciliation_score",
+    "review_checks",
     "ruleset_hash",
     "run_rules",
     "scoped",
@@ -113,6 +129,7 @@ __all__ = [
     "seed_rules",
     "seed_score_weights",
     "suggest",
+    "strip_family",
     "worklist",
     "worst_field",
 ]

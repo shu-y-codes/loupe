@@ -601,23 +601,18 @@ RULES_ENFORCED_BY_ENGINE: frozenset[str] = frozenset(
 DEDUPE_DROP_RULES: frozenset[str] = frozenset({"UNQ.EXACT_DUPLICATE"})
 NEVER_EXCLUDE_RULES: frozenset[str] = frozenset({"VAL.OFF_TICK_PRICE"})
 
-#: specs/dq-rules-and-scoring.md §11.6. The Risk inventory's **Closing-day** column is a
-#: statement about the session's *settlement* record, not the contract's worst issue of any
-#: kind, and nothing on `dq.dq_rule` distinguishes the two — hence a named set rather than a
-#: query. Membership test: the rule's subject can be the session's settlement record.
+#: specs/dq-rules-and-scoring.md §11.6. `/v1/dq/summary` still ships `settlement_issue` from
+#: this set. The reviewer page does not have a Closing-day column.
+#: Membership test: the rule's subject can be the session's settlement record.
 #: Applied together with `frequency = 'daily'`; at minute grain `VAL.OFF_TICK_PRICE` says
 #: "off-tick price", not "off-tick close", and `CMP.SESSION_MISSING` says "no tape at all"
 #: rather than "no settlement".
 #: `UNQ.EXACT_DUPLICATE` is deliberately absent though a duplicated daily row is literally a
 #: duplicated settlement: `dedupe_drop` resolves it automatically, so it is a changelog entry
 #: rather than open settlement risk. A key conflict is two *different* settlement prices for
-#: one session with no principled winner, which is what a risk manager must be told.
-#: **No `REC.*` rule joins this set** (§11.6). `REC.CLOSE_CONVENTION` is the near miss: its
-#: subject is plainly the settlement, but it is `info` and fires on the *expected* difference
-#: between a settlement and a last trade, and the Closing-day column is what a risk manager
-#: reads as what is *wrong* with a settlement. Reconciliation's contribution to the Risk view
-#: is the corroboration state of §8.7 — which changes what an existing callout means — not
-#: another callout.
+#: one session with no principled winner.
+#: **No `REC.*` rule joins this set** (§11.6). Reconciliation's contribution is the
+#: corroboration state of §8.7, not another callout.
 SETTLEMENT_RULES: frozenset[str] = frozenset(
     {
         "CON.CLOSE_OUT_OF_RANGE",
@@ -627,9 +622,9 @@ SETTLEMENT_RULES: frozenset[str] = frozenset(
     }
 )
 
-#: specs/dq-rules-and-scoring.md §11.7. The Analyst **Worst field** tile, derived from rule
-#: identity rather than by grouping `dq.dq_finding.details` — that column is evidence and is
-#: never grouped on (`specs/data-model.md`).
+#: specs/dq-rules-and-scoring.md §11.7. `worst_field` on `/v1/dq/summary`, from rule identity
+#: rather than by grouping `dq.dq_finding.details` — that column is evidence and is never
+#: grouped on (`specs/data-model.md`). The reviewer page does not show a worst-field tile.
 #:
 #: Membership is a two-part test, because the tile answers *what is broken*: the rule must
 #: **assert a defect**, and must **fix the field that defect is in**. "Fixes a field" alone
@@ -679,3 +674,50 @@ RULE_SUBJECT_FIELD: Mapping[str, str] = MappingProxyType(
         "REC.VOLUME_SHORTFALL": "volume",
     }
 )
+
+#: specs/dq-rules-and-scoring.md §11.8. Reviewer-strip families: labelling, not a score input.
+#: A rule is in exactly one of `gaps`, `duplicates`, `invalid`, or off-strip. Recurring
+#: patterns is not a rule family — its card counts standing pattern rows.
+GAPS_RULES: frozenset[str] = frozenset(
+    {"CMP.MISSING_TIMESTAMP", "CMP.SESSION_MISSING", "CMP.PARTIAL_SESSION"}
+)
+DUPLICATE_RULES: frozenset[str] = frozenset({"UNQ.EXACT_DUPLICATE", "UNQ.KEY_CONFLICT"})
+INVALID_RULES: frozenset[str] = frozenset(
+    {
+        "CMP.NULL_FIELD",
+        "VAL.NON_POSITIVE_PRICE",
+        "VAL.NEGATIVE_VOLUME",
+        "VAL.NON_INTEGER_VOLUME",
+        "VAL.OFF_TICK_PRICE",
+        "VAL.ZERO_VOLUME_WITH_RANGE",
+        "VAL.PRICE_MAGNITUDE",
+        "VAL.EXTREME_VOLUME",
+        "CON.HIGH_LT_LOW",
+        "CON.OPEN_OUT_OF_RANGE",
+        "CON.CLOSE_OUT_OF_RANGE",
+    }
+)
+VOLUME_INVALID_RULES: frozenset[str] = frozenset(
+    {
+        "VAL.NEGATIVE_VOLUME",
+        "VAL.NON_INTEGER_VOLUME",
+        "VAL.ZERO_VOLUME_WITH_RANGE",
+        "VAL.EXTREME_VOLUME",
+    }
+)
+STRIP_FAMILIES: tuple[str, ...] = ("gaps", "duplicates", "invalid", "patterns")
+STRIP_FAMILY_RULES: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "gaps": GAPS_RULES,
+        "duplicates": DUPLICATE_RULES,
+        "invalid": INVALID_RULES,
+    }
+)
+
+
+def strip_family(rule_id: str) -> str:
+    """`gaps`, `duplicates`, `invalid`, or `off_strip`. Patterns is not a rule family."""
+    for family, rules in STRIP_FAMILY_RULES.items():
+        if rule_id in rules:
+            return family
+    return "off_strip"

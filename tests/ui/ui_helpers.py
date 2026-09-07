@@ -46,6 +46,7 @@ class FakeClient:
             "insights_patterns": PATTERNS,
             "insights_suggestions": SUGGESTIONS,
             "batches": BATCHES,
+            "checks": checks_response,
         }
         self._responses.update(overrides)
 
@@ -63,6 +64,9 @@ class FakeClient:
 
     def summary(self, **p: Any):
         return self._answer("summary", **p)
+
+    def checks(self, **p: Any):
+        return self._answer("checks", **p)
 
     def metrics(self, **p: Any):
         return self._answer("metrics", **p)
@@ -499,3 +503,184 @@ SUGGESTIONS: dict[str, Any] = {
     ],
     "total": 1,
 }
+
+
+#: Overlay marks for the stubbed contract. All family flags sit on the same rows so a test
+#: that switches Gaps vs Invalid can see the join change which marks are drawn.
+OHLCV_MARKS: list[dict[str, Any]] = [
+    {
+        "trade_date": "2025-12-11",
+        "session": "present",
+        "partial_gap": True,
+        "duplicate": False,
+        "invalid": False,
+        "invalid_volume": False,
+        "pattern_member": True,
+        "caption": "18 missing slots at session open",
+    },
+    {
+        "trade_date": "2025-12-12",
+        "session": "present",
+        "partial_gap": False,
+        "duplicate": False,
+        "invalid": True,
+        "invalid_volume": False,
+        "pattern_member": False,
+        "caption": "Close outside the bar range",
+    },
+    {
+        "trade_date": "2025-09-16",
+        "session": "absent",
+        "partial_gap": False,
+        "duplicate": False,
+        "invalid": False,
+        "invalid_volume": False,
+        "pattern_member": False,
+        "caption": "Settlement never arrived",
+    },
+]
+
+_PICTURES: dict[str, dict[str, Any]] = {
+    "gaps": {
+        "kind": "gaps_ribbon",
+        "trade_date": "2025-12-11",
+        "caption": "18 consecutive minute slots missing on 2025-12-11.",
+        "rule_ids": ["CMP.MISSING_TIMESTAMP"],
+        "slots": [
+            {"label": "17:00", "present": False},
+            {"label": "17:01", "present": False},
+            {"label": "17:02", "present": True},
+        ],
+    },
+    "duplicates": {
+        "kind": "empty",
+        "trade_date": None,
+        "caption": "This check ran. Nothing in this window.",
+        "rule_ids": [],
+    },
+    "invalid": {
+        "kind": "invalid_cell",
+        "trade_date": "2025-12-12",
+        "caption": "Close outside the bar range",
+        "rule_ids": ["CON.CLOSE_OUT_OF_RANGE"],
+        "field": "close",
+        "bar": {
+            "trade_date": "2025-12-12",
+            "open": 410.25,
+            "high": 410.0,
+            "low": 407.0,
+            "close": 412.0,
+            "volume": 20104,
+        },
+    },
+    "patterns": {
+        "kind": "pattern_histogram",
+        "trade_date": None,
+        "caption": PATTERNS["data"][0]["narrative"],
+        "rule_ids": [PATTERNS["data"][0]["rule_id"]],
+        "buckets": [
+            {
+                "label": PATTERNS["data"][0]["bucket"],
+                "share_of_findings": PATTERNS["data"][0]["share_of_findings"],
+                "share_of_records": PATTERNS["data"][0]["share_of_records"],
+            }
+        ],
+    },
+}
+
+CHECKS: dict[str, Any] = {
+    "scope": {"contracts": ["ZCZ25"], "basis": "clean"},
+    "contract_id": "ZCZ25",
+    "score": 41.0,
+    "scope_signature": "cmp+val+con+unq+tim",
+    "dimensions_not_in_scope": [
+        {
+            "dimension": "reconciliation",
+            "reason": "only one frequency uploaded for this contract",
+        }
+    ],
+    "frequencies": ["daily"],
+    "checked": True,
+    "families": [
+        {
+            "family": "gaps",
+            "label": "Gaps",
+            "count": 2,
+            "unit": "runs",
+            "detail": "1 session-open hole · 1 session absent",
+        },
+        {
+            "family": "duplicates",
+            "label": "Duplicates",
+            "count": 0,
+            "unit": "records",
+            "detail": "0 exact copies · 0 key conflicts",
+        },
+        {
+            "family": "invalid",
+            "label": "Invalid values",
+            "count": 1,
+            "unit": "rows",
+            "detail": "1 price · 0 volumes",
+        },
+        {
+            "family": "patterns",
+            "label": "Recurring patterns",
+            "count": 1,
+            "unit": "standing",
+            "detail": "Open-hour gaps, 61 of 63 sessions",
+        },
+    ],
+    "issues": [
+        {
+            "family": "gaps",
+            "what": "Missing grid slots",
+            "days": 1,
+            "records": 18,
+            "what_we_did": "Flagged; not auto-dropped",
+        },
+        {
+            "family": "invalid",
+            "what": "Close outside the bar range",
+            "days": 1,
+            "records": 1,
+            "what_we_did": "excluded 4 records",
+        },
+        {
+            "family": "patterns",
+            "what": PATTERNS["data"][0]["narrative"],
+            "days": 61,
+            "records": 412,
+            "what_we_did": "Reported; not applied",
+        },
+    ],
+    "overlay": {
+        "family": "gaps",
+        "ohlcv": OHLCV_MARKS,
+        "vwap": {
+            "pattern_hours": ["16:00-17:00 America/Chicago"],
+            "name_breaks": True,
+        },
+        "picture": _PICTURES["gaps"],
+    },
+    "meta": {"run_id": "run-1"},
+}
+
+
+def checks_response(**params: Any) -> dict[str, Any]:
+    """Family-aware `/dq/checks` stub. Overlay flags are shared; picture follows `family`."""
+    family = params.get("family") or "gaps"
+    picture = _PICTURES.get(family) or _PICTURES["duplicates"]
+    return {
+        **CHECKS,
+        "contract_id": params.get("contract") or "ZCZ25",
+        "overlay": {
+            "family": family,
+            "ohlcv": OHLCV_MARKS,
+            "vwap": {
+                "pattern_hours": ["16:00-17:00 America/Chicago"],
+                "name_breaks": family in {"gaps", "patterns", "invalid"},
+            },
+            "picture": picture,
+        },
+    }

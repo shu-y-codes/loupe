@@ -11,7 +11,7 @@ research scrapbook (gitignored; not in clones). Founding notes are locked histor
 
 - **[specs/](specs/)** — living product and calculation specs (normative)
 - **[specs/loupe-solution-design.md](specs/loupe-solution-design.md)** — implementation brief
-- **[specs/loupe-ui-design.md](specs/loupe-ui-design.md)** — UI / personas / wireframes
+- **[specs/loupe-ui-design.md](specs/loupe-ui-design.md)** — reviewer page (four checks, two charts)
 - **[plans/](plans/)** — slice sequence and done-when
 - **[specs/data-model.md](specs/data-model.md)** — DuckDB schema and its invariants
 - **[specs/analytics-semantics.md](specs/analytics-semantics.md)** — trade date, grid, OHLCV, VWAP
@@ -109,9 +109,9 @@ manifest, which is what makes it a test asset rather than a prop.
 
 Slices 1-6 are done: DuckDB schema, reference seed, upload preview and synchronous ingest;
 the quality engine — 38 rules seeded as rows, default cleaning, and the DQ score; daily bars,
-VWAP and the raw/clean compare; the FastAPI `/v1` surface; the Streamlit UI with its three
-personas; and cross-frequency reconciliation with the pattern and suggestion reports. The
-README walkthrough follows — see **[plans/](plans/)**.
+VWAP and the raw/clean compare; the FastAPI `/v1` surface; the Streamlit reviewer page
+(four checks and two charts — `specs/loupe-ui-design.md`); and cross-frequency reconciliation
+with the pattern and suggestion reports. The README walkthrough follows — see **[plans/](plans/)**.
 
 **Reconciliation needs both grains.** `REC.*` compares vendor daily bars against bars derived
 from the minute tape, so it runs only where a contract holds both — and where it does, the

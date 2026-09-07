@@ -1,14 +1,13 @@
-# 10 — Reviewer-facing UI
+# 09 — Reviewer-facing UI
 
 **Goal.** One page that names the brief’s four checks and two charts. No persona
 selector. Spec the chrome and any backend the widgets need, then rebuild the Streamlit
 page against that spec.
 
-**Status.** pending
+**Status.** done — 2026-09-07
 
-Written 2026-09-07. [09-readme-walkthrough.md](09-readme-walkthrough.md) is still pending
-and describes today’s Summary / Specifics + persona walkthrough. Write 09 *after* this
-page exists, not against the old one.
+Written 2026-09-07. [10-readme-walkthrough.md](10-readme-walkthrough.md) is still pending
+and must describe **this** page. Write 10 after this slice, not against Summary / Specifics.
 
 Do not reopen [05-ui.md](05-ui.md) or [08-ingest-chrome.md](08-ingest-chrome.md). Those
 slices stay **done**. Amend the specs they pointed at; leave the plan files as history.
@@ -177,8 +176,8 @@ wrong. This slice is labelling, grouping, overlay payloads, and chrome.
 
 Done-when 1–4 (specs) before any widget. 5 before 6. 7 with 6.
 
-Slice 9’s walkthrough done-whens that name “open one finding” / Risk columns are rewritten
-when 09 is executed, against this page. Do not start 09 in parallel.
+Slice 10's walkthrough done-whens that name “open one finding” / Risk columns are rewritten
+when this page exists, against this page. Do not start 10 in parallel.
 
 ## Files
 
@@ -204,7 +203,7 @@ when 09 is executed, against this page. Do not start 09 in parallel.
 - `specs/api-contract.md` §6, §8, §9
 - `specs/dq-rules-and-scoring.md` §11.3, §11.6–11.7
 - `specs/analytics-semantics.md` §3.3–3.4
-- [09-readme-walkthrough.md](09-readme-walkthrough.md) — blocked on this
+- [10-readme-walkthrough.md](10-readme-walkthrough.md) — blocked on this
 - [05-ui.md](05-ui.md), [08-ingest-chrome.md](08-ingest-chrome.md) — done; do not reopen
 
 ## Non-goals

@@ -8,11 +8,12 @@ Analytics semantics: `specs/analytics-semantics.md`. Rule IDs and score fields:
 `specs/dq-rules-and-scoring.md`. Storage: `specs/data-model.md`. Sample numbers cited in
 examples are owned by `specs/sample-corpus.md`.
 
+Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
+issues for the one-page reviewer UI. Same day: ingest validate and
+`POST /v1/dq/runs` materialise `mart.bar_daily` before returning (gap from slices 3/4).
 Revised 2026-09-06: promoted from research; first normative version. Same day: v1 vs
 extension boundaries for finding override, suggestion apply/dismiss, and catalogue
-mutation routes are stated here to match solution brief §11 / §14 (the research note
-listed those routes without the v1 cut). Revised 2026-09-06: ingest validate and
-`POST /v1/dq/runs` materialise `mart.bar_daily` before returning (gap from slices 3/4).
+mutation routes are stated here to match solution brief §11 / §14.
 
 **Scope of authority.** This spec owns *paths, query parameters, status codes, JSON
 envelopes, and transport error codes (`STR.*`, `CAP.*`)*. It does not own DDL, rule
@@ -30,7 +31,7 @@ layers those sibling specs already define.
 | Reference | `GET /health`, `/contracts`, `/calendar` | — |
 | Ingest | preview, batches (201 / `file_hash` 409), list, detail, rejects, soft-delete purge | Async job table + 202 (only if ingest exceeds ~30s) |
 | Analytics | bars/daily, vwap, compare | — |
-| DQ | summary, metrics, findings **GET** (read-only), changelog **GET** (read-only), rules **GET**, runs POST/GET | `POST .../findings/{id}/review`; `POST` / `PATCH` `/dq/rules` |
+| DQ | summary, **checks**, metrics, findings **GET** (read-only), changelog **GET** (read-only), rules **GET**, runs POST/GET | `POST .../findings/{id}/review`; `POST` / `PATCH` `/dq/rules` |
 | Insights | patterns **GET**, suggestions **GET** | `POST .../suggestions/{id}/apply`, `.../dismiss` |
 | Auth | none | Router-level RBAC; no signature changes |
 
@@ -182,7 +183,7 @@ DELETE /v1/ingest/batches/{id}        purge this batch and its derived rows
 **Loupe accepts `minute` and `daily` uploads alike, and rejects an upload only on file
 format** (CSV or Parquet). A granularity gate would invent a rejection the brief does not
 ask for. Daily is required material: the development sample's natural defects live in the
-daily files; the risk-manager persona works on settlements; reconciliation needs both.
+daily files; settlement quality lives there; reconciliation needs both.
 
 Capability follows from what was supplied and is disclosed:
 
@@ -485,6 +486,7 @@ frequencies; returns the same `CAP.FREQUENCY_UNAVAILABLE` refusal when only one 
 
 ```
 GET  /v1/dq/summary?contract=&start=&end=&basis=&frequency=
+GET  /v1/dq/checks?contract=&start=&end=&family=&basis=
 GET  /v1/dq/metrics?contract=&start=&end=&frequency=&group_by=day|contract|rule|dimension|frequency&dimension=
 GET  /v1/dq/findings?contract=&start=&end=&frequency=&rule_id=&severity=&status=&limit=&offset=
 GET  /v1/dq/findings/{finding_id}
@@ -588,8 +590,9 @@ the API surfaces the effect as per-bar `reconciliation.status` of `compared` or
 `not_comparable`.
 
 **`contracts[]` — the inventory row, alongside `slices[]`.** `slices` is per contract ×
-frequency; every persona's Summary table is one row per *contract*
-(`specs/loupe-ui-design.md`). The rollup is composed in `quality`, not by the client:
+frequency; `contracts[]` is one row per *contract*. The rollup is composed in `quality`,
+not by the client. The reviewer page does not render this inventory (`GET /v1/dq/checks`
+is the one-page envelope); the fields remain so API callers still get a book rollup.
 
 ```json
 {
@@ -616,14 +619,14 @@ the score as a navigation index rather than a grade.
 
 **Two callouts ship on every row, not one behind a parameter.** `top_issue` is the worst
 issue of any kind; `settlement_issue` is drawn from `SETTLEMENT_RULES` at daily grain only
-(§11.6) and is null for a contract held solely at minute grain. Personas are a UI view
-selector and nothing in this contract is persona-aware (§8), so a `?callout=` parameter would
-make the endpoint persona-shaped to save one string per row. Both carry the rule's own
-`label` from `dq.dq_rule.name`, so wording lives with the rule rather than in a widget.
+(§11.6) and is null for a contract held solely at minute grain. Nothing in this contract is
+view-shaped (§8), so a `?callout=` parameter would make the endpoint UI-shaped to save one
+string per row. Both carry the rule's own `label` from `dq.dq_rule.name`.
 
-`worst_field` is derived from rule identity (§11.7) and is `null` — the tile reads "not
-applicable" — when a scope's findings are all from unmapped rules. It is never a group-by
-over `dq.dq_finding.details`, which is evidence and not a key.
+`worst_field` is derived from rule identity (§11.7) and is `null` when a scope's findings
+are all from unmapped rules. It is never a group-by over `dq.dq_finding.details`, which is
+evidence and not a key. The reviewer page does not show a worst-field tile; the field stays
+on `/dq/summary` for callers that want it.
 
 **It carries its denominator**, for the reason §11.5 makes a score carry one. `findings` is
 the winning field's count, `considered` is how many open findings name a field at all, and
@@ -632,9 +635,9 @@ field-parametric, record-shaped and diagnostic rules — so a client that showed
 alone would imply it summarised everything on the screen.
 
 **`dimension` on `/dq/metrics`.** `group_by=day` averages the dimensions together, which
-cannot express a single-dimension trend. The Risk **Settlement trend** sparkline is
-`completeness` at `frequency=daily` over trade dates, so the filter selects one dimension and
-is echoed as `dimension` on the response. Omitted, behaviour is exactly as before.
+cannot express a single-dimension trend. Filter `dimension=completeness` at
+`frequency=daily` to select daily completeness over trade dates. Omitted, behaviour is
+exactly as before.
 
 ### 6.2 Findings (v1 read-only)
 
@@ -757,6 +760,90 @@ severity, not a user action (`specs/dq-rules-and-scoring.md` §14), so there is 
 client could make here. Overriding a finding is the extension (§6.3), and it changes findings
 rather than these rows.
 
+### 6.6 Checks (reviewer strip)
+
+One request for the one-page reviewer UI (`specs/loupe-ui-design.md`). Cards, overlay marks,
+picture payload, and aggregated issues are composed in `quality`. A client that can only
+build the page by grouping `GET /v1/dq/findings` in a widget has missed this route.
+
+`contract` is **required** and names one contract. `family` selects the overlay and picture
+(`gaps` | `duplicates` | `invalid` | `patterns`; default `gaps`). `start` / `end` are trade
+dates. `basis` defaults to `clean`.
+
+```
+GET /v1/dq/checks?contract=ESZ25&start=2025-06-02&end=2025-06-30&family=gaps
+```
+
+```json
+{
+  "scope": {"contracts": ["ESZ25"], "start": "2025-06-02", "end": "2025-06-30",
+            "basis": "clean"},
+  "contract_id": "ESZ25",
+  "score": 96.0,
+  "scope_signature": "cmp+val+con+unq+tim",
+  "dimensions_not_in_scope": [
+    {"dimension": "reconciliation",
+     "reason": "Only minute records are held for ESZ25. Reconciliation requires both grains."}
+  ],
+  "frequencies": ["minute"],
+  "checked": true,
+  "families": [
+    {"family": "gaps", "label": "Gaps", "count": 2, "unit": "runs",
+     "detail": "1 session-open hole · 1 session absent"},
+    {"family": "duplicates", "label": "Duplicates", "count": 0, "unit": "records",
+     "detail": "0 exact copies · 0 key conflicts"},
+    {"family": "invalid", "label": "Invalid values", "count": 1, "unit": "rows",
+     "detail": "1 price · 0 volumes"},
+    {"family": "patterns", "label": "Recurring patterns", "count": 0, "unit": "standing",
+     "detail": "No standing pattern in this window"}
+  ],
+  "issues": [
+    {"family": "gaps", "what": "Missing grid slots", "days": 1, "records": 4,
+     "what_we_did": "excluded 4 records"},
+    {"family": "invalid", "what": "Close outside the bar range", "days": 1, "records": 1,
+     "what_we_did": "Flagged; not auto-dropped"}
+  ],
+  "overlay": {
+    "family": "gaps",
+    "ohlcv": [
+      {"trade_date": "2025-06-12", "session": "present", "partial_gap": true,
+       "duplicate": false, "invalid": false, "invalid_volume": false,
+       "pattern_member": false, "caption": "4 missing slots at session open"},
+      {"trade_date": "2025-06-16", "session": "absent", "partial_gap": false,
+       "duplicate": false, "invalid": false, "invalid_volume": false,
+       "pattern_member": false, "caption": "Settlement never arrived"}
+    ],
+    "vwap": {"pattern_hours": [], "name_breaks": true},
+    "picture": {
+      "kind": "gaps_ribbon",
+      "trade_date": "2025-06-12",
+      "caption": "Four consecutive minute slots missing at the session open.",
+      "rule_ids": ["CMP.MISSING_TIMESTAMP"],
+      "slots": [{"label": "17:00", "present": false}, {"label": "17:04", "present": true}]
+    }
+  }
+}
+```
+
+**Cards.** `count` is findings in the family for this contract × window, except Recurring
+patterns, whose `count` is standing patterns from `GET /v1/insights/patterns` (not finding
+count). Zero is a real answer when `checked` is true (a completed run exists). `OUT.*` does
+not increment any card. Family membership lives next to `SETTLEMENT_RULES` in the catalogue.
+
+**Overlay.** `ohlcv` is per `trade_date`. `session` is `present` | `absent` | `holiday`.
+`absent` means the expected grid asked for a settlement and `mart.bar_daily` has **no row**
+— never a zero-filled bar. Marks are booleans the UI can draw without knowing rule IDs.
+A minute `CMP.MISSING_TIMESTAMP` sets `partial_gap` on that session's derived daily date.
+`max_severity` is not on this envelope; it stays on `/analytics/bars/daily` for the publish
+gate.
+
+**Picture kinds:** `gaps_ribbon`, `absent_session`, `duplicate_rows`, `invalid_cell`,
+`pattern_histogram`, `empty`. Rule IDs travel as a caption list, not as the headline.
+
+**Issues.** One row per *(family, plain-language issue)*. `what` is `dq.dq_rule.name` or
+the pattern narrative. `what_we_did` is from the changelog; the client does not re-derive
+cleaning. Unknown `family` is 400.
+
 ---
 
 ## 7. Insights
@@ -792,8 +879,8 @@ v1 surfaces suggestions as report-only text (exercise: identify and suggest, not
 
 ## 8. Authentication
 
-**None in v1.** Personas are a UI view selector, not an authorisation boundary. Nothing in
-this contract is persona-aware.
+**None in v1.** The UI is one reviewer page, not a view selector and not an authorisation
+boundary. Nothing in this contract is persona-aware.
 
 **Extension:** auth dependency at the FastAPI router level, role claim, filter `contract`
 scope per role. **No endpoint signature changes** — the API is resource-shaped, not
@@ -813,10 +900,10 @@ Keep this table in the delivered README.
 | Daily OHLCV bars | `GET /v1/analytics/bars/daily` |
 | Rolling 15-minute VWAP | `GET /v1/analytics/vwap` |
 | Filter by contract and date range | query parameters on every analytic and DQ endpoint |
-| Missing timestamps and gaps | `GET /v1/dq/findings?rule_id=CMP.MISSING_TIMESTAMP` |
-| Duplicate records | `GET /v1/dq/findings?rule_id=UNQ.*` |
-| Invalid prices or volumes | `GET /v1/dq/findings?rule_id=VAL.*` |
-| Statistical outliers (optional) | `GET /v1/dq/findings?rule_id=OUT.*` |
-| Recurring DQ patterns | `GET /v1/insights/patterns` |
+| Missing timestamps and gaps | `GET /v1/dq/checks?family=gaps` (cards + overlay); `GET /v1/dq/findings?rule_id=CMP.MISSING_TIMESTAMP` |
+| Duplicate records | `GET /v1/dq/checks?family=duplicates`; `GET /v1/dq/findings?rule_id=UNQ.*` |
+| Invalid prices or volumes | `GET /v1/dq/checks?family=invalid`; `GET /v1/dq/findings?rule_id=VAL.*` |
+| Statistical outliers (optional) | `GET /v1/dq/findings?rule_id=OUT.*` — off the reviewer strip |
+| Recurring DQ patterns | `GET /v1/dq/checks?family=patterns`; `GET /v1/insights/patterns` |
 | Suggest cleansing/validation rules | `GET /v1/insights/suggestions` (apply is extension) |
 | Cross-granularity reconciliation | `GET /v1/dq/findings?rule_id=REC.*`, `GET /v1/analytics/compare?compare=frequency` |

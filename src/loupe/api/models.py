@@ -355,7 +355,7 @@ class Issue(BaseModel):
 
 
 class ContractSummary(BaseModel):
-    """One row of the Summary inventory. Every persona reads this; each shows a subset."""
+    """One row of the per-contract rollup on `/dq/summary`. The reviewer page uses `/dq/checks`."""
 
     contract_id: str
     score: float | None = Field(
@@ -371,13 +371,12 @@ class ContractSummary(BaseModel):
     frequencies: list[str]
     finding_count: int
     top_issue: Issue | None = Field(
-        None, description="Worst issue of any kind: the Analyst Top issue and Trader Warning."
+        None, description="Worst issue of any kind on this contract."
     )
     settlement_issue: Issue | None = Field(
         None,
-        description="Risk's Closing-day column — `SETTLEMENT_RULES` at daily grain only "
-        "(§11.6). Null for a contract held solely at minute grain, because settlement lives "
-        "in the daily file.",
+        description="`SETTLEMENT_RULES` at daily grain only (§11.6). Null for a contract "
+        "held solely at minute grain, because settlement lives in the daily file.",
     )
 
 
@@ -388,14 +387,13 @@ class DqSummaryResponse(BaseModel):
     slices: list[SliceScore]
     contracts: list[ContractSummary] = Field(
         default_factory=list,
-        description="`slices` rolled up to one row per contract, with the callouts each "
-        "persona selects. Both callouts ship on every row rather than behind a `?callout=` "
-        "parameter: personas are a UI view selector and nothing here is persona-aware (§8).",
+        description="`slices` rolled up to one row per contract. Both callouts ship on every "
+        "row rather than behind a `?callout=` parameter: nothing here is view-shaped (§8).",
     )
     worst_field: dict[str, Any] | None = Field(
         None,
-        description="The Analyst tile, derived from rule identity (§11.7). Null — the tile "
-        "reads 'not applicable' — when the scope's findings are all from unmapped rules.",
+        description="Field most findings implicate, from rule identity (§11.7). Null when "
+        "the scope's findings are all from unmapped rules. Not shown on the reviewer page.",
     )
     records: dict[str, Any]
     top_issues: list[dict[str, Any]]
@@ -491,6 +489,70 @@ class ChangelogResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class FamilyCard(BaseModel):
+    family: str
+    label: str
+    count: int
+    unit: str
+    detail: str
+
+
+class AggregatedIssue(BaseModel):
+    family: str
+    what: str = Field(description="`dq.dq_rule.name`, or a pattern narrative.")
+    days: int
+    records: int
+    what_we_did: str = Field(
+        description="Changelog labels. The client does not re-derive cleaning."
+    )
+
+
+class OverlayMark(BaseModel):
+    """One trade date the Daily OHLCV chart can mark without knowing rule IDs."""
+
+    trade_date: date
+    session: str = Field(description="`present`, `absent`, or `holiday`.")
+    partial_gap: bool
+    duplicate: bool
+    invalid: bool
+    invalid_volume: bool
+    pattern_member: bool
+    caption: str = ""
+
+
+class Overlay(BaseModel):
+    family: str
+    ohlcv: list[OverlayMark]
+    vwap: dict[str, Any] = Field(
+        default_factory=dict,
+        description="`pattern_hours` and `name_breaks`. VWAP points still come from "
+        "`/analytics/vwap`; null windows are already the break.",
+    )
+    picture: dict[str, Any] = Field(
+        default_factory=dict,
+        description="`kind` is `gaps_ribbon`, `absent_session`, `duplicate_rows`, "
+        "`invalid_cell`, `pattern_histogram`, or `empty`. Rule IDs are a caption list.",
+    )
+
+
+class DqChecksResponse(BaseModel):
+    """The one-page reviewer envelope (`specs/api-contract.md` §6.6)."""
+
+    scope: Scope
+    contract_id: str
+    score: float | None
+    scope_signature: str | None = None
+    dimensions_not_in_scope: list[dict[str, Any]] = Field(default_factory=list)
+    frequencies: list[str] = Field(default_factory=list)
+    checked: bool = Field(
+        description="True when a completed run exists. Zero on a card then means the check ran."
+    )
+    families: list[FamilyCard]
+    issues: list[AggregatedIssue]
+    overlay: Overlay
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class Rule(BaseModel):

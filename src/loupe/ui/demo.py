@@ -17,7 +17,7 @@ still reaches nothing but the filesystem and the database.
 **The disclosure is not this module's to forget.** `render_synthetic_notice` reads
 `/v1/health`, which the page already calls before it draws anything, so a store holding planted
 defects says so on every rerun rather than once at the moment of injection. A toast would be
-gone by the time the reviewer changed persona.
+gone by the time the reviewer changed family.
 """
 
 from __future__ import annotations

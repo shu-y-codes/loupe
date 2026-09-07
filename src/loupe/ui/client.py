@@ -121,6 +121,10 @@ class LoupeClient:
     def summary(self, **params: Any) -> dict[str, Any]:
         return self.get("/dq/summary", **params)
 
+    def checks(self, **params: Any) -> dict[str, Any]:
+        """`GET /v1/dq/checks` — cards, overlay marks, picture and aggregated issues."""
+        return self.get("/dq/checks", **params)
+
     def metrics(self, **params: Any) -> dict[str, Any]:
         return self.get("/dq/metrics", **params)
 
@@ -142,10 +146,9 @@ class LoupeClient:
     def suggestions(self, **params: Any) -> dict[str, Any]:
         """Slice 6 (`plans/06-rec-suggestions-demo.md` done-when 4).
 
-        The method exists so the Analyst view has one place to call; until the route lands it
-        raises `ApiProblem` with a 404, which the page renders as "not in this build" rather
-        than as an empty suggestions list. Stubbing the text here instead would put copy in a
-        widget that belongs to `quality`.
+        The method exists so a caller has one place to request suggestions; until the route
+        lands it raises `ApiProblem` with a 404. The reviewer page does not render a
+        suggestions table in v1 — What we did is the changelog.
         """
         return self.get("/insights/suggestions", **params)
 

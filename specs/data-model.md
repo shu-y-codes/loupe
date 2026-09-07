@@ -300,8 +300,7 @@ integer**, so the column is null for every one of the 5.3 million clean rows and
 where there is something to report.
 
 **`source_row` is carried on every record.** This is the traceability spine: every finding can
-say "row 41,207 of `ESZ25.parquet`". Without it, drill-down stops at the database boundary and
-the analyst persona has nowhere to go.
+say "row 41,207 of `ESZ25.parquet`". Without it, drill-down stops at the database boundary.
 
 **`ts_utc` is derived; `ts_source` preserves what the file said.** There is no UTC instant
 anywhere in this vendor's source — only a DST-aware Chicago wall clock and an integer rendering
@@ -724,7 +723,7 @@ genuinely gates, and it gates the output, not the upload.
 
 | Not modelled | Why |
 |---|---|
-| `user`, `role`, `role_view` | No authentication in v1. Personas are a UI view selector. |
+| `user`, `role`, `role_view` | No authentication in v1. The UI is one reviewer page; nothing here is a view selector. |
 | `report_catalog`, `chart` registry | Registry indirection for a fixed set of charts is cost without benefit. Add it when the set becomes user-extensible. |
 | Bid/ask, or any quote-level data | Genuinely not in the source. Only aggregated bars are supplied, so no spread, depth or quote-based check is possible. |
 | A separate settlement-price column | Not needed rather than not available. The vendor's daily `close` **is** a settlement price, so it is stored in `close` on a `source = 'vendor'` bar and distinguished by `close_convention`. A parallel column would be null on every minute-derived bar and would duplicate what the discriminator already says. |

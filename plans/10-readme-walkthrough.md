@@ -1,20 +1,21 @@
-# 09 — README walkthrough
+# 10 — README walkthrough
 
 **Goal.** The delivered README a reviewer reads first: philosophy, architecture, trade-offs,
 limitations, extensibility, and a walkthrough against real `ESZ25` (solution brief §16).
 
-**Status.** pending — blocked on [10-reviewer-ui.md](10-reviewer-ui.md)
+**Status.** pending — blocked on [09-reviewer-ui.md](09-reviewer-ui.md)
 
 Written 2026-09-07, after slice 6 shipped and after the integration tier went in; renumbered
 from 07 when the demo-corpus work was split out ahead of it, then from 08 when ingest chrome
-was inserted ahead of that. Slice 10 then replaced the persona Summary / Specifics page;
-this walkthrough describes **that** page, so it runs after 10, not in parallel.
+was inserted ahead of that, then to 10 so the reviewer-facing UI could ship as slice 9.
+Slice 9 replaced the persona Summary / Specifics page; this walkthrough describes **that**
+page, so it runs after 9, not in parallel.
 
-**Slices 7, 8 and 10 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
+**Slices 7, 8 and 9 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
 corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md) there is no
 CSV file to name, no demo button to describe, and no answer to "what does a reviewer see first".
 Until [08-ingest-chrome.md](08-ingest-chrome.md) that sidebar still offers Upload files and does
-not show what was loaded. Until [10-reviewer-ui.md](10-reviewer-ui.md) the main column is still
+not show what was loaded. Until [09-reviewer-ui.md](09-reviewer-ui.md) the main column is still
 persona Summary / Specifics, which is not what the walkthrough should teach. Write this after
 all three, not alongside them.
 
@@ -34,9 +35,9 @@ all three, not alongside them.
 3. **Limitations, stated rather than implied.** The list is known and each has a spec reference,
    so this is assembly rather than discovery — see "Limitations already established" below.
 4. **The walkthrough itself, on real data**, against `ESZ25` or a chosen volatile window: fetch,
-   ingest both grains, re-run corpus-wide, read the score, open one finding and its
-   corroboration, read one pattern and one suggestion. Real numbers, and no screenshot that the
-   code cannot reproduce.
+   ingest both grains, re-run corpus-wide, read the score caption, select a family card and
+   see the overlay and picture, read one standing pattern. Real numbers, and no screenshot
+   that the code cannot reproduce.
 5. **Extensibility**: what a new rule, a new vendor profile and a new venue each cost, and which
    named extensions (§14) were deliberately left out — suggestion apply, finding override, AI
    narratives, async ingest.
@@ -73,12 +74,11 @@ is per-root configuration and only ES is measured (`specs/sample-corpus.md` §6.
 
 Each of these is decided and referenced; the slice writes them up, it does not reopen them.
 
-- **Risk metrics depend on daily files.** Closing-day callouts and the settlement trend are
-  daily-grain by design (§11.6); a minute-only corpus loses two of Risk's five columns and one
-  of its four tiles, and the screen says so.
+- **Daily-only hides VWAP, not the panel.** The VWAP panel stays and says "needs minute bars"
+  (`CAP.FREQUENCY_UNAVAILABLE`). Settlement still lives in the daily file; a minute-only
+  contract has no vendor settlement row to miss (`specs/analytics-semantics.md` §3.4).
 - **Mixed scope is the default, not an edge case.** 32 of 40 contracts score over five
-  dimensions and 8 over six, so the `†` mark and the scope disclosure fire on most of the book
-  (§11.3).
+  dimensions and 8 over six, so the score caption must carry `scope_signature` (§11.3).
 - **Two pattern dimensions are not computed.** `field` and `rule` have no exposure denominator,
   so lift is undefined for them; the off-tick case is reachable through `frequency` instead
   (`src/loupe/quality/patterns.py`).

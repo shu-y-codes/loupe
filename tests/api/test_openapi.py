@@ -22,6 +22,7 @@ V1_PATHS = {
     "/v1/analytics/vwap",
     "/v1/analytics/compare",
     "/v1/dq/summary",
+    "/v1/dq/checks",
     "/v1/dq/metrics",
     "/v1/dq/findings",
     "/v1/dq/findings/{finding_id}",

@@ -3,7 +3,7 @@
 The disclosure tests are the reason this file exists. Done-when 5 turns on a property that is
 easy to satisfy badly: *a reader who arrives mid-session, or reloads, still knows*. A notice
 rendered once when the button is pressed satisfies "the user was told" and fails that property
-completely, because Streamlit reruns on every interaction — change persona, sort a column, pick
+completely, because Streamlit reruns on every interaction — change family, pick
 a contract, and the notice is three reruns gone while the findings remain.
 
 So every disclosure test here runs the page **twice** and asserts on the second run.
@@ -39,7 +39,7 @@ def _text(test) -> str:
 
 def test_a_store_with_planted_defects_says_so(app):
     client = FakeClient(health=SYNTHETIC_HEALTH)
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
 
     banner = " ".join(w.value for w in test.warning)
     assert "planted defects" in banner
@@ -51,23 +51,23 @@ def test_the_disclosure_survives_a_rerun(app):
     """Done-when 5, stated as the property rather than as the moment.
 
     Two full script runs. The second is the one that matters: it stands in for every
-    interaction after the injection — a persona switch, a date change, a row selection — and a
+    interaction after the injection — a family switch, a date change, a contract pick — and a
     notice that only fired on the injection rerun would be gone by now.
     """
     client = FakeClient(health=SYNTHETIC_HEALTH)
-    first = _no_exception(app("Risk", client=client))
+    first = _no_exception(app(client=client))
     assert "planted defects" in " ".join(w.value for w in first.warning)
 
     second = _no_exception(first.run())
     assert "planted defects" in " ".join(w.value for w in second.warning)
 
 
-def test_the_disclosure_survives_a_persona_switch(app):
+def test_the_disclosure_survives_a_family_switch(app):
     """The likeliest real interaction, and it must not be the one that clears the notice."""
     client = FakeClient(health=SYNTHETIC_HEALTH)
-    for persona in ("Risk", "Trader", "Analyst"):
-        test = _no_exception(app(persona, client=client))
-        assert "planted defects" in " ".join(w.value for w in test.warning), persona
+    for family in ("gaps", "invalid", "patterns"):
+        test = _no_exception(app(client=client, family=family))
+        assert "planted defects" in " ".join(w.value for w in test.warning), family
 
 
 def test_nothing_is_disclosed_when_nothing_was_planted(app):
@@ -77,7 +77,7 @@ def test_nothing_is_disclosed_when_nothing_was_planted(app):
     *offer* to inject describes what it would plant, which is the panel doing its job. What
     must be absent is the claim that the store already holds synthetic data.
     """
-    test = _no_exception(app("Risk"))
+    test = _no_exception(app())
     warnings = " ".join(w.value for w in test.warning).lower()
     assert "contains planted defects" not in warnings
     assert "synthetic records" not in warnings
@@ -92,11 +92,11 @@ def test_the_disclosure_reaches_the_page_before_any_score(app):
     from loupe.ui import app as page
 
     client = FakeClient(health=SYNTHETIC_HEALTH)
-    _no_exception(app("Risk", client=client))
+    _no_exception(app(client=client))
 
     source = page.main.__code__.co_names
     assert "render_synthetic_notice" in source
-    assert source.index("render_synthetic_notice") < source.index("load_summary")
+    assert source.index("render_synthetic_notice") < source.index("load_checks")
 
 
 # ------------------------------------------------------------------------- the two buttons
@@ -105,7 +105,7 @@ def test_the_disclosure_reaches_the_page_before_any_score(app):
 def test_an_empty_store_offers_the_fetch_and_says_what_it_downloads(app):
     """Consent before bytes: §1 found no licence grant, so the reader decides knowingly."""
     client = FakeClient(health=EMPTY_HEALTH)
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
 
     labels = [b.label for b in test.button]
     assert "Load demo data" in labels
@@ -118,7 +118,7 @@ def test_an_empty_store_offers_the_fetch_and_says_what_it_downloads(app):
 
 def test_a_loaded_store_offers_injection_and_not_the_fetch(app):
     """Two clicks, in order. The second only appears once there is real data to contrast with."""
-    test = _no_exception(app("Risk"))
+    test = _no_exception(app())
     labels = [b.label for b in test.button]
 
     assert "Inject demo defects" in labels
@@ -127,7 +127,7 @@ def test_a_loaded_store_offers_injection_and_not_the_fetch(app):
 
 def test_injection_says_what_it_will_do_before_it_is_pressed(app):
     """Planting defects is not something to discover afterwards."""
-    test = _no_exception(app("Risk"))
+    test = _no_exception(app())
     said = _text(test)
     assert "copy" in said.lower(), "the vendor files are not modified, and it says so"
     assert "manifest" in said.lower()
@@ -136,7 +136,7 @@ def test_injection_says_what_it_will_do_before_it_is_pressed(app):
 def test_a_synthetic_store_offers_the_way_back(app):
     """Done-when 6. A demo that can only be undone with `rm` is one nobody presses."""
     client = FakeClient(health=SYNTHETIC_HEALTH)
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
     labels = [b.label for b in test.button]
 
     assert "Remove demo defects" in labels
@@ -151,7 +151,7 @@ def test_no_demo_control_reads_as_an_apply_or_override(app, health):
     three demo states is what stops a new button being the exception.
     """
     client = FakeClient(health=health)
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
     labels = [b.label.lower() for b in test.button]
     forbidden = ("apply", "override", "dismiss", "accept", "resolve", "edit")
     assert not [label for label in labels if any(w in label for w in forbidden)], labels
@@ -168,7 +168,7 @@ def test_pressing_nothing_fetches_nothing(app, monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", refuse)
     client = FakeClient(health=EMPTY_HEALTH)
-    _no_exception(app("Risk", client=client))
+    _no_exception(app(client=client))
     assert not [name for name, _ in client.calls if name == "create_batch"]
 
 
@@ -177,7 +177,7 @@ def test_pressing_nothing_fetches_nothing(app, monkeypatch):
 
 def test_the_uploader_is_absent_from_every_demo_state(app):
     for health in (EMPTY_HEALTH, HEALTH, SYNTHETIC_HEALTH):
-        test = _no_exception(app("Risk", client=FakeClient(health=health)))
+        test = _no_exception(app(client=FakeClient(health=health)))
         assert not test.file_uploader
         assert not test.sidebar.file_uploader
         labels = [b.label for b in test.button]
@@ -209,7 +209,7 @@ def test_the_conversion_mark_keys_off_demo_plus_csv_not_any_csv():
 def test_a_loaded_store_lists_ingested_files_and_marks_demo_csv(app):
     """After a stubbed load the list is present; converted rows are distinct from Parquet."""
     client = FakeClient()
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
     assert any(name == "batches" for name, _ in client.calls), (
         "the list is GET /v1/ingest/batches, not a directory walk"
     )
@@ -229,7 +229,7 @@ def test_a_loaded_store_lists_ingested_files_and_marks_demo_csv(app):
 def test_injected_csv_does_not_get_the_conversion_mark(app):
     """The synthetic/injected mark is still not this mark."""
     client = FakeClient(health=SYNTHETIC_HEALTH, batches=SYNTHETIC_BATCHES)
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
 
     markdown = [m.value for m in test.markdown]
     injected = [m for m in markdown if "SR3G26.injected.csv" in m]
@@ -245,7 +245,7 @@ def test_injected_csv_does_not_get_the_conversion_mark(app):
 
 def test_an_empty_store_does_not_list_ingested_files(app):
     client = FakeClient(health=EMPTY_HEALTH)
-    test = _no_exception(app("Risk", client=client))
+    test = _no_exception(app(client=client))
     assert not any(name == "batches" for name, _ in client.calls)
     markdown = " ".join(m.value for m in test.markdown)
     assert "ESZ25.parquet" not in markdown

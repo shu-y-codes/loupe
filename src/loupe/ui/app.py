@@ -18,37 +18,21 @@ import streamlit as st
 from loupe.ui.chrome import render_header, render_sidebar
 from loupe.ui.client import ApiProblem, ApiUnavailable, LoupeClient
 from loupe.ui.demo import render_demo, render_synthetic_notice
+from loupe.ui.review import render_review
 from loupe.ui.runtime import get_client
-from loupe.ui.specifics import render_specifics
-from loupe.ui.summary import render_summary
 
 
-def contract_roots(client: LoupeClient) -> dict[str, str]:
-    """`contract_id` → root, for the inventory's Root column. A lookup, not a rollup."""
+def contract_ids(client: LoupeClient) -> list[str]:
+    """Loaded contracts for the sidebar picker. A lookup, not a rollup."""
     try:
         body = client.contracts()
     except (ApiProblem, ApiUnavailable):
-        return {}
-    return {
-        row["contract_id"]: row.get("root") or ""
+        return []
+    return [
+        row["contract_id"]
         for row in body.get("data", [])
         if row.get("contract_id")
-    }
-
-
-def settlement_trend(client: LoupeClient, start, end) -> list[dict[str, Any]]:
-    """Daily completeness per trade date — settlement reliability, defined in the UI spec.
-
-    `group_by=day` alone averages the dimensions together, which is a general DQ trend and not
-    this tile; the `dimension` filter is what makes the sparkline mean what its label says.
-    """
-    try:
-        body = client.metrics(
-            group_by="day", dimension="completeness", frequency="daily", start=start, end=end
-        )
-    except (ApiProblem, ApiUnavailable):
-        return []
-    return body.get("data", [])
+    ]
 
 
 def read_health(client: LoupeClient) -> dict[str, Any] | None:
@@ -97,15 +81,46 @@ def store_is_ready(health: dict[str, Any]) -> bool:
     return True
 
 
-def load_summary(client: LoupeClient, start, end) -> dict[str, Any] | None:
+def load_checks(
+    client: LoupeClient, contract: str, start, end, family: str
+) -> dict[str, Any] | None:
     try:
-        return client.summary(start=start, end=end)
+        return client.checks(contract=contract, start=start, end=end, family=family)
     except ApiUnavailable as exc:
         st.error(str(exc))
         return None
     except ApiProblem as problem:
         st.error(f"{problem.title}: {problem}")
         return None
+
+
+def load_bars(client: LoupeClient, contract: str, start, end) -> list[dict[str, Any]]:
+    try:
+        return client.bars_daily(
+            contract=contract, start=start, end=end, basis="clean"
+        ).get("data", [])
+    except ApiProblem as problem:
+        st.warning(str(problem))
+        return []
+    except ApiUnavailable as exc:
+        st.warning(str(exc))
+        return []
+
+
+def load_vwap(
+    client: LoupeClient, contract: str, start, end
+) -> dict[str, Any] | ApiProblem | None:
+    try:
+        return client.vwap(contract=contract, start=start, end=end)
+    except ApiProblem as problem:
+        return problem
+    except ApiUnavailable as exc:
+        return ApiProblem(
+            status=503,
+            code=None,
+            title="Unavailable",
+            detail=str(exc),
+        )
 
 
 def main() -> None:
@@ -116,10 +131,11 @@ def main() -> None:
     if health is None:
         return
 
-    state = render_sidebar()
+    contracts = contract_ids(client)
+    state = render_sidebar(contracts)
     # Demo ingest is the only UI path into the store; the ingested-file list sits with it.
     render_demo(client, health)
-    render_header(state.persona)
+    render_header(state)
 
     if not store_is_ready(health):
         return
@@ -128,24 +144,20 @@ def main() -> None:
     # whether the data behind it was planted (`plans/07-demo-corpus.md` done-when 5).
     render_synthetic_notice(health)
 
-    summary = load_summary(client, state.start, state.end)
-    if summary is None:
+    if not state.contract:
+        st.info(
+            "No contracts loaded yet. Load demo data from the sidebar to see quality for it."
+        )
         return
 
-    selected = render_summary(
-        state.persona,
-        summary,
-        settlement_trend(client, state.start, state.end),
-        contract_roots(client),
-    )
+    family = st.session_state.get("family") or "gaps"
+    checks = load_checks(client, state.contract, state.start, state.end, family)
+    if checks is None:
+        return
 
-    # Selection drives Specifics; it survives a rerun so switching persona keeps the contract.
-    if selected:
-        st.session_state["contract"] = selected
-    contract = st.session_state.get("contract")
-
-    st.markdown("---")
-    render_specifics(state.persona, client, contract, state.start, state.end, summary)
+    bars = load_bars(client, state.contract, state.start, state.end)
+    vwap = load_vwap(client, state.contract, state.start, state.end)
+    render_review(checks, bars, vwap)
 
 
 main()

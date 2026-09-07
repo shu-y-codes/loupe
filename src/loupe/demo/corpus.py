@@ -200,8 +200,8 @@ def prepare_demo_corpus(
 
     Daily files first. Reconciliation needs both grains for a contract and the score object
     says which dimensions were in scope, so loading daily before minute means the inventory is
-    never briefly showing a book that looks minute-only — and it matches the order the Risk
-    persona's advice recommends (`specs/loupe-solution-design.md` §2).
+    never briefly showing a book that looks minute-only — and it matches the order
+    load-both-grains recommends (`specs/loupe-solution-design.md` §2).
     """
     from .fetch import daily_paths
 

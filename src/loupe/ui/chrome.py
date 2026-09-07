@@ -1,10 +1,6 @@
-"""Shared chrome: persona and trade dates. The same page for every persona.
+"""Shared chrome: contract and trade dates. One page, no persona radio.
 
-The sidebar is the whole of the page's input surface (`specs/loupe-ui-design.md`). Persona is
-a **view selector** and nothing more — it changes which columns and panels are drawn, never
-which records are readable. The API is not persona-aware (`specs/api-contract.md` §8), so
-switching persona here re-renders and does not re-authorise.
-
+The sidebar is the whole of the page's input surface (`specs/loupe-ui-design.md` Sidebar).
 Demo ingest and the ingested-file list live in `demo.py`, next to the button that produces
 them. There is no file uploader.
 """
@@ -16,29 +12,26 @@ from datetime import date
 
 import streamlit as st
 
-PERSONAS = ("Risk", "Trader", "Analyst")
-
-#: What each persona came to ask (`specs/loupe-ui-design.md`, motivations).
-PRIMARY_QUESTION = {
-    "Risk": "Is settlement trustworthy, and how much of the book is hit?",
-    "Trader": "Is this series usable for charts and backtests?",
-    "Analyst": "What is broken, and should we cleanse or keep it?",
-}
-
 
 @dataclass(frozen=True)
 class SidebarState:
-    persona: str
+    contract: str | None
     start: date | None
     end: date | None
 
 
-def render_sidebar() -> SidebarState:
-    """Persona and trade dates. Demo ingest sits in `render_demo`, under this."""
-    st.sidebar.title("LOUPE")
+def render_sidebar(contracts: list[str]) -> SidebarState:
+    """Contract picker and trade dates. Demo ingest sits in `render_demo`, under this."""
+    st.sidebar.title("Loupe")
 
-    persona = st.sidebar.radio("Persona", PERSONAS, key="persona")
-    st.sidebar.caption(PRIMARY_QUESTION[persona])
+    contract: str | None = None
+    if contracts:
+        current = st.session_state.get("contract")
+        if current not in contracts:
+            st.session_state.pop("contract", None)
+        contract = st.sidebar.selectbox("Contract", contracts, key="contract")
+    else:
+        st.sidebar.caption("No contracts loaded yet.")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Trade dates")
@@ -47,12 +40,26 @@ def render_sidebar() -> SidebarState:
 
     st.sidebar.markdown("---")
     return SidebarState(
-        persona=persona,
+        contract=contract,
         start=start if isinstance(start, date) else None,
         end=end if isinstance(end, date) else None,
     )
 
 
-def render_header(persona: str) -> None:
+def render_header(state: SidebarState) -> None:
     st.title("Loupe")
-    st.caption(PRIMARY_QUESTION[persona])
+    if state.contract:
+        window = _window_caption(state.start, state.end)
+        st.caption(f"{state.contract} · {window}" if window else state.contract)
+    else:
+        st.caption("Four checks and two charts on one selected contract.")
+
+
+def _window_caption(start: date | None, end: date | None) -> str:
+    if start and end:
+        return f"{start.isoformat()} → {end.isoformat()}"
+    if start:
+        return f"from {start.isoformat()}"
+    if end:
+        return f"to {end.isoformat()}"
+    return ""
