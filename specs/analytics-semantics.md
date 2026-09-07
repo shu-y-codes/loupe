@@ -6,6 +6,7 @@ rolling 15-minute VWAP, and the MAD method for `OUT.*`. Promoted from research
 §8. Storage: `specs/data-model.md`. Sample and oracle claims cited here are owned by
 `specs/sample-corpus.md`. Rule IDs and severities: `specs/dq-rules-and-scoring.md`.
 
+Revised 2026-09-07: the reviewer overlay is not the `max_severity` join (§3.3).
 Revised 2026-09-05: promoted from research; first normative version. Same day: §3.1 defines
 `open_interest` on a derived bar (last reported, never summed) — `mart.bar_daily` carried the
 column with no definition behind it. Same day: §3.3 defines which findings intersect a
@@ -548,6 +549,12 @@ whole trend by a constant and tells the reader nothing about which session is wo
 still contribute to `max_severity`, because a bar sitting inside a broken series is not
 trustworthy just because the breakage was described once. One resolver serves this and the
 publish gate — they ask the same question and must not answer it differently.
+
+**The reviewer overlay is a different join.** `max_severity` stays on this envelope for the
+publish gate. The UI does not key candle colour on it. Family marks for Daily OHLCV are
+composed in `quality` (`GET /v1/dq/checks`, `specs/api-contract.md` §6.6): they include
+`CMP.SESSION_MISSING` dates that have no bar row, and they let a minute
+`CMP.MISSING_TIMESTAMP` mark the derived daily session. Do not redefine `max_severity`.
 
 A daily bar built from 40% of its ticks is not wrong, but it is not trustworthy; shade
 low-completeness candles at the point of use. Materialise under **both** bases. Vendor daily

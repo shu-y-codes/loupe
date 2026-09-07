@@ -31,6 +31,8 @@ from typing import Any
 
 import duckdb
 
+from loupe.data.bulk import insert_rows
+
 from .catalogue import DEFAULT_MIN_RECORDS
 from .reconciliation import (
     CROSS,
@@ -485,11 +487,22 @@ def persist_daily_metrics(con: duckdb.DuckDBPyConnection, run_id: str) -> int:
     Per-day rather than per-slice because the dashboard reads a time series, and the
     per-dimension rows are the answer the user is actually looking for — the composite is
     navigation (§11.5).
+
+    **Written as `INSERT OR REPLACE ... SELECT`, so the rows never reach Python.** They are the
+    result of the query directly below, and a corpus-wide run produces about 145,000 of them
+    against a composite key. Pulling them out and putting them back one statement at a time cost
+    160 seconds where the query itself costs 0.1 — two thirds of the whole run
+    (`specs/data-model.md` §5, `specs/api-contract.md` §4.4). `OR REPLACE` is what keeps a
+    re-run idempotent rather than doubling the table.
     """
     severities = ", ".join("?" for _ in DEFECT_SEVERITIES)
     dimensions = ", ".join("?" for _ in ALWAYS_IN_SCOPE)
-    rows = con.execute(
-        f"""
+    written = int(
+        con.execute(
+            f"""
+        INSERT OR REPLACE INTO mart.dq_metric_daily
+          (contract_id, trade_date, frequency, dimension, expected_records,
+           actual_records, affected_records, finding_count, dimension_score)
         WITH dims(dimension) AS (SELECT unnest([{dimensions}])),
         actual AS (
           SELECT contract_id, frequency, trade_date, count(*) AS actual_records
@@ -565,22 +578,32 @@ def persist_daily_metrics(con: duckdb.DuckDBPyConnection, run_id: str) -> int:
         WHERE (dimension = 'completeness' AND expected_records > 0)
            OR (dimension <> 'completeness' AND actual_records > 0)
         """,
-        [*ALWAYS_IN_SCOPE, run_id, *DEFECT_SEVERITIES, run_id],
-    ).fetchall()
+            [*ALWAYS_IN_SCOPE, run_id, *DEFECT_SEVERITIES, run_id],
+        ).fetchone()[0]
+    )
 
-    rows += _reconciliation_metric_rows(con, run_id)
-
-    if rows:
-        con.executemany(
-            """
-            INSERT OR REPLACE INTO mart.dq_metric_daily
-              (contract_id, trade_date, frequency, dimension, expected_records,
-               actual_records, affected_records, finding_count, dimension_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-    return len(rows)
+    # The cross-grain rows are the one part with no query behind them: they are composed from
+    # `SessionEvidence` objects in Python, so they take the chunked path instead. There are a
+    # few thousand of them against a hundred thousand above, which is why only this half needs
+    # it (`specs/data-model.md` §5).
+    written += insert_rows(
+        con,
+        "mart.dq_metric_daily",
+        (
+            "contract_id",
+            "trade_date",
+            "frequency",
+            "dimension",
+            "expected_records",
+            "actual_records",
+            "affected_records",
+            "finding_count",
+            "dimension_score",
+        ),
+        _reconciliation_metric_rows(con, run_id),
+        replace=True,
+    )
+    return written
 
 
 def _reconciliation_metric_rows(

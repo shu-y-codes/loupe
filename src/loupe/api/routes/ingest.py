@@ -151,7 +151,8 @@ def preview(con: Con, file: Upload) -> PreviewResponse:
 def _batch_row(con, batch_id: str) -> tuple[Any, ...] | None:
     return con.execute(
         """
-        SELECT b.batch_id, b.status, b.filename, b.file_format, b.file_hash, b.frequency,
+        SELECT b.batch_id, b.status, b.filename, b.file_format, b.origin, b.file_hash,
+               b.frequency,
                b.source_timezone, b.ts_convention, b.session_boundary,
                b.rows_read, b.rows_accepted, b.rows_rejected,
                b.started_at, b.finished_at
@@ -181,21 +182,22 @@ def _summary(con, batch_id: str, *, dq_run_id: str | None = None) -> BatchSummar
         [batch_id],
     ).fetchone()
     elapsed = None
-    if row[12] is not None and row[13] is not None:
-        elapsed = int((row[13] - row[12]).total_seconds() * 1000)
+    if row[13] is not None and row[14] is not None:
+        elapsed = int((row[14] - row[13]).total_seconds() * 1000)
     return BatchSummary(
         batch_id=str(row[0]),
         status=row[1],
         filename=row[2],
         file_format=row[3],
-        file_hash=row[4],
-        frequency=row[5],
-        source_timezone=row[6],
-        ts_convention=row[7],
-        session_boundary=row[8],
-        rows_read=int(row[9] or 0),
-        rows_accepted=int(row[10] or 0),
-        rows_rejected=int(row[11] or 0),
+        origin=row[4],
+        file_hash=row[5],
+        frequency=row[6],
+        source_timezone=row[7],
+        ts_convention=row[8],
+        session_boundary=row[9],
+        rows_read=int(row[10] or 0),
+        rows_accepted=int(row[11] or 0),
+        rows_rejected=int(row[12] or 0),
         contracts_detected=sorted(contracts or []),
         sessions_detected=int(sessions or 0),
         trade_date_range=[first, last],
@@ -223,6 +225,16 @@ def create_batch(
             "either way.",
         ),
     ] = True,
+    origin: Annotated[
+        str,
+        Query(
+            pattern="^(upload|demo|injected)$",
+            description="Where this file came from: an ordinary `upload`, the fetched `demo` "
+            "corpus, or `injected` demo defects. Recorded on the batch and reported by "
+            "`/health`, so a manufactured defect is never rendered as a vendor one. A "
+            "declaration, not a check — it changes nothing about how the file is read.",
+        ),
+    ] = "upload",
 ) -> BatchSummary:
     """Load one file and return **201** with the finished batch.
 
@@ -234,7 +246,7 @@ def create_batch(
     try:
         preview = _preview_or_problem(con, path)
         try:
-            result: LoadResult = load_file(con, path, preview=preview)
+            result: LoadResult = load_file(con, path, preview=preview, origin=origin)
         except DuplicateFileError as exc:
             existing = _summary(con, exc.existing_batch_id)
             response.status_code = status.HTTP_409_CONFLICT

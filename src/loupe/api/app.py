@@ -11,13 +11,18 @@ translation in one readable list instead of scattered through `try` blocks.
 
 from __future__ import annotations
 
+import sys
+
 import duckdb
+from duckdb import CatalogException
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from loupe.data import LoupeDataError, apply_schema, connect, seed_reference
+from loupe.data.connection import database_path
 from loupe.data.errors import UnsupportedFileFormat
+from loupe.quality import seed_quality
 from loupe.quality.errors import LoupeQualityError
 
 from .deps import Database
@@ -41,18 +46,41 @@ for a well-formed request the ingested data cannot support.
 def create_app(
     connection: duckdb.DuckDBPyConnection | None = None,
     *,
-    bootstrap: bool = False,
+    bootstrap: bool = True,
 ) -> FastAPI:
     """Build the app over `connection`, or over the default store when none is given.
 
-    `bootstrap` applies the schema and seeds reference data on the way up. It is off by
-    default: creating tables as a side effect of starting a server would hide a
-    misconfigured `LOUPE_DB` behind an empty but healthy-looking store.
+    `bootstrap` applies the schema and seeds reference data **and the rule catalogue**, so any
+    way of starting this app produces a store it can actually serve.
+
+    **It defaults on, and that is a reversal.** It was off, on the grounds that creating tables
+    as a side effect of starting a server would hide a misconfigured `LOUPE_DB` behind an empty
+    but healthy-looking store. That risk is real and the answer to it was wrong: it made the
+    documented `uvicorn loupe.api.app:create_app --factory` produce an app that refused every
+    request until someone found the other factory name, which is a worse failure and a far more
+    likely one. The resolved store path is printed on the way up instead, so a misconfigured
+    `LOUPE_DB` is *visible* rather than prevented by refusing to work.
+
+    Pass `bootstrap=False` for the case the original reasoning cared about: inspecting a store
+    that should already exist, where creating one silently would be the wrong answer.
+
+    The rule catalogue used to be a separate step, on the grounds that rules are rows and which
+    rules a deployment wants is its decision. That is true and it is still true — `seed_rules`
+    is idempotent and re-seedable, and nothing here stops a deployment disabling or retuning a
+    row afterwards. What it is not is a reason to ship a half-open store: without it every
+    upload is refused with `RulesNotSeeded`, so the documented `uvicorn` command produced an app
+    that answered `/v1/health` cheerfully and could not ingest a file. Seeding the declared
+    catalogue is the honest default for a bootstrap that claims to make a store usable.
     """
     con = connection if connection is not None else connect()
     if bootstrap:
         apply_schema(con)
         seed_reference(con)
+        seed_quality(con)
+        if connection is None:
+            # Named, not hidden. This is what stops a mistyped `LOUPE_DB` looking like an
+            # empty corpus: the path is in the server log before the first request.
+            print(f"loupe: store ready at {database_path()}", file=sys.stderr)
 
     app = FastAPI(
         title="Loupe API",
@@ -69,6 +97,16 @@ def create_app(
 
     _register_error_handlers(app)
     return app
+
+
+def bootstrapped_app() -> FastAPI:
+    """`create_app()`, kept as a name because the README and older commands point at it.
+
+    It was the only way to reach `bootstrap=True` from `uvicorn --factory`, which calls its
+    target with no arguments. Bootstrapping is the default now, so this is an alias — retained
+    because a documented command that stops working is its own kind of setup step.
+    """
+    return create_app()
 
 
 def _register_error_handlers(app: FastAPI) -> None:
@@ -106,6 +144,31 @@ def _register_error_handlers(app: FastAPI) -> None:
                 detail=str(exc),
                 code="STR.DATA_ERROR",
                 type_="/errors/data-error",
+            ),
+        )
+
+    @app.exception_handler(CatalogException)
+    def _catalog(request: Request, exc: CatalogException) -> JSONResponse:
+        # A store nobody has bootstrapped. Every table this app reads lives in a schema
+        # `apply_schema` creates, so a missing catalog entry on a fresh file is the ordinary
+        # first-run state rather than a defect — and answering it with a 500 carrying a raw
+        # `Catalog Error` tells a new user the app is broken when the truth is that it has not
+        # been set up. 503 rather than 4xx: the request was fine, the server is not ready yet.
+        #
+        # The underlying message leads the detail rather than being replaced by a guess, so a
+        # genuinely missing relation on a healthy store still reads as what it is.
+        return problem_response(
+            request,
+            ProblemError(
+                status=503,
+                title="Store not initialised",
+                detail=(
+                    f"{exc} Apply the schema and seed reference data once before using the "
+                    "app (see the README, Setup); GET /v1/health reports whether that has "
+                    "happened."
+                ),
+                code="CAP.STORE_NOT_INITIALISED",
+                type_="/errors/store-not-initialised",
             ),
         )
 

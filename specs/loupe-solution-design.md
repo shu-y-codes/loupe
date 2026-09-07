@@ -2,10 +2,13 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
+Revised 2026-09-07: one reviewer page — four family cards and two charts; personas are
+not a view selector (slice 9). Same day: v1 UI ingest is Load demo data; capability
+preview is API-only and disclosed in place (slice 8).
 Revised 2026-09-06: `specs/api-contract.md` promoted (slice 4 done-when 1).
 Revised 2026-09-05: `specs/analytics-semantics.md` promoted (slice 3 done-when 1).
 `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs (`data-model.md`,
-`sample-corpus.md`) already promoted. Remaining sibling: UI only (slice 5).
+`sample-corpus.md`) already promoted.
 
 This document is the implementation brief. **`specs/` is normative.** Calculation, schema,
 rule catalogues, API payloads, and UI belong in `specs/` (this brief plus sibling specs).
@@ -16,7 +19,7 @@ as binding. Execution sequence: `plans/`.
 
 | Detail | Document |
 |---|---|
-| Persona UI, Summary / Specifics, wireframes, tooltips | `specs/loupe-ui-design.md` |
+| Reviewer page (cards, overlay, charts, tooltips) | `specs/loupe-ui-design.md` |
 | Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` |
 | Data model / DDL | `specs/data-model.md` |
 | DQ rules and scoring | `specs/dq-rules-and-scoring.md` |
@@ -50,52 +53,45 @@ trading workstation or a data warehouse.
 
 ---
 
-## 2. Personas
+## 2. What the page answers
 
-Personas are a **UI view selector**, not an authorisation boundary. No authentication in v1;
-RBAC is a documented extension that filters contract scope without changing endpoint signatures.
+No authentication in v1. RBAC is a documented extension that filters contract scope without
+changing endpoint signatures. The UI is **one reviewer page**, not three views.
 
-| Persona | Primary need | What they look at |
-|---|---|---|
-| **Risk manager** | Is the daily close / settlement trustworthy? How much of the book is affected? | Book grain: score, contracts needing attention, session completeness, settlement-quality sparkline, worst-first list with closing-day callouts. Specifics: Why / Impact / Address, daily OHLCV with quality on the candle, raw vs clean. No tick drill-down, no outlier hunting. |
-| **Trader** | Can I use this series for backtesting / charts? | Name-sorted list (Root, Contract, Score, Warning). Specifics: one contract, window completeness, warnings, changelog marks on the **clean** series (click row ↔ mark; raw ghost where it disagrees), OHLCV + 15-min VWAP (refused in place if daily-only). Score carries go/no-go; no GO/NO column. |
-| **Analyst** | What is broken, and what would we cleanse? | Score-then-name list with finding counts. Specifics: read-only findings log, raw neighbourhood of the selected finding, patterns (lift), suggestions as text, engine changelog, diagnostic charts including daily-vs-minute when both exist. **v1 does not override findings or apply suggestions from the UI.** |
+| Product question (§1) | What the page shows |
+|---|---|
+| **Can I trust this data?** | Four named checks (gaps, duplicates, invalid values, recurring patterns) for one selected contract × date window. Score as a caption with `scope_signature`. Aggregated issues: What / Days / Records / What we did. Report-only: no apply or override. |
+| **What does this data look like?** | Daily OHLCV then rolling 15-minute VWAP, full width, marks for the **selected family** (not `max_severity`). Picture of that family below VWAP. Daily-only keeps the VWAP panel and says “needs minute bars”. |
 
-Illustrative trader question — *"I want to backtest ES through a wild market. How clean is this
+Illustrative question — *"I want to backtest ES through a wild market. How clean is this
 data?"* — remains valid. The shipped sample runs **2021–2026**, so demos use a volatile window
-inside that range rather than 2008.
+inside that range rather than 2008. Chrome, overlay grammar, and empty states:
+`specs/loupe-ui-design.md`.
 
-### Advise Risk users to load both grains
+### Advise loading both grains
 
-**Every persona can use Loupe independently, on the grain they arrive with.** A Trader with
-only the minute tape gets bars, VWAP, warnings and a changelog — a real answer to *is this
-series usable*. An Analyst works with whatever is there and is told what is not. Nothing here
-is a prerequisite, and no upload is refused for arriving alone.
+Loupe accepts whichever grain arrives. A minute-only contract still gets derived daily bars,
+VWAP, gap and duplicate checks, and a changelog. A daily-only contract still gets settlement
+OHLCV, invalid-value checks, and in-place refusal of VWAP. Nothing is a prerequisite, and no
+upload is refused for arriving alone.
 
-**The Risk manager is the exception, and the advice is aimed at them.** Theirs is the one
-persona whose primary question cannot be fully answered from their own primary grain. Daily
-is the Risk grain — settlement is what the book is marked at — but a daily file can only be
-checked against itself: close inside the bar range, on the tick, not duplicated, session
-present. Nothing in that set can catch a settlement file that is internally perfect and still
-wrong. Only `REC.*` can (§9), and only when the minute tape is there to compare against.
+**Reconciliation still needs two files.** A daily file can only be checked against itself:
+close inside the bar range, on the tick, not duplicated, session present. Nothing in that set
+can catch a settlement file that is internally perfect and still wrong. Only `REC.*` can
+(§9), and only when the minute tape is there to compare against. That advice is about the
+measurement, not about a Risk view: load the minute tape alongside the daily file for the
+contracts you care about so the score can include it.
 
-So the recommendation is specific rather than general: **a Risk user should load the minute
-tape alongside the daily file for the contracts they care about.** It is the Trader's primary
-grain, and reconciling one against the other is what turns "this file is self-consistent" into
-"this settlement is corroborated". Where the two disagree, the Analyst's Specifics view is
-where that gets investigated.
-
-The reason it needs saying out loud is that the failure is silent. A **minute-only** contract
-makes the Risk view visibly thin — no closing-day callouts, no settlement trend, both measured
-on the daily file — so the reader can see they are not being told much. A **daily-only**
-contract makes the Risk view look *complete*: every column fills and the score computes, but
-reconciliation is out of scope, §11.3 renormalises the denominator from 1.20 to 1.00, and a
-five-dimension measurement is displayed on the same 0–100 scale as a six-dimension one.
+The failure is silent if the page does not say so. A **daily-only** contract still fills the
+four cards and the daily chart, the score computes, reconciliation is out of scope, §11.3
+renormalises the denominator from 1.20 to 1.00, and a five-dimension measurement is displayed
+on the same 0–100 scale as a six-dimension one.
 
 **One grain scores what a file says about itself; two grains score whether it is true.** Where
 a contract holds one, every surface that shows a score must say which dimensions were in scope
-(`specs/dq-rules-and-scoring.md` §11.3), and the upload preview should name the companion
-grain that is missing — as advice, in the terms of the persona it matters to, never as a gate.
+(`specs/dq-rules-and-scoring.md` §11.3), and the missing companion grain is named as advice —
+on `POST /v1/ingest/preview` for API callers, and in the score caption after load. Never as a
+gate. The v1 UI does not host a pre-commit preview panel.
 
 ---
 
@@ -116,7 +112,7 @@ These are no longer open. State them in the delivered README.
    not zero or forward-filled.
 5. **Rules are deterministic and data-driven.** AI is a documented narrative extension only;
    raw market data never leaves the process.
-6. **No authentication.** Personas = view selector.
+6. **No authentication.** The UI is one reviewer page, not a view selector.
 7. **Ingestion is synchronous.** Streamlit has no server push; at sample scale a job table buys
    nothing. Async is an extension if ingest exceeds ~30s; enforce a hard upload size cap.
 8. **Both granularities are accepted; capability follows from input.** Gate on CSV/Parquet only,
@@ -132,7 +128,12 @@ These are no longer open. State them in the delivered README.
 
 ## 4. Capability model
 
-Upload preview discloses what the file unlocks before commit.
+Capability follows from what was supplied. **The v1 UI does not host a pre-commit preview
+panel.** `POST /v1/ingest/preview` stays as an API dry run (and for any non-UI caller). Demo
+load already skips per-file preview (`validate=False`, then one corpus-wide run). The
+dashboard discloses what is unavailable **in place** after load — a daily-only contract keeps
+the VWAP panel and says "needs minute bars"; a daily-only score caption names the missing
+companion grain. There is no sidebar capability matrix before commit.
 
 | Uploaded | Daily OHLCV | Rolling 15-min VWAP | Reconciliation (`REC.*`) |
 |---|---|---|---|
@@ -143,9 +144,9 @@ Upload preview discloses what the file unlocks before commit.
 Do not invent a 15-*day* VWAP from daily bars and label it as the exercise requirement.
 
 **Why accept daily.** Every naturally occurring defect in the sample lives in the daily files;
-the minute tape is essentially clean. Risk managers work on settlement series. Rejecting daily
-would also make user-supplied reconciliation impossible and force a runtime HuggingFace
-dependency — which we reject.
+the minute tape is essentially clean. Settlement quality lives in the daily files.
+Rejecting daily would also make user-supplied reconciliation impossible and force a runtime
+HuggingFace dependency — which we reject.
 
 ---
 
@@ -227,16 +228,17 @@ HuggingFace dataset `lynx1231/historical-futures-data-sample` (public evaluation
 
 ### Ingestion principles
 
-- Preview first: headers, types, inferred timezone / interval / frequency, capability matrix
+- Preview first (API): headers, types, inferred timezone / interval / frequency, capability matrix.
+  The v1 UI does not host this panel.
 - Sync `POST /v1/ingest/batches` → **201** with finished summary (`dq_run_id`, row counts, elapsed)
 - Idempotent on `file_hash` (409 if duplicate)
 - Parse failures → `stage.record_reject`; nulls and soft defects → load + find
 - Frequency discriminator on every record: `(contract_id, frequency, ts_utc)` — loading daily and
   minute without it collides
-- **Name the companion grain at preview time** (§2, "Advise Risk users to load both grains"):
-  a daily file with no minute tape for that contract cannot be reconciled, which is the one
-  gap that matters to the Risk manager's question. Neither file is refused and neither is
-  incomplete on its own terms — the preview says what the second one would add
+- **Name the companion grain** (§2, "Advise loading both grains"):
+  a daily file with no minute tape for that contract cannot be reconciled. Neither file is
+  refused and neither is incomplete on its own terms. The API preview says what the second
+  file would add; the v1 UI says the same in the score caption after load.
 
 ### Oracle (test asset, not runtime)
 
@@ -367,34 +369,47 @@ Full contract: `specs/api-contract.md`.
 
 ## 12. UI shape
 
-Wireframes and tooltip copy: `specs/loupe-ui-design.md`. Journeys (historical, locked):
-`_notes/founding/loupe-solution-design.md` (App Usage).
+Wireframes, overlay grammar, and tooltip copy: `specs/loupe-ui-design.md`. Journeys
+(historical, locked): `_notes/founding/loupe-solution-design.md` (App Usage).
 
-Shared chrome: sidebar (persona, trade dates, upload) + **Summary** then **Specifics**.
-Selecting a Summary row drives Specifics. Specifics is **Why / Impact / Address** first;
-charts sit under it only when that persona will look at them. Address is suggestion **text**
-in v1 (no apply button).
+**One page.** Sidebar: contract picker, trade dates, Load demo data, ingested-file list.
+No persona radio. Main column, in this order: four family cards (Gaps, Duplicates, Invalid
+values, Recurring patterns); score as a caption under the cards (`scope_signature` required);
+Daily OHLCV then 15-minute VWAP, full width, **selected-family** marks (not `max_severity`);
+picture of the selected family **below** VWAP; aggregated issues (What / Days / Records /
+What we did). Report-only: no apply or override.
 
-| | Summary | Specifics |
-|---|---|---|
-| Risk | Worst-first; score, book hit (contracts needing attention), session completeness, settlement-quality sparkline; Status + Closing-day | Multi-select; Why / Impact / Address; daily OHLCV with quality on the candle; raw vs clean. No tick log |
-| Trader | Name-sorted; Contracts + With warnings; Root, Contract, Score, Warning | One contract; window completeness; warnings; changelog **marks on the clean series** (click ↔ mark; raw ghost); OHLCV + VWAP or in-place “needs minute bars” |
-| Analyst | Score then name; finding counts; top issue; both-frequency count when relevant | Read-only findings log; raw neighbourhood of selected finding; patterns (lift); suggestions as text; engine changelog; diagnostic charts + `REC.*` when both frequencies exist |
+Invariants the chrome must keep:
 
-Upload flow: file → **preview / capability disclosure** → confirm → sync progress → dashboard
-updates on return. Unavailable capabilities are explained in place (disabled VWAP with reason),
-not silently omitted.
+- Cards select the family and therefore the overlay and the picture. Zero on a card means
+  the check ran.
+- A gap can mark an absent day with **no** bar row. Never a zero-filled settlement candle.
+- Minute `CMP.MISSING_TIMESTAMP` can mark a derived daily session.
+- `OUT.*` stays off the strip. Rule IDs are captions, not headlines.
+- Daily-only keeps the VWAP panel and says “needs minute bars”.
+- Widgets call HTTP only. They do not group `findings[]` to build cards or overlay marks.
 
-Help on **named boxes** (KPI tiles and headers), one sentence, not every grid cell.
-Skip Why / Impact / Address rows and the findings What column. Streamlit: `st.metric(..., help=...)`,
+v1 UI ingest path: **Load demo data** posts local files to `POST /v1/ingest/batches` with
+`origin=demo`. There is no file uploader, no confirm-upload, and no sidebar preview panel.
+After a successful load the sidebar lists batches from `GET /v1/ingest/batches` (filename,
+format, origin) — inventory of what was ingested, not a directory walk. Demo CSV rows
+(`origin = demo` and CSV) are marked converted from Parquet, not as defects; injected CSV
+is the synthetic disclosure, not that mark.
+
+Capability preview is **UI-absent and API-only.** `POST /v1/ingest/preview` stays.
+Unavailable capabilities are explained in place on the dashboard after load (disabled VWAP
+with reason), not silently omitted and not via a pre-commit sidebar matrix.
+
+Help on **named boxes** (family cards, headers), one sentence, not every grid cell.
+Skip aggregated-issue What cells and picture sentences. Streamlit: `st.metric(..., help=...)`,
 dataframe column `help`, chart caption.
 
 ### Demo priorities
 
-1. **Raw vs clean overlay** (especially on daily / injected defects) — shows what cleaning buys.  
-2. **Quality annotation on the candle** — trustworthiness at the point of use.  
-3. **Timezone misalignment** as centrepiece finding when relevant.  
-4. **Reconciliation** when both frequencies are loaded.
+1. **Selected-family overlay** on Daily OHLCV — the four checks, not worst-severity paint.
+2. **Absent settlement as a dashed column** — never a zero-filled bar.
+3. **Timezone misalignment** as centrepiece finding when relevant.
+4. **Reconciliation in the score caption** when both frequencies are loaded.
 
 ---
 
@@ -407,7 +422,8 @@ dataframe column `help`, chart caption.
 | Contract | FastAPI `TestClient` against OpenAPI shapes | `tests/api/` |
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
-| UI | Persona view assembly; absence of apply/override controls | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| UI | One-page assembly (no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| Integration | Cold start, the real client against a real server, durability on disk | uvicorn on an ephemeral port over a file-backed store, `tests/integration/` |
 | Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `tests/ui/test_pages.py` |
 
 Edge cases to fixture explicitly: exact dup, key conflict, mid-session gap, missing day,
@@ -439,6 +455,24 @@ absence is legitimate. That is what a built-path test is for: assert the feature
 on data that should trigger it, not merely that it declines gracefully on data that should
 not.
 
+### Every tier stubs a seam, so one tier must stub none
+
+The three defects above were caught by rules about assertions. The next three were not caught
+at all, and reached a first run of the app: the store had no schema, the upload button did
+nothing, and bars were missing until something rebuilt them. They share a cause that no
+assertion rule reaches — **each tier simulates exactly the thing the others test**. `tests/api/`
+runs HTTP in-process and is handed a database somebody already set up; `tests/ui/` drives the
+pages over a client that never builds a request; every tier above runs `:memory:` and closes
+with the test. The seams between them — an unbootstrapped store, a real multipart body on a
+real socket, and state that has to outlive the request that wrote it — were the only places
+left for a defect to hide, and that is where all three were.
+
+`tests/integration/` therefore simulates neither side: uvicorn on a real port, a file-backed
+DuckDB, and the same `LoupeClient` the pages use. It is deliberately small — seams only, since
+behaviour belongs in the faster tiers that own it — and it earned its place immediately, by
+finding that every read route answered a fresh store with a bare 500 and that the client threw
+away the body of §4.3's duplicate-file refusal.
+
 ---
 
 ## 14. Extensibility and non-goals
@@ -456,29 +490,29 @@ override from the UI.
 
 ---
 
-## 15. Data flow (Trader, sync)
+## 15. Data flow (reviewer page, sync)
 
 ```
 User                    Streamlit                     FastAPI                      DuckDB
  │                          │                            │                           │
- ├─ Select view=Trader ────►│                            │                           │
- │                          ├─ GET /dq/summary ─────────►│                           │
- │                          │  GET /analytics/...        ├─ query marts / views ────►│
+ ├─ Pick contract + dates ─►│                            │                           │
+ │                          ├─ GET /dq/checks ──────────►│                           │
+ │                          │  GET /analytics/bars,vwap  ├─ query marts / views ────►│
  │                          │◄── JSON ───────────────────┤◄── aggregates ────────────┤
- │◄─ Trader dashboard ──────┤                            │                           │
+ │◄─ Cards, charts, picture ┤                            │                           │
  │                          │                            │                           │
- ├─ Upload + preview ──────►│                            │                           │
- │                          ├─ POST /ingest/preview ────►│  infer freq/tz/interval   │
- │◄─ Capability matrix ─────┤◄── enables / disables ─────┤                           │
- ├─ Confirm upload ────────►│                            │                           │
+ ├─ Select family ─────────►│  GET /dq/checks?family=    │  overlay marks ──────────►│
+ │◄─ Overlay + picture ─────┤◄── JSON ───────────────────┤                           │
+ │                          │                            │                           │
+ ├─ Load demo data ────────►│                            │                           │
  │                          ├─ POST /ingest/batches ────►│  load → rules → marts ───►│
  │                          │◄── 201 batch summary ──────┤                           │
+ │                          ├─ GET /ingest/batches ─────►│                           │
+ │◄─ Sidebar file list ─────┤◄── filename, format, origin┤                           │
  │◄─ Dashboard refresh ─────┤                            │                           │
  │                          │                            │                           │
- ├─ Change date filter ────►│  GET /analytics/...?start= │  re-query slice ─────────►│
- │◄─ Charts/metrics update ─┤◄── JSON ───────────────────┤                           │
- │   (changelog marks bind  │                            │                           │
- │    to the series)        │                            │                           │
+ ├─ Change date filter ────►│  GET /dq/checks?start=     │  re-query slice ─────────►│
+ │◄─ Cards/charts update ───┤◄── JSON ───────────────────┤                           │
 ```
 
 ---
@@ -488,7 +522,7 @@ User                    Streamlit                     FastAPI                   
 - [ ] Working app (venv and/or Docker)  
 - [ ] README: philosophy, architecture, trade-offs, limitations, extensibility, walkthrough  
 - [ ] Architecture overview (this doc + layer diagram in README)  
-- [ ] UI: Summary / Specifics + persona selector + capability-aware upload + named-box tooltips  
+- [ ] UI: one reviewer page (four cards, family overlay, picture below VWAP) + Load demo data + ingested-file list + named-box tooltips  
 - [ ] Unit + integration tests; oracle test marked optional if samples absent  
 - [ ] `tools/fetch_samples.py` + gitignore for `data/samples/` and `*.duckdb`  
 
@@ -502,6 +536,9 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 2. `quality` — core rule families + score; fixtures first  
 3. `insights` — daily bars + VWAP; wire oracle test  
 4. `api` — routes matching `specs/api-contract.md`  
-5. `ui` — Summary/Specifics, persona selector, upload with capability disclosure, tooltips  
-6. Reconciliation + **report-only** suggestions + demo injection (apply/override later)  
-7. README walkthrough against real `ESZ25` (or chosen volatile window)
+5. `ui` — first chrome (slice 5); later rebuilt as the one reviewer page (slice 9)
+6. Reconciliation + **report-only** suggestions + demo injection (apply/override later)
+7. Demo corpus — fetch, CSV conversion, Load demo data and Inject
+8. Ingest chrome — one sidebar ingest path; ingested-file list and CSV conversion mark
+9. Reviewer-facing UI — four family cards, selected-family overlay, picture below VWAP
+10. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page slice 9 ships

@@ -34,7 +34,7 @@ class FakeClient:
     def __init__(self, **overrides: Any) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self._responses: dict[str, Any] = {
-            "health": {"status": "ok", "schema_applied": True, "rules_seeded": True},
+            "health": HEALTH,
             "summary": SUMMARY,
             "metrics": {"data": TREND, "total": len(TREND), "dimension": "completeness"},
             "contracts": CONTRACTS,
@@ -45,6 +45,8 @@ class FakeClient:
             "compare": {"data": COMPARE},
             "insights_patterns": PATTERNS,
             "insights_suggestions": SUGGESTIONS,
+            "batches": BATCHES,
+            "checks": checks_response,
         }
         self._responses.update(overrides)
 
@@ -62,6 +64,9 @@ class FakeClient:
 
     def summary(self, **p: Any):
         return self._answer("summary", **p)
+
+    def checks(self, **p: Any):
+        return self._answer("checks", **p)
 
     def metrics(self, **p: Any):
         return self._answer("metrics", **p)
@@ -93,6 +98,9 @@ class FakeClient:
         """
         return self.get("/insights/suggestions", **p)
 
+    def batches(self, **p: Any):
+        return self._answer("batches", **p)
+
     def preview(self, filename: str, content: bytes):
         return self._answer("preview", filename=filename)
 
@@ -115,6 +123,101 @@ VWAP_REFUSED = ApiProblem(
     title="Frequency unavailable",
     detail="ZCZ25 holds daily records only; a 15-minute VWAP needs minute bars.",
 )
+
+#: `GET /v1/health`. `synthetic_batches` is zero here: the default stub is a store holding only
+#: real vendor data, which is what the app must look like before anyone presses Inject.
+HEALTH: dict[str, Any] = {
+    "status": "ok",
+    "schema_applied": True,
+    "rules_seeded": True,
+    "records": 115622,
+    "contracts": 2,
+    "batches": 2,
+    "synthetic_batches": 0,
+    "synthetic_records": 0,
+}
+
+#: The same store after labelled defects were planted. Every surface reporting a number has to
+#: say so while this is true, and has to keep saying so on every rerun
+#: (`plans/07-demo-corpus.md` done-when 5).
+SYNTHETIC_HEALTH: dict[str, Any] = {
+    **HEALTH,
+    "records": 115967,
+    "batches": 3,
+    "synthetic_batches": 1,
+    "synthetic_records": 345,
+}
+
+#: A store nobody has loaded anything into — where the demo panel offers the fetch.
+EMPTY_HEALTH: dict[str, Any] = {**HEALTH, "records": 0, "contracts": 0, "batches": 0}
+
+
+def _batch(
+    *,
+    filename: str,
+    file_format: str,
+    origin: str,
+    batch_id: str,
+    frequency: str = "minute",
+) -> dict[str, Any]:
+    """A `BatchSummary`-shaped row. Keys are a subset of the model; see the stub-parity guard."""
+    return {
+        "batch_id": batch_id,
+        "status": "succeeded",
+        "filename": filename,
+        "file_format": file_format,
+        "origin": origin,
+        "file_hash": "0" * 64,
+        "frequency": frequency,
+        "source_timezone": "America/Chicago",
+        "ts_convention": "interval_start",
+        "session_boundary": "17:00 America/Chicago",
+        "rows_read": 100,
+        "rows_accepted": 100,
+        "rows_rejected": 0,
+        "contracts_detected": ["ESZ25"],
+        "sessions_detected": 10,
+        "trade_date_range": ["2024-01-18", "2025-12-19"],
+        "dq_run_id": "run-1",
+        "elapsed_ms": 100,
+    }
+
+
+#: `GET /v1/ingest/batches` after a demo load. One Parquet, one converted CSV (`origin=demo`).
+BATCHES: dict[str, Any] = {
+    "data": [
+        _batch(
+            filename="ESZ25.parquet",
+            file_format="parquet",
+            origin="demo",
+            batch_id="b-parq",
+        ),
+        _batch(
+            filename="SR3G26.csv",
+            file_format="csv",
+            origin="demo",
+            batch_id="b-csv",
+        ),
+    ],
+    "total": 2,
+}
+
+#: Same store after labelled defects were planted. The injected copy is also a CSV; that
+#: mark is the synthetic disclosure, not the conversion mark.
+SYNTHETIC_BATCHES: dict[str, Any] = {
+    "data": [
+        *BATCHES["data"],
+        _batch(
+            filename="SR3G26.injected.csv",
+            file_format="csv",
+            origin="injected",
+            batch_id="b-inj",
+        ),
+    ],
+    "total": 3,
+}
+
+EMPTY_BATCHES: dict[str, Any] = {"data": [], "total": 0}
 
 CONTRACTS = {
     "data": [
@@ -289,8 +392,20 @@ BARS = [
 VWAP = [{"ts_utc": "2025-12-12T15:00:00Z", "vwap": 410.5}]
 
 COMPARE = [
-    {"trade_date": "2025-12-11", "raw": 410.0, "clean": 410.0},
-    {"trade_date": "2025-12-12", "raw": 412.0, "clean": 411.0},
+    {
+        "contract_id": "ZCZ25",
+        "trade_date": "2025-12-11",
+        "raw": {"open": 408.0, "high": 411.25, "low": 407.5, "close": 410.0, "volume": 18210},
+        "clean": {"open": 408.0, "high": 411.25, "low": 407.5, "close": 410.0, "volume": 18210},
+        "differs": False,
+    },
+    {
+        "contract_id": "ZCZ25",
+        "trade_date": "2025-12-12",
+        "raw": {"open": 410.25, "high": 410.0, "low": 407.0, "close": 412.0, "volume": 20104},
+        "clean": {"open": 410.25, "high": 410.0, "low": 407.0, "close": 411.0, "volume": 20104},
+        "differs": True,
+    },
 ]
 
 
@@ -388,3 +503,184 @@ SUGGESTIONS: dict[str, Any] = {
     ],
     "total": 1,
 }
+
+
+#: Overlay marks for the stubbed contract. All family flags sit on the same rows so a test
+#: that switches Gaps vs Invalid can see the join change which marks are drawn.
+OHLCV_MARKS: list[dict[str, Any]] = [
+    {
+        "trade_date": "2025-12-11",
+        "session": "present",
+        "partial_gap": True,
+        "duplicate": False,
+        "invalid": False,
+        "invalid_volume": False,
+        "pattern_member": True,
+        "caption": "18 missing slots at session open",
+    },
+    {
+        "trade_date": "2025-12-12",
+        "session": "present",
+        "partial_gap": False,
+        "duplicate": False,
+        "invalid": True,
+        "invalid_volume": False,
+        "pattern_member": False,
+        "caption": "Close outside the bar range",
+    },
+    {
+        "trade_date": "2025-09-16",
+        "session": "absent",
+        "partial_gap": False,
+        "duplicate": False,
+        "invalid": False,
+        "invalid_volume": False,
+        "pattern_member": False,
+        "caption": "Settlement never arrived",
+    },
+]
+
+_PICTURES: dict[str, dict[str, Any]] = {
+    "gaps": {
+        "kind": "gaps_ribbon",
+        "trade_date": "2025-12-11",
+        "caption": "18 consecutive minute slots missing on 2025-12-11.",
+        "rule_ids": ["CMP.MISSING_TIMESTAMP"],
+        "slots": [
+            {"label": "17:00", "present": False},
+            {"label": "17:01", "present": False},
+            {"label": "17:02", "present": True},
+        ],
+    },
+    "duplicates": {
+        "kind": "empty",
+        "trade_date": None,
+        "caption": "This check ran. Nothing in this window.",
+        "rule_ids": [],
+    },
+    "invalid": {
+        "kind": "invalid_cell",
+        "trade_date": "2025-12-12",
+        "caption": "Close outside the bar range",
+        "rule_ids": ["CON.CLOSE_OUT_OF_RANGE"],
+        "field": "close",
+        "bar": {
+            "trade_date": "2025-12-12",
+            "open": 410.25,
+            "high": 410.0,
+            "low": 407.0,
+            "close": 412.0,
+            "volume": 20104,
+        },
+    },
+    "patterns": {
+        "kind": "pattern_histogram",
+        "trade_date": None,
+        "caption": PATTERNS["data"][0]["narrative"],
+        "rule_ids": [PATTERNS["data"][0]["rule_id"]],
+        "buckets": [
+            {
+                "label": PATTERNS["data"][0]["bucket"],
+                "share_of_findings": PATTERNS["data"][0]["share_of_findings"],
+                "share_of_records": PATTERNS["data"][0]["share_of_records"],
+            }
+        ],
+    },
+}
+
+CHECKS: dict[str, Any] = {
+    "scope": {"contracts": ["ZCZ25"], "basis": "clean"},
+    "contract_id": "ZCZ25",
+    "score": 41.0,
+    "scope_signature": "cmp+val+con+unq+tim",
+    "dimensions_not_in_scope": [
+        {
+            "dimension": "reconciliation",
+            "reason": "only one frequency uploaded for this contract",
+        }
+    ],
+    "frequencies": ["daily"],
+    "checked": True,
+    "families": [
+        {
+            "family": "gaps",
+            "label": "Gaps",
+            "count": 2,
+            "unit": "runs",
+            "detail": "1 session-open hole · 1 session absent",
+        },
+        {
+            "family": "duplicates",
+            "label": "Duplicates",
+            "count": 0,
+            "unit": "records",
+            "detail": "0 exact copies · 0 key conflicts",
+        },
+        {
+            "family": "invalid",
+            "label": "Invalid values",
+            "count": 1,
+            "unit": "rows",
+            "detail": "1 price · 0 volumes",
+        },
+        {
+            "family": "patterns",
+            "label": "Recurring patterns",
+            "count": 1,
+            "unit": "standing",
+            "detail": "Open-hour gaps, 61 of 63 sessions",
+        },
+    ],
+    "issues": [
+        {
+            "family": "gaps",
+            "what": "Missing grid slots",
+            "days": 1,
+            "records": 18,
+            "what_we_did": "Flagged; not auto-dropped",
+        },
+        {
+            "family": "invalid",
+            "what": "Close outside the bar range",
+            "days": 1,
+            "records": 1,
+            "what_we_did": "excluded 4 records",
+        },
+        {
+            "family": "patterns",
+            "what": PATTERNS["data"][0]["narrative"],
+            "days": 61,
+            "records": 412,
+            "what_we_did": "Reported; not applied",
+        },
+    ],
+    "overlay": {
+        "family": "gaps",
+        "ohlcv": OHLCV_MARKS,
+        "vwap": {
+            "pattern_hours": ["16:00-17:00 America/Chicago"],
+            "name_breaks": True,
+        },
+        "picture": _PICTURES["gaps"],
+    },
+    "meta": {"run_id": "run-1"},
+}
+
+
+def checks_response(**params: Any) -> dict[str, Any]:
+    """Family-aware `/dq/checks` stub. Overlay flags are shared; picture follows `family`."""
+    family = params.get("family") or "gaps"
+    picture = _PICTURES.get(family) or _PICTURES["duplicates"]
+    return {
+        **CHECKS,
+        "contract_id": params.get("contract") or "ZCZ25",
+        "overlay": {
+            "family": family,
+            "ohlcv": OHLCV_MARKS,
+            "vwap": {
+                "pattern_hours": ["16:00-17:00 America/Chicago"],
+                "name_breaks": family in {"gaps", "patterns", "invalid"},
+            },
+            "picture": picture,
+        },
+    }

@@ -71,8 +71,15 @@ def load_file(
     path: str | Path,
     *,
     preview: Preview | None = None,
+    origin: str = "upload",
 ) -> LoadResult:
-    """Ingest one file. Raises `DuplicateFileError` when these bytes are already loaded."""
+    """Ingest one file. Raises `DuplicateFileError` when these bytes are already loaded.
+
+    `origin` records where the batch came from — an ordinary `upload`, the `demo` corpus, or
+    `injected` demo defects. It is a declaration by the caller and changes nothing about how
+    the file is read; it exists so that a manufactured defect can never be mistaken for a
+    vendor one downstream, which is the whole point of labelling the injection at all.
+    """
     path = Path(path)
     preview = preview or preview_file(con, path)
 
@@ -80,7 +87,7 @@ def load_file(
         raise DuplicateFileError(preview.file_hash, preview.already_ingested, preview.filename)
 
     started = datetime.now()
-    batch_id = _open_batch(con, preview)
+    batch_id = _open_batch(con, preview, origin=origin)
 
     try:
         _clear_reject_log(con)
@@ -144,7 +151,9 @@ def load_file(
 # ------------------------------------------------------------------ batch lifecycle
 
 
-def _open_batch(con: duckdb.DuckDBPyConnection, preview: Preview) -> str:
+def _open_batch(
+    con: duckdb.DuckDBPyConnection, preview: Preview, *, origin: str = "upload"
+) -> str:
     """Write the batch row, `running`, with every ingestion decision recorded.
 
     `running` is a transient state inside one request rather than something a client polls.
@@ -154,10 +163,10 @@ def _open_batch(con: duckdb.DuckDBPyConnection, preview: Preview) -> str:
     row = con.execute(
         """
         INSERT INTO stage.ingest_batch
-          (filename, file_hash, file_bytes, file_format, status, column_mapping, frequency,
-           bar_interval, source_timezone, ts_convention, session_boundary, inferred_interval,
-           interval_confidence)
-        VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)
+          (filename, file_hash, file_bytes, file_format, origin, status, column_mapping,
+           frequency, bar_interval, source_timezone, ts_convention, session_boundary,
+           inferred_interval, interval_confidence)
+        VALUES (?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING batch_id
         """,
         [
@@ -165,6 +174,7 @@ def _open_batch(con: duckdb.DuckDBPyConnection, preview: Preview) -> str:
             preview.file_hash,
             preview.file_bytes,
             preview.file_format,
+            origin,
             json.dumps(preview.column_mapping, default=str),
             preview.frequency,
             preview.bar_interval,

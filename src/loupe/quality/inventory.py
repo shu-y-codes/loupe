@@ -1,10 +1,10 @@
-"""The per-contract inventory row every persona's Summary table reads.
+"""The per-contract inventory row `/v1/dq/summary` still carries.
 
-`score_slice` answers *how good is this contract at this frequency*. The Summary table asks a
-coarser question — one row per contract — and asks it three ways, because the personas select
-differently over the same findings (`specs/loupe-ui-design.md`). Composing that here rather
-than in a handler or a widget keeps the rule in the layer that owns rules: the API renders
-these rows, the UI picks which columns to show.
+`score_slice` answers *how good is this contract at this frequency*. The summary envelope
+asks a coarser question — one row per contract — so a caller can navigate the book. The
+reviewer page does not render this inventory (`GET /v1/dq/checks` is the page). Composing
+the row here rather than in a handler or a widget keeps the rule in the layer that owns
+rules.
 
 Nothing in this module is a score input. The rollup reuses the weighted `overall` that
 §11.1-11.3 already produced; the callouts and the status are selections over findings.
@@ -20,12 +20,11 @@ import duckdb
 from .catalogue import RULE_SUBJECT_FIELD, SETTLEMENT_RULES
 from .scoring import SliceScore
 
-#: `specs/loupe-ui-design.md`, Risk → Summary. A contract is `ATTN` when it holds any open
-#: finding of these severities, and `OK` otherwise. Not a score threshold: §11.5 has the score
-#: as a navigation index rather than a grade, and a cut at 70-or-80-or-90 turns it into one
-#: while answering a question the severities already answer exactly. These are also the
-#: severities default cleaning acts on (§14), so `ATTN` means "something here was excluded or
-#: blocked" — which is what a risk manager is asking.
+#: A contract is `ATTN` when it holds any open finding of these severities, and `OK`
+#: otherwise. Not a score threshold: §11.5 has the score as a navigation index rather than a
+#: grade, and a cut at 70-or-80-or-90 turns it into one while answering a question the
+#: severities already answer exactly. These are also the severities default cleaning acts on
+#: (§14), so `ATTN` means "something here was excluded or blocked".
 ATTENTION_SEVERITIES: tuple[str, ...] = ("error", "critical")
 
 #: Ordering for "worst". Severity first, then how many: one `critical` outranks two hundred
@@ -55,7 +54,7 @@ class Issue:
 
 @dataclass(frozen=True)
 class ContractRow:
-    """One inventory row. Every persona reads this; each shows a different subset."""
+    """One inventory row on `/dq/summary`. The reviewer page does not pick columns from it."""
 
     contract_id: str
     score: float | None

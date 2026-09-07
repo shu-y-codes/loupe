@@ -6,6 +6,9 @@ the fixture-to-rule mapping. Promoted from research `_notes/cursor/04-dq-rules-a
 `specs/data-model.md` §4. Sample rates used as calibration: `specs/sample-corpus.md` §7.
 Session grid, bar provenance and MAD method: `specs/analytics-semantics.md`.
 
+Revised 2026-09-07: reviewer-strip family set (§11.8); drop persona-dashboard sentences.
+The score formula and rule triggers are unchanged.
+
 Revised 2026-09-05: promoted from research; first normative version. Same day: `dq.dq_rule.weight`
 renamed `triage_weight` and defined as worklist ordering only (§11.4) — it had no role in any
 score formula and the name invited one. Same day: §15 notes that `CON.DERIVED_BAR_INVALID` and
@@ -355,7 +358,7 @@ sessions has **no** reconciliation score — not 100, not 0. Reconciliation rows
 
 ### 8.7 Corroboration — what reconciliation does for a daily finding
 
-Reconciliation's value to the Risk persona is **attribution, not detection**. A daily defect is
+Reconciliation's value for a daily finding is **attribution, not detection**. A daily defect is
 already visible in the daily file; what a single file cannot say is *which of its numbers to
 distrust*.
 
@@ -434,7 +437,8 @@ auto-excluded (locked with the cleaning policy). Dimension `validity`.
 
 ## 11. The DQ score
 
-Displayed on every persona dashboard. The definition is shown in the UI (tooltip).
+Displayed wherever a score appears. The reviewer page shows it as a caption under the four
+family cards, with `scope_signature` required (§11.3). The definition is in the UI tooltip.
 
 ### 11.1 Per-dimension sub-score
 
@@ -592,9 +596,11 @@ grade — it points the user to which dimensions need work, so show the breakdow
 ### 11.6 Settlement rules — a callout filter, not a score input
 
 Like §11.4's triage weight, this classifies rules for a presentation purpose and enters no
-score formula. The Risk inventory's **Closing-day** column (`specs/loupe-ui-design.md`) is a
-one-line callout about the session's *settlement* record, not the contract's worst issue of
-any kind, and nothing on `dq.dq_rule` distinguishes the two. The named set is:
+score formula. `SETTLEMENT_RULES` selects findings whose subject can be the session's
+*settlement* record, not the contract's worst issue of any kind, and nothing on `dq.dq_rule`
+distinguishes the two. `/v1/dq/summary` still ships `settlement_issue` from this set. The
+reviewer page (`specs/loupe-ui-design.md`) does **not** have a Closing-day column. The named
+set is:
 
 | Rule | The closing-day statement it makes |
 |---|---|
@@ -612,14 +618,13 @@ asserts a defect**.
 **No `REC.*` rule joins this set, `REC.CLOSE_CONVENTION` included.** An earlier draft of this
 section said slice 6 would add it, on the grounds that its subject is plainly the settlement.
 That was wrong on the second half of the test. It is `info`, it fires on the *expected*
-difference between a settlement and a last trade (§8.4), and the Closing-day column is what a
-risk manager reads as *what is wrong with this settlement*. Filling it with a difference that
-is not an error is noise in the one column that must not have any.
+difference between a settlement and a last trade (§8.4), and `settlement_issue` is what is
+*wrong* with a settlement. Filling it with a difference that is not an error is noise.
 
-Reconciliation's contribution to the Risk view is not another callout. It is the corroboration
-state of §8.7, which changes what an existing callout **means** — whether a close outside the
-range sits outside a confirmed range or a disputed one. That belongs in Specifics, next to the
-finding it qualifies, not in a one-line column at book grain.
+Reconciliation's contribution is not another settlement callout. It is the corroboration
+state of §8.7, which changes what an existing finding **means** — whether a close outside the
+range sits outside a confirmed range or a disputed one. That rides on the finding
+(`specs/api-contract.md` §6.2), not as a book-grain column.
 
 **Filtered to `frequency = 'daily'` findings**, which is load-bearing rather than tidying.
 `VAL.OFF_TICK_PRICE` on a minute record says "off-tick price", not "off-tick close" — §5
@@ -632,27 +637,26 @@ clause the column fills with intraday noise that is not about the close.
 **Consequence, and accepted:** a contract held only at minute grain gets no closing-day
 callout when its close is missing. That shortfall surfaces as `CMP.MISSING_TIMESTAMP` or
 `CMP.PARTIAL_SESSION`, neither of which is in the set. This is the intended reading, not a
-gap to patch — settlement comes from the daily file, and the Risk persona's question is
-whether *settlement* is trustworthy. The contract still appears in the inventory with its
-score and its `top_issue`; only the Closing-day cell is an em dash.
+gap to patch — settlement comes from the daily file. The contract still appears in
+`/v1/dq/summary` with its score and `top_issue`; `settlement_issue` is null.
 
 **`UNQ.EXACT_DUPLICATE` is deliberately out**, though at daily grain it is also literally a
 duplicated settlement row. It is auto-resolved by `dedupe_drop` keeping the lowest
 `source_row` (§14), so it is a changelog entry rather than open settlement risk. A key
 conflict is the opposite: two *different* settlement prices for one session with no
-principled winner inside the file, which is exactly what a risk manager must be told.
+principled winner inside the file, which is exactly what `settlement_issue` must name.
 
 The set lives beside `DEDUPE_DROP_RULES` and `NEVER_EXCLUDE_RULES` in
 `src/loupe/quality/catalogue.py`, which is already where a named set of rule IDs with a
 documented reason belongs.
 
-### 11.7 Rule subject field — for the worst-field tile, from rule identity
+### 11.7 Rule subject field — from rule identity
 
-The Analyst headline tile **Worst field** (`specs/loupe-ui-design.md`) names the field most
-findings implicate — "close", "timestamp". It is derived from **rule identity**, never by
-grouping `dq.dq_finding.details`: that column is evidence and is explicitly never grouped on
-(`specs/data-model.md`), and a JSON payload is the wrong key for an aggregate. Like §11.4 and
-§11.6, this enters no score formula.
+`worst_field` on `/v1/dq/summary` names the field most findings implicate — "close",
+"timestamp". It is derived from **rule identity**, never by grouping `dq.dq_finding.details`:
+that column is evidence and is explicitly never grouped on (`specs/data-model.md`), and a JSON
+payload is the wrong key for an aggregate. Like §11.4 and §11.6, this enters no score formula.
+The reviewer page does not show a worst-field tile.
 
 **Membership is a two-part test**, because the tile answers *what is broken*: the rule must
 **assert a defect**, and must **fix the field that defect is in**. "Fixes a field" alone is
@@ -705,6 +709,24 @@ The tile shows the field with the most findings among mapped rules, and reads "n
 applicable" — not a fabricated field — when a scope's findings are entirely from unmapped
 rules. `RULE_SUBJECT_FIELD` lives in `src/loupe/quality/catalogue.py` beside
 `SETTLEMENT_RULES`.
+
+### 11.8 Reviewer strip families
+
+Labelling for the four cards on the reviewer page. Enters no score formula and does not
+change rule triggers. Catalogue sets live beside `SETTLEMENT_RULES` in
+`src/loupe/quality/catalogue.py`. Overlay join: `specs/api-contract.md` §6.6;
+chrome: `specs/loupe-ui-design.md`.
+
+| Family | Rule IDs | Off this card |
+|---|---|---|
+| `gaps` | `CMP.MISSING_TIMESTAMP`, `CMP.SESSION_MISSING`, `CMP.PARTIAL_SESSION` | `CMP.NULL_FIELD` |
+| `duplicates` | `UNQ.EXACT_DUPLICATE`, `UNQ.KEY_CONFLICT` | `UNQ.DUPLICATE_FILE` (ingest list) |
+| `invalid` | all `VAL.*`, `CMP.NULL_FIELD`, `CON.HIGH_LT_LOW`, `CON.OPEN_OUT_OF_RANGE`, `CON.CLOSE_OUT_OF_RANGE` | `OUT.*` |
+| Recurring patterns | not a rule family — standing rows from pattern lift (§12) | a count of findings as the lead |
+
+Every catalogue rule is in exactly one of `gaps`, `duplicates`, `invalid`, or **off-strip**.
+Off-strip includes `OUT.*`, remaining `CON.*` / `TIM.*` / `REC.*` / `ROL.*`, `CMP.SPARSE_SERIES`,
+and `UNQ.DUPLICATE_FILE`. A card count of zero means the check ran.
 
 ---
 

@@ -22,6 +22,7 @@ from loupe.quality import (
     assess,
     changelog,
     contract_rows,
+    review_checks,
     scoped,
     score_slice,
     worst_field,
@@ -40,15 +41,20 @@ from ..deps import (
 )
 from ..errors import ProblemError
 from ..models import (
+    AggregatedIssue,
     ChangelogEntry,
     ChangelogResponse,
     ContractSummary,
     Corroboration,
     DimensionScore,
+    DqChecksResponse,
     DqMetricsResponse,
     DqSummaryResponse,
+    FamilyCard,
     Finding,
     FindingsResponse,
+    Overlay,
+    OverlayMark,
     Rule,
     RulesResponse,
     RunSummary,
@@ -182,6 +188,63 @@ def summary(
     )
 
 
+@router.get("/checks", response_model=DqChecksResponse, summary="Reviewer strip")
+def checks(
+    con: Con,
+    contract: Annotated[str, Query(description="One contract. Required.")],
+    start: StartDateParam = None,
+    end: EndDateParam = None,
+    family: Annotated[
+        str,
+        Query(
+            description="Selected overlay family: `gaps`, `duplicates`, `invalid`, or "
+            "`patterns`. Default `gaps`.",
+        ),
+    ] = "gaps",
+    basis: BasisParam = "clean",
+) -> DqChecksResponse:
+    """Cards, overlay marks, picture and aggregated issues for one contract.
+
+    Composed in `quality`. Grouping `findings[]` in a widget is not a substitute.
+    """
+    try:
+        page = review_checks(
+            con, contract, start=start, end=end, family=family, basis=basis
+        )
+    except ValueError as exc:
+        raise ProblemError(
+            status=400,
+            title="Unknown family",
+            detail=str(exc),
+            code="STR.INVALID_REQUEST",
+            type_="/errors/invalid-request",
+        ) from exc
+    overlay = page.overlay
+    return DqChecksResponse(
+        scope=Scope(
+            contracts=[page.contract_id],
+            start=start,
+            end=end,
+            basis=basis,
+        ),
+        contract_id=page.contract_id,
+        score=page.score,
+        scope_signature=page.scope_signature,
+        dimensions_not_in_scope=page.dimensions_not_in_scope,
+        frequencies=page.frequencies,
+        checked=page.checked,
+        families=[FamilyCard(**card) for card in page.families],
+        issues=[AggregatedIssue(**issue) for issue in page.issues],
+        overlay=Overlay(
+            family=overlay["family"],
+            ohlcv=[OverlayMark(**row) for row in overlay.get("ohlcv", [])],
+            vwap=overlay.get("vwap") or {},
+            picture=overlay.get("picture") or {},
+        ),
+        meta=page.meta,
+    )
+
+
 _SCORE_METHOD = "weighted mean of in-scope dimension scores; overall = Σ(w×s) / Σ(w)"
 
 
@@ -257,8 +320,8 @@ def metrics(
             pattern="^(completeness|validity|consistency|uniqueness|timeliness|reconciliation)$",
             description="Restrict to one quality dimension. Without it `group_by=day` "
             "averages the dimensions together, which cannot express a single-dimension "
-            "trend: the Risk **Settlement trend** sparkline is `completeness` at "
-            "`frequency=daily` over trade dates (`specs/loupe-ui-design.md`, Risk → Summary).",
+            "trend. `dimension=completeness` at `frequency=daily` is daily completeness "
+            "over trade dates.",
         ),
     ] = None,
 ) -> DqMetricsResponse:

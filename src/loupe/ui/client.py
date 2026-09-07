@@ -121,6 +121,10 @@ class LoupeClient:
     def summary(self, **params: Any) -> dict[str, Any]:
         return self.get("/dq/summary", **params)
 
+    def checks(self, **params: Any) -> dict[str, Any]:
+        """`GET /v1/dq/checks` — cards, overlay marks, picture and aggregated issues."""
+        return self.get("/dq/checks", **params)
+
     def metrics(self, **params: Any) -> dict[str, Any]:
         return self.get("/dq/metrics", **params)
 
@@ -130,17 +134,37 @@ class LoupeClient:
     def changelog(self, **params: Any) -> dict[str, Any]:
         return self.get("/dq/changelog", **params)
 
+    def run_rules(self, **params: Any) -> dict[str, Any]:
+        """`POST /v1/dq/runs` — re-validate a scope, corpus-wide when unscoped (§6.4).
+
+        The demo needs this and so does anyone who uploads a second granularity: an upload runs
+        the rules scoped to *its own batch*, so cross-frequency reconciliation cannot be in
+        scope at that moment — the run has not seen the other grain yet.
+        """
+        return self._request("POST", "/dq/runs", params=_params(params))
+
     def suggestions(self, **params: Any) -> dict[str, Any]:
         """Slice 6 (`plans/06-rec-suggestions-demo.md` done-when 4).
 
-        The method exists so the Analyst view has one place to call; until the route lands it
-        raises `ApiProblem` with a 404, which the page renders as "not in this build" rather
-        than as an empty suggestions list. Stubbing the text here instead would put copy in a
-        widget that belongs to `quality`.
+        The method exists so a caller has one place to request suggestions; until the route
+        lands it raises `ApiProblem` with a 404. The reviewer page does not render a
+        suggestions table in v1 — What we did is the changelog.
         """
         return self.get("/insights/suggestions", **params)
 
     # ---------------------------------------------------------------- ingest
+
+    def batches(self, **params: Any) -> dict[str, Any]:
+        """`GET /v1/ingest/batches` — the sidebar inventory reads this, not the sample directory."""
+        return self.get("/ingest/batches", **params)
+
+    def purge_batch(self, batch_id: str) -> dict[str, Any]:
+        """`DELETE /v1/ingest/batches/{id}` — the way back out of a demo.
+
+        Injected defects have to be removable without deleting the store, or nobody presses the
+        button that plants them.
+        """
+        return self._request("DELETE", f"/ingest/batches/{batch_id}")
 
     def preview(self, filename: str, content: bytes) -> dict[str, Any]:
         return self._request(
@@ -148,14 +172,48 @@ class LoupeClient:
         )
 
     def create_batch(
-        self, filename: str, content: bytes, *, validate: bool = True
+        self,
+        filename: str,
+        content: bytes,
+        *,
+        validate: bool = True,
+        origin: str = "upload",
     ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/ingest/batches",
-            files={"file": (filename, content)},
-            params={"validate": validate},
-        )
+        """Ingest a file. A re-upload of the same bytes is refused with something to say.
+
+        `specs/api-contract.md` §4.3 answers a duplicate with **409 and the existing batch** —
+        idempotent re-upload, surfaced rather than silently duplicated. That body is a batch
+        summary, not a problem document, so the blanket "4xx means problem" rule in `_request`
+        would turn the most informative refusal in the app into a bare `Conflict` with no
+        detail at all: the user is told no, and not that their file is already loaded.
+
+        So it is translated here, keeping the batch the server named. Found by
+        `tests/integration/`, which is the only tier with a real client on one side of the
+        wire and the real API on the other.
+        """
+        try:
+            return self._request(
+                "POST",
+                "/ingest/batches",
+                files={"file": (filename, content)},
+                params={"validate": validate, "origin": origin},
+            )
+        except ApiProblem as problem:
+            if problem.status != 409:
+                raise
+            existing = problem.meta or {}
+            batch_id = existing.get("batch_id")
+            raise ApiProblem(
+                status=409,
+                code="STR.DUPLICATE_FILE",
+                title="Already ingested",
+                detail=(
+                    "These exact bytes were already loaded"
+                    + (f" as batch {batch_id}" if batch_id else "")
+                    + ". Nothing was ingested a second time."
+                ),
+                meta=existing,
+            ) from None
 
 
 def _problem(response: httpx.Response) -> ApiProblem:
@@ -166,10 +224,15 @@ def _problem(response: httpx.Response) -> ApiProblem:
         body = {}
     if not isinstance(body, dict):
         body = {}
+    # A 4xx body is *usually* RFC 7807, but not always: §4.3's duplicate-file refusal answers
+    # 409 with the existing batch summary. Keeping the whole body as `meta` when it carries no
+    # `title` means a caller can still say something specific instead of rendering a status
+    # code — `create_batch` is the one that does.
+    problem_shaped = "title" in body or "detail" in body
     return ApiProblem(
         status=response.status_code,
         code=body.get("code"),
         title=body.get("title") or response.reason_phrase or "Request failed",
         detail=body.get("detail"),
-        meta=body.get("meta"),
+        meta=body.get("meta") if problem_shaped else (body or None),
     )

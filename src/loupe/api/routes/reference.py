@@ -40,6 +40,8 @@ def health(con: Con) -> Health:
             records=0,
             contracts=0,
             batches=0,
+            synthetic_batches=0,
+            synthetic_records=0,
         )
     records = con.execute("SELECT count(*) FROM stage.market_record").fetchone()[0]
     contracts = con.execute("SELECT count(*) FROM ref.contract").fetchone()[0]
@@ -47,6 +49,17 @@ def health(con: Con) -> Health:
         "SELECT count(*) FROM stage.ingest_batch WHERE status <> 'purged'"
     ).fetchone()[0]
     seeded = bool(con.execute("SELECT count(*) FROM dq.dq_rule").fetchone()[0])
+    # Planted defects, counted every time the page asks whether the store is usable. The UI
+    # already calls `/health` before it draws anything, so putting the disclosure here is what
+    # makes it impossible to render a score without knowing whether the data behind it is real.
+    synthetic_batches, synthetic_records = con.execute(
+        """
+        SELECT count(*),
+               coalesce(sum(rows_accepted), 0)
+        FROM stage.ingest_batch
+        WHERE origin = 'injected' AND status <> 'purged'
+        """
+    ).fetchone()
     return Health(
         status="ok",
         schema_applied=True,
@@ -54,6 +67,8 @@ def health(con: Con) -> Health:
         records=int(records),
         contracts=int(contracts),
         batches=int(batches),
+        synthetic_batches=int(synthetic_batches),
+        synthetic_records=int(synthetic_records),
     )
 
 

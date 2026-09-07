@@ -18,6 +18,8 @@ from dataclasses import dataclass, field, replace
 
 import duckdb
 
+from loupe.data.bulk import insert_rows
+
 from . import rules as _rules  # noqa: F401  (import registers every runner)
 from .catalogue import CATALOGUE, DEFAULT_MIN_RECORDS
 from .cleaning import CleaningReport, apply_default_cleaning
@@ -191,18 +193,39 @@ def scoped(
 # ----------------------------------------------------------------------------- the pass
 
 
+#: The `dq.dq_finding` columns a run writes. The rest are defaulted: `finding_id`, `status` and
+#: `detected_at` are the table's business, not a runner's.
+_FINDING_COLUMNS = (
+    "run_id",
+    "rule_id",
+    "contract_id",
+    "frequency",
+    "compare_frequency",
+    "trade_date",
+    "ts_start_utc",
+    "ts_end_utc",
+    "record_id",
+    "affected_rows",
+    "severity",
+    "details",
+)
+
+
 def _write_findings(
     con: duckdb.DuckDBPyConnection, run_id: str, findings: list[Finding]
 ) -> None:
-    if not findings:
-        return
-    con.executemany(
-        """
-        INSERT INTO dq.dq_finding
-          (run_id, rule_id, contract_id, frequency, compare_frequency, trade_date,
-           ts_start_utc, ts_end_utc, record_id, affected_rows, severity, details)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+    """Write a run's findings in chunks rather than one statement each.
+
+    There is no `INSERT ... SELECT` available here, and that is not an oversight: a `Finding` is
+    what a runner *returns*, so these rows genuinely originate in Python and no query produces
+    them. Chunking is the remaining choice, and it is worth making — a corpus-wide run over this
+    sample writes about 160,000 findings, which costs seconds a chunk at a time and tens of
+    seconds one at a time (`loupe.data.bulk`).
+    """
+    insert_rows(
+        con,
+        "dq.dq_finding",
+        _FINDING_COLUMNS,
         [
             (
                 run_id,

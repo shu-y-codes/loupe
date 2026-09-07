@@ -176,6 +176,8 @@ CREATE TABLE stage.ingest_batch (
   file_hash       VARCHAR NOT NULL,          -- sha256 of file bytes
   file_bytes      BIGINT,
   file_format     VARCHAR CHECK (file_format IN ('csv','parquet')),
+  origin          VARCHAR NOT NULL DEFAULT 'upload'   -- 'upload' | 'demo' | 'injected'
+                  CHECK (origin IN ('upload','demo','injected')),
   status          VARCHAR NOT NULL DEFAULT 'pending'
                   CHECK (status IN ('pending','running','succeeded','partial','failed','purged')),
   rows_read       BIGINT DEFAULT 0,
@@ -298,8 +300,7 @@ integer**, so the column is null for every one of the 5.3 million clean rows and
 where there is something to report.
 
 **`source_row` is carried on every record.** This is the traceability spine: every finding can
-say "row 41,207 of `ESZ25.parquet`". Without it, drill-down stops at the database boundary and
-the analyst persona has nowhere to go.
+say "row 41,207 of `ESZ25.parquet`". Without it, drill-down stops at the database boundary.
 
 **`ts_utc` is derived; `ts_source` preserves what the file said.** There is no UTC instant
 anywhere in this vendor's source — only a DST-aware Chicago wall clock and an integer rendering
@@ -444,6 +445,16 @@ CREATE TABLE dq.dq_run (
   finished_at   TIMESTAMPTZ
 );
 ```
+
+**`origin` is provenance, and it is a column because it has to outlive a session.** A demo can
+plant labelled synthetic defects to show rules the vendor corpus cannot trigger
+(`specs/loupe-solution-design.md` §9), and from that moment every score and finding count drawn
+from those records is partly manufactured. A UI flag would be gone on the next reload; a
+filename convention would be a guess. The column travels with the records, survives a restart,
+and is what `GET /v1/health` counts so no surface can report a number without the disclosure.
+
+It is a **declaration by the caller** and changes nothing about how a file is read. `demo` is
+real vendor data loaded by the demo button; only `injected` is manufactured.
 
 `ruleset_hash` makes results reproducible and answers "why did this number change?" — either the
 data changed or the ruleset did, and the hash says which.
@@ -672,6 +683,14 @@ CREATE TABLE mart.dq_metric_daily (
 Pre-aggregating per contract per day per dimension makes trend charts and pattern detection cheap.
 Both "identify recurring data quality patterns" and the DQ trend widget read this one table.
 
+**Write it set-based.** The composite key is what makes a re-run idempotent, and it is also what
+makes a per-row upsert pathological: `INSERT OR REPLACE` one row at a time is an index probe, a
+possible delete and an insert, repeated once per row. Measured on this corpus, the same 145,236
+rows take **159 seconds** row by row and **0.1 seconds** as a single `INSERT OR REPLACE ... SELECT`.
+The rows are the result of a query, so they never need to reach Python at all — which is already
+how `stage.market_record` is written (§3). Anywhere rows genuinely originate in Python, insert
+them in chunks of one statement rather than one statement per row.
+
 **`frequency` belongs in this key.** Without it the two granularities of one contract-day average
 into a single score, and on this corpus they genuinely disagree: the same root scores perfectly on
 the tick lattice in its minute config and badly in its daily config. Averaging produces a number
@@ -704,7 +723,7 @@ genuinely gates, and it gates the output, not the upload.
 
 | Not modelled | Why |
 |---|---|
-| `user`, `role`, `role_view` | No authentication in v1. Personas are a UI view selector. |
+| `user`, `role`, `role_view` | No authentication in v1. The UI is one reviewer page; nothing here is a view selector. |
 | `report_catalog`, `chart` registry | Registry indirection for a fixed set of charts is cost without benefit. Add it when the set becomes user-extensible. |
 | Bid/ask, or any quote-level data | Genuinely not in the source. Only aggregated bars are supplied, so no spread, depth or quote-based check is possible. |
 | A separate settlement-price column | Not needed rather than not available. The vendor's daily `close` **is** a settlement price, so it is stored in `close` on a `source = 'vendor'` bar and distinguished by `close_convention`. A parallel column would be null on every minute-derived bar and would duplicate what the discriminator already says. |

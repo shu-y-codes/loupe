@@ -1,6 +1,6 @@
 """What the tape says about a daily finding (`specs/dq-rules-and-scoring.md` §8.7).
 
-Reconciliation's value to the Risk persona is **attribution, not detection**. A daily defect is
+Reconciliation's value to a reviewer is **attribution, not detection**. A daily defect is
 already visible in the daily file; what one file cannot say is *which of its numbers to
 distrust*. `CON.CLOSE_OUT_OF_RANGE` is the worked example, and it has two readings that call
 for opposite responses:
