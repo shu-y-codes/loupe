@@ -1,14 +1,15 @@
 """One sentence per named box, in this page's language.
 
-`specs/loupe-ui-design.md` puts help on named boxes — family cards, score-caption jargon,
-and aggregated-issue column headers — not on every grid cell. What / What we did *cells*
-and picture sentences are already the explanation, so they get nothing extra. Rule IDs
-never appear in a hover; they are a caption under the chart or picture.
+`specs/loupe-ui-design.md` puts help on named boxes — family-card **counts**, and
+aggregated-issue column headers — not on every grid cell. Family names have no `?`.
+What / What we did *cells* and picture sentences are already the explanation, so they
+get nothing extra. Rule IDs never appear in a hover; they are a caption under the
+picture. Overlay marks are a chart legend, not a tooltip.
 """
 
 from __future__ import annotations
 
-#: Family cards, keyed by the API `family` id.
+#: Family-card counts, keyed by the API `family` id. Attaches to `42 runs`, not "Gaps".
 CARDS: dict[str, str] = {
     "gaps": "Missing timestamps and absent sessions — holes in the expected grid, not a "
     "quiet market.",
@@ -31,9 +32,6 @@ COLUMNS: dict[str, str] = {
 
 #: Jargon that needs a sentence wherever it appears.
 JARGON: dict[str, str] = {
-    "scope_signature": "Which quality dimensions this score was measured over. Equal "
-    "signatures are comparable; unequal ones are not the same measurement.",
     "vwap": "Rolling 15-minute volume-weighted average price. Needs minute bars; a "
     "daily-only contract cannot have one.",
-    "marked sessions": "How many dates the selected check flags on the chart.",
 }

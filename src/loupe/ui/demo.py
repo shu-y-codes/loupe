@@ -35,6 +35,7 @@ from loupe.demo.corpus import (
     prepare_injection,
 )
 from loupe.demo.fetch import FetchFailed, describe_corpus
+from loupe.quality.catalogue import strip_family
 
 from .client import ApiProblem, ApiUnavailable, LoupeClient
 
@@ -43,6 +44,21 @@ SYNTHETIC_MARK = "⚠️"
 
 #: Demo CSV rows: format fact, not a defect (`specs/loupe-ui-design.md`).
 CONVERTED_MARK = "Converted from Parquet"
+
+#: Ingested-file buckets. Coverage is per contract, not per file frequency.
+COVERAGE_BOTH = "Daily + minute"
+COVERAGE_DAILY = "Daily-only"
+COVERAGE_MINUTE = "Minute-only"
+_COVERAGE_ORDER = (COVERAGE_BOTH, COVERAGE_DAILY, COVERAGE_MINUTE)
+
+#: Planted-defect groups. Recurring patterns is not a planted family.
+_PLANTED_FAMILY_ORDER = ("gaps", "duplicates", "invalid", "off_strip")
+PLANTED_FAMILY_LABEL = {
+    "gaps": "Gaps",
+    "duplicates": "Duplicates",
+    "invalid": "Invalid values",
+    "off_strip": "Other (off the strip)",
+}
 
 
 def render_demo(client: LoupeClient, health: dict[str, Any]) -> None:
@@ -173,6 +189,83 @@ def is_demo_csv_conversion(batch: dict[str, Any]) -> bool:
     return origin == "demo" and is_csv
 
 
+def _coverage_label(grains: set[str]) -> str | None:
+    held = {grain for grain in grains if grain in {"daily", "minute"}}
+    if held == {"daily", "minute"}:
+        return COVERAGE_BOTH
+    if held == {"daily"}:
+        return COVERAGE_DAILY
+    if held == {"minute"}:
+        return COVERAGE_MINUTE
+    return None
+
+
+def group_batches_by_coverage(
+    batches: list[dict[str, Any]],
+    contracts: list[dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Group ingested files by **contract** coverage, not the file's own frequency.
+
+    A contract that holds both grains lists both of its files under Daily + minute.
+    """
+    grains: dict[str, set[str]] = {
+        row["contract_id"]: set(row.get("frequencies_available") or [])
+        for row in contracts
+        if row.get("contract_id")
+    }
+    for batch in batches:
+        freq = batch.get("frequency")
+        for cid in batch.get("contracts_detected") or []:
+            if cid not in grains or not grains[cid]:
+                grains.setdefault(cid, set())
+                if freq:
+                    grains[cid].add(freq)
+
+    buckets: dict[str, list[dict[str, Any]]] = {label: [] for label in _COVERAGE_ORDER}
+    seen: set[str] = set()
+    for batch in batches:
+        keys: set[str] = set()
+        for cid in batch.get("contracts_detected") or []:
+            label = _coverage_label(grains.get(cid, set()))
+            if label:
+                keys.add(label)
+        if COVERAGE_BOTH in keys:
+            bucket = COVERAGE_BOTH
+        elif keys:
+            bucket = next(iter(keys))
+        else:
+            bucket = _coverage_label({batch.get("frequency") or ""})
+        if not bucket:
+            continue
+        bid = str(batch.get("batch_id") or batch.get("filename") or id(batch))
+        if bid in seen:
+            continue
+        seen.add(bid)
+        buckets[bucket].append(batch)
+    return [(label, rows) for label, rows in buckets.items() if rows]
+
+
+def group_planted_by_family(
+    defects: list[dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Group planted manifest rows with the same catalogue map as the cards.
+
+    Recurring patterns is not a planted family. Off-strip injectables (e.g. `TIM.*`)
+    land in Other (off the strip), not a fifth card.
+    """
+    buckets: dict[str, list[dict[str, Any]]] = {name: [] for name in _PLANTED_FAMILY_ORDER}
+    for row in defects:
+        family = strip_family(str(row.get("rule_id") or ""))
+        if family not in buckets:
+            family = "off_strip"
+        buckets[family].append(row)
+    return [
+        (PLANTED_FAMILY_LABEL[name], rows)
+        for name, rows in buckets.items()
+        if rows
+    ]
+
+
 def _render_ingested_files(client: LoupeClient) -> None:
     """Inventory of batches in the store — not a second ingest control, not a directory walk."""
     try:
@@ -180,19 +273,29 @@ def _render_ingested_files(client: LoupeClient) -> None:
     except (ApiProblem, ApiUnavailable) as exc:
         st.sidebar.caption(f"Could not list ingested files. {exc}")
         return
+    try:
+        contracts_body = client.contracts()
+    except (ApiProblem, ApiUnavailable):
+        contracts_body = {"data": []}
     rows = [batch for batch in (body.get("data") or []) if isinstance(batch, dict)]
     if not rows:
         return
+    contracts = [
+        row for row in (contracts_body.get("data") or []) if isinstance(row, dict)
+    ]
+    groups = group_batches_by_coverage(rows, contracts)
     with st.sidebar.expander(f":material/folder: {len(rows)} ingested files", expanded=False):
         st.caption("What this store holds — not a directory of downloads.")
-        for batch in rows:
-            name = batch.get("filename") or "—"
-            fmt = batch.get("file_format") or "—"
-            origin = batch.get("origin") or "—"
-            line = f"`{name}` · {fmt} · {origin}"
-            if is_demo_csv_conversion(batch):
-                line += f" · :blue-badge[{CONVERTED_MARK}]"
-            st.markdown(line)
+        for label, files in groups:
+            st.markdown(f"**{label}**")
+            for batch in files:
+                name = batch.get("filename") or "—"
+                fmt = batch.get("file_format") or "—"
+                origin = batch.get("origin") or "—"
+                line = f"`{name}` · {fmt} · {origin}"
+                if is_demo_csv_conversion(batch):
+                    line += f" · :blue-badge[{CONVERTED_MARK}]"
+                st.markdown(line)
 
 
 # ------------------------------------------------------------------- plant, and undo it
@@ -366,17 +469,23 @@ def _render_manifest() -> None:
             f"{payload['source']} → {payload['output']} · {payload['rows_in']:,} rows in, "
             f"{payload['rows_out']:,} out · seed {payload['seed']}"
         )
-        st.dataframe(
-            [
-                {
-                    "Row": d["source_row"],
-                    "Rule": d["rule_id"],
-                    "What was done": d["kind"],
-                    "Was": d.get("original"),
-                    "Now": d.get("injected"),
-                }
-                for d in payload["defects"]
-            ],
-            hide_index=True,
-            width="stretch",
-        )
+        filename = Path(str(payload.get("output") or "")).name
+        groups = group_planted_by_family(list(payload.get("defects") or []))
+        for label, rows in groups:
+            st.markdown(f"**{label}**")
+            if filename:
+                st.caption(f"`{filename}`")
+            st.dataframe(
+                [
+                    {
+                        "Row": d.get("source_row"),
+                        "Rule": d.get("rule_id"),
+                        "What was done": d.get("kind"),
+                        "Was": d.get("original"),
+                        "Now": d.get("injected"),
+                    }
+                    for d in rows
+                ],
+                hide_index=True,
+                width="stretch",
+            )

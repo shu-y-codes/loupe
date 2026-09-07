@@ -150,6 +150,7 @@ def main() -> None:
         )
         return
 
+    st.session_state.setdefault("family", "gaps")
     family = st.session_state.get("family") or "gaps"
     checks = load_checks(client, state.contract, state.start, state.end, family)
     if checks is None:

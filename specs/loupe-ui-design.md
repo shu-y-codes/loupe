@@ -1,9 +1,10 @@
 # Loupe UI design
 
-Revised 2026-09-07: one reviewer page — four family cards, Daily OHLCV then 15-minute VWAP
-with selected-family overlays, picture of the selected family below VWAP. No persona
-selector. Sidebar ingest is still **Load demo data**; after a load the sidebar lists
-ingested batches and marks demo CSVs converted from Parquet.
+Revised 2026-09-07: reviewer chrome — cards *are* the family control (no Check row), no
+score line, OHLCV legend + shared-x zoom, ingested files grouped by contract coverage,
+planted defects grouped by strip family. Same day: one reviewer page — four family cards,
+Daily OHLCV then 15-minute VWAP with selected-family overlays, picture of the selected
+family below VWAP. No persona selector. Sidebar ingest is still **Load demo data**.
 
 ## UI philosophy
 
@@ -15,21 +16,21 @@ It provides **report-only** evidence. Findings and suggestions are identified, n
 
 ## Tooltips
 
-Help on **named boxes** (family cards, KPI-style tiles, column headers), not on every grid
-cell. One sentence, in this page’s language — not a persona dialect. Streamlit:
-`st.metric(..., help=...)`, dataframe column `help`, chart caption. Not a glossary overlay.
+Help on **named boxes** (family-card **counts**, KPI-style tiles, column headers), not on
+every grid cell. One sentence, in this page’s language — not a persona dialect. Streamlit:
+`st.metric(..., help=...)` on the count, dataframe column `help`. Overlay marks are a chart
+legend, not a hover glossary.
 
 **Attach help**
 
-- Family cards: Gaps, Duplicates, Invalid values, Recurring patterns
-- Score caption jargon: `scope_signature`, “needs minute bars”
+- Family-card **count / unit** (`42 runs`, `4 records`) — not the family name
 - Column headers on the aggregated issues table: What, Days, Records, What we did
-- Marked sessions (how many dates the selected family flags)
+- VWAP panel: “needs minute bars” stays on the refused daily-only panel
 
-Examples: Gaps — “Missing timestamps and absent sessions — holes in the expected grid, not
-a quiet market.” Recurring patterns — “Standing concentrations, corrected for how often
-that bucket appears in the records.” What we did — “What default cleaning did, from the
-changelog. This page does not apply a new rule.”
+Examples: Gaps count — “Missing timestamps and absent sessions — holes in the expected
+grid, not a quiet market.” Recurring patterns count — “Standing concentrations, corrected
+for how often that bucket appears in the records.” What we did — “What default cleaning
+did, from the changelog. This page does not apply a new rule.”
 
 **Skip**
 
@@ -45,8 +46,8 @@ selected contract** and the sidebar date window:
 
 | Question | What the page shows |
 |---|---|
-| Can I trust this data? | Four check cards (zero means the check ran), a score **caption** with `scope_signature`, aggregated issues (What / Days / Records / What we did) |
-| What does this data look like? | Daily OHLCV then rolling 15-minute VWAP, marks for the **selected family** only, picture of that family below VWAP |
+| Can I trust this data? | Four check cards (zero means the check ran). The cards *are* the family selector. Aggregated issues (What / Days / Records / What we did). No score line on this page. |
+| What does this data look like? | Daily OHLCV then rolling 15-minute VWAP, marks for the **selected family** only (legend on OHLCV), picture of that family below VWAP |
 
 Filter by **contract and date**. There is no book-grain inventory and no persona view
 selector. A book strip is an extension.
@@ -67,8 +68,8 @@ not paint with it.
 | Invalid values | Paint that candle; volume pane for volume defects. | Only if cleaning dropped the window. |
 | Recurring patterns | Band every participating session. | Shade the concentrating hour. |
 
-`OUT.*` stays off this strip (optional in the brief). Captions under the charts **explain
-the marks**; they do not argue a proposal.
+`OUT.*` stays off this strip (optional in the brief). OHLCV **legend** names the selected
+family’s marks; it does not argue a proposal. Rule IDs stay off the candle.
 
 Family → rule map (engine unchanged; labelling + grouping). Catalogue home is the same as
 `SETTLEMENT_RULES`: `src/loupe/quality/catalogue.py`. HTTP envelope:
@@ -112,9 +113,16 @@ already on local disk to `POST /v1/ingest/batches` with `origin=demo`
 UI is not a second way to do the same thing.
 
 **Ingested files** appear after a successful load. The list is `GET /v1/ingest/batches`
-— filename, format, origin — inventory of what the store holds, not a second ingest
-control and not a walk of `data/samples/`. Converted rows show as CSV; the Parquet they
-replaced is not in the load (`specs/sample-corpus.md` §8).
+plus `GET /v1/contracts` (already sidebar HTTP) — filename, format, origin — inventory of
+what the store holds, not a second ingest control and not a walk of `data/samples/`.
+Converted rows show as CSV; the Parquet they replaced is not in the load
+(`specs/sample-corpus.md` §8).
+
+**Group by contract coverage, not by the file’s own frequency.** Three buckets: **Daily +
+minute**, **Daily-only**, **Minute-only**. A contract that holds both grains lists **both**
+of its files under Daily + minute — the daily file of a dual-grain contract does not sit
+in Daily-only. Coverage comes from `frequencies_available` on the contract, filled from
+batch `frequency` when that list is empty. No new route. CSV-from-Parquet mark unchanged.
 
 **CSV mark.** Rows with `origin = demo` and CSV (`file_format` or suffix) are marked
 **converted from Parquet**, so a reviewer can see the CSV half of "accept CSV or
@@ -128,8 +136,8 @@ data. A failed fetch is answered in place and does not point at an uploader.
 **Capability preview is not on this page.** `POST /v1/ingest/preview` stays as an API
 dry run. Demo load skips per-file preview (`validate=False`, then one corpus-wide run).
 Unavailable capabilities are disclosed in place on the dashboard after load — VWAP keeps
-its panel and says "needs minute bars"; a daily-only score caption names the missing
-minute tape. There is no pre-commit sidebar matrix.
+its panel and says "needs minute bars". The page does not draw a score caption to name the
+missing minute tape. There is no pre-commit sidebar matrix.
 
 ## Wireframe
 
@@ -138,21 +146,23 @@ minute tape. There is no pre-commit sidebar matrix.
 │ LOUPE            │  ESZ25 · 2025-06-02 → 2025-06-30                         │
 │                  │                                                          │
 │ Contract         │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────────────┐  │
-│  [ESZ25     ▾]   │  │ Gaps    │ │Duplicates│ │ Invalid │ │ Recurring     │  │
+│  [ESZ25     ▾]   │  │ Selected│ │Duplicates│ │ Invalid │ │ Recurring     │  │
+│                  │  │ Gaps    │ │          │ │ values  │ │ patterns      │  │
 │                  │  │ 42 runs │ │ 4 records│ │ 12 rows │ │ 2 standing    │  │
 │ Trade dates      │  │ 18 holes│ │ 3 exact  │ │ 8 prices│ │ Open-hour     │  │
 │  [2025-01-02]    │  │ 2 absent│ │ 1 conflict│ │ 4 vols  │ │ gaps, 61/63   │  │
 │  [2025-12-19]    │  └─────────┘ └─────────┘ └─────────┘ └────────────────┘  │
-│                  │  Score 96 · cmp+val+con+unq+tim · load minute tape to    │
-│ Demo data        │  reconcile. Zero on a card means the check ran.          │
-│ Inject defects   │                                                          │
-│                  │  Daily OHLCV · clean series · selected family            │
-│ Ingested files   │  ┌────────────────────────────────────────────────────┐  │
-│  ESZ25.parquet   │  │  ▲ ▲    ▲     ╎absent╎     ▲          paint        │  │
-│  parquet · demo  │  │ vol ▁▂▃▅▇▅▃▂▁                                      │  │
-│  SR3G26.csv      │  └────────────────────────────────────────────────────┘  │
-│  csv · demo      │  Triangles: session-open holes. Dashed: settlement never │
-│  from Parquet    │  arrived. Rule IDs in the caption, not on the candle.    │
+│                  │  Cards are the selector. Help on 42 runs, not Gaps.      │
+│ Demo data        │                                                          │
+│ Inject defects   │  Daily OHLCV · clean series · selected family            │
+│                  │  ┌────────────────────────────────────────────────────┐  │
+│ Ingested files   │  │  ▲ ▲    ▲     ╎absent╎     ▲          paint        │  │
+│  Daily + minute  │  │ vol ▁▂▃▅▇▅▃▂▁                                      │  │
+│   ESZ25.parquet  │  └────────────────────────────────────────────────────┘  │
+│   ESZ25.csv      │  Legend: ▲ hole · ╎ absent. Drag dates to pan/zoom;     │
+│  Minute-only     │  double-click to reset. Rule IDs off the candle.        │
+│   SR3G26.csv     │                                                          │
+│   from Parquet   │                                                          │
 │                  │                                                          │
 │                  │  Rolling 15-minute VWAP                                  │
 │                  │  ┌────────────────────────────────────────────────────┐  │
@@ -177,32 +187,32 @@ minute tape. There is no pre-commit sidebar matrix.
 
 ## Main column
 
-Order is load-bearing: **cards, score caption, Daily OHLCV, VWAP, picture, aggregated
-issues.** Expanding the picture must not shove the charts. Both charts are **full width**.
+Order is load-bearing: **cards, Daily OHLCV, VWAP, picture, aggregated issues.** Expanding
+the picture must not shove the charts. Both charts are **full width**. There is **no
+score line** under the cards.
 
-HTTP: `GET /v1/dq/checks` for cards, score, overlay marks, picture payload, and issues;
+HTTP: `GET /v1/dq/checks` for cards, overlay marks, picture payload, and issues;
 `GET /v1/analytics/bars/daily` for OHLCV; `GET /v1/analytics/vwap` for the line. The page
-joins overlay marks to bars **by `trade_date`**. It does not group `findings[]`.
+joins overlay marks to bars **by `trade_date`**. It does not group `findings[]`. The
+envelope may still include `score` / `scope_signature`; this page does not draw them.
 
 ### Family cards
 
-Four cards. Selecting a card selects the overlay, the chart captions, and the picture.
-Zero is a real answer: the check ran and found nothing in this contract × window.
+Four cards. **The cards are the family control** — no separate Check segmented control or
+second button row. Clicking a card selects the overlay, the OHLCV legend, and the picture.
+Selected state lives on the card. Family names are labels without `?`. Help attaches to
+the **count** (`42 runs`), not the title.
 
-The selected card is visually distinct. Rule IDs do not headline the card; they may appear
-in a caption on the picture or under the chart.
+Zero is a real answer: the check ran and found nothing in this contract × window. Rule IDs
+do not headline the card; they may appear in a caption on the picture.
 
-### Score caption
+### Missing grain
 
-The four cards lead. Score is a **caption under the cards**, not a competing headline
-tile. `scope_signature` still travels with it (`specs/dq-rules-and-scoring.md` §11.3).
-Equal signature means comparable; unequal means the page must say so. When reconciliation
-is out of scope, name the missing companion grain and the consequence (settlement judged
-on the daily file alone — load the minute tape to reconcile it). Do not mark a book of
-scores against each other: there is no inventory column.
-
-Below `params.min_records`, show "insufficient data" instead of a number. Never render
-absent as zero.
+Drop the score line entirely, including `scope_signature` and the reconciliation sentence
+(“settlement judged on the daily file alone”). Do not invent a new score-shaped caption to
+carry those words. Daily-only VWAP already says “needs minute bars”
+(`CAP.FREQUENCY_UNAVAILABLE`) — that is the page’s missing-grain copy. When a score *is*
+displayed on some other surface, `specs/dq-rules-and-scoring.md` §11.3 still applies.
 
 ### Daily OHLCV
 
@@ -220,7 +230,13 @@ The **clean** series. Overlay marks from `checks.overlay.ohlcv` for the selected
 `max_severity` may still arrive on the bar envelope; ignore it for colour. A holiday with
 no finding is not an absent settlement.
 
-Caption explains the marks on screen. Rule IDs may follow in smaller type.
+**Legend, not caption.** Pin / triangle, dashed absent, paint, volume-pane defect, and
+pattern band for the **selected family** are a chart legend. Overlay grammar does not
+change. Rule IDs stay off the candle; they may still caption the picture.
+
+**Zoom.** Daily OHLCV **and** the volume pane pan and zoom together on a **shared x**
+(trade date). Drag to pan or zoom the dates; **double-click to reset**. VWAP and the
+picture ribbon do not zoom in v1.
 
 ### Rolling 15-minute VWAP
 
@@ -269,7 +285,7 @@ What / What we did cells.
 | No contracts loaded | Main column points at Load demo data. No empty charts pretending to be a clean bill. |
 | Contract loaded, no completed run | Cards and charts wait; say that validation has not finished. |
 | Check ran, count is zero | Card shows **0**. Picture: this check found nothing in the window. |
-| Daily-only | VWAP panel stays with "needs minute bars". Score caption names the missing minute tape when reconciliation is out of scope. |
+| Daily-only | VWAP panel stays with "needs minute bars". No score caption and no extra reconciliation sentence. |
 | Minute-only | Daily OHLCV is derived from the tape. Absent *settlements* still come from the daily expected grid vs `mart.bar_daily`; a minute-only contract has no vendor settlement row to miss. |
 | API down | Error in place. Do not invite an uploader. |
 
@@ -278,3 +294,16 @@ What / What we did cells.
 No apply, override, dismiss, accept, resolve, or edit control anywhere in the tree.
 Suggestions that exist on `GET /v1/insights/suggestions` are not a second table on this
 page; What we did is the changelog. Apply / dismiss remain extensions.
+
+## Synthetic disclosure
+
+Injection is **one** planted file with many labelled defects (`loupe.demo.injection`
+manifest, keyed by `rule_id`). Group those rows under **Gaps**, **Duplicates**, and
+**Invalid values** using the same catalogue family map as the cards
+(`src/loupe/quality/catalogue.py` `strip_family`). Nest the planted **filename** under
+each family that appears. Recurring patterns are insights, not planted rows — no synthetic
+bucket for that card.
+
+**Off-strip** planted rules (`TIM.OUT_OF_ORDER`, and anything else injection can plant that
+is not on the strip) get a named group **Other (off the strip)** — not dropped, not a
+fifth card.

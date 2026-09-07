@@ -11,10 +11,15 @@ So every disclosure test here runs the page **twice** and asserts on the second 
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from ui_helpers import (
     EMPTY_HEALTH,
     HEALTH,
+    MIXED_COVERAGE_BATCHES,
+    MIXED_COVERAGE_CONTRACTS,
+    PLANTED_MANIFEST,
     SYNTHETIC_BATCHES,
     SYNTHETIC_HEALTH,
     FakeClient,
@@ -253,4 +258,70 @@ def test_an_empty_store_does_not_list_ingested_files(app):
     said = _text(test).lower()
     assert "upload any csv" not in said
     assert "from the sidebar instead" not in said
+
+
+def test_ingested_files_group_by_contract_coverage_when_grains_mix(app):
+    """A dual-grain contract lists both files under Daily + minute, not by file frequency."""
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS, batches=MIXED_COVERAGE_BATCHES)
+    test = _no_exception(app(client=client))
+    markdown = " ".join(m.value for m in test.markdown)
+    assert "Daily + minute" in markdown
+    assert "Daily-only" in markdown
+    assert "Minute-only" in markdown
+    assert "ESZ25.parquet" in markdown
+    assert "ESZ25.csv" in markdown
+    assert "ZCZ25.parquet" in markdown
+    assert "SR3G26.csv" in markdown
+
+
+def test_planted_rows_group_under_strip_families_with_off_strip(app, tmp_path):
+    """One planted file, many labelled defects. TIM.* is other/off-strip, not dropped."""
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(PLANTED_MANIFEST))
+    client = FakeClient(health=SYNTHETIC_HEALTH)
+    test = _no_exception(app(client=client, injected_manifest=str(path)))
+    markdown = [m.value for m in test.markdown]
+    assert any("**Gaps**" in m for m in markdown)
+    assert any("**Duplicates**" in m for m in markdown)
+    assert any("**Invalid values**" in m for m in markdown)
+    assert any("Other (off the strip)" in m for m in markdown)
+    captions = " ".join(c.value for c in test.caption)
+    assert "SR3G26.injected.csv" in captions
+    tables = [d.value for d in test.dataframe]
+    rules = []
+    for table in tables:
+        if "Rule" in list(table.columns):
+            rules.extend(str(v) for v in table["Rule"])
+    assert "CMP.MISSING_TIMESTAMP" in rules
+    assert "UNQ.EXACT_DUPLICATE" in rules
+    assert "VAL.NEGATIVE_VOLUME" in rules
+    assert "TIM.OUT_OF_ORDER" in rules
+
+
+def test_group_batches_by_coverage_puts_dual_grain_files_together():
+    from loupe.ui.demo import (
+        COVERAGE_BOTH,
+        COVERAGE_DAILY,
+        COVERAGE_MINUTE,
+        group_batches_by_coverage,
+    )
+
+    groups = dict(
+        group_batches_by_coverage(
+            MIXED_COVERAGE_BATCHES["data"], MIXED_COVERAGE_CONTRACTS["data"]
+        )
+    )
+    both = [batch["filename"] for batch in groups[COVERAGE_BOTH]]
+    assert both == ["ESZ25.parquet", "ESZ25.csv"]
+    assert [batch["filename"] for batch in groups[COVERAGE_DAILY]] == ["ZCZ25.parquet"]
+    assert [batch["filename"] for batch in groups[COVERAGE_MINUTE]] == ["SR3G26.csv"]
+
+
+def test_group_planted_by_family_keeps_off_strip_and_skips_patterns():
+    from loupe.ui.demo import group_planted_by_family
+
+    groups = dict(group_planted_by_family(PLANTED_MANIFEST["defects"]))
+    assert set(groups) == {"Gaps", "Duplicates", "Invalid values", "Other (off the strip)"}
+    assert groups["Other (off the strip)"][0]["rule_id"] == "TIM.OUT_OF_ORDER"
+    assert "Recurring patterns" not in groups
 

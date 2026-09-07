@@ -24,6 +24,9 @@ _PATTERN = "#7c3aed"
 _VOLUME_BAD = "#c2410c"
 _VOLUME = "#94a3b8"
 
+#: How to reset the shared-x zoom on Daily OHLCV + volume (`specs/loupe-ui-design.md`).
+OHLCV_ZOOM_CAPTION = "Drag the dates to pan or zoom. Double-click to reset."
+
 
 def _date_str(value: Any) -> str:
     if hasattr(value, "isoformat"):
@@ -85,53 +88,70 @@ def overlay_frame(bars: list[dict[str, Any]], marks: list[dict[str, Any]]) -> pd
     return frame.sort_values("trade_date").reset_index(drop=True)
 
 
-def overlay_legend(family: str, marks: list[dict[str, Any]]) -> str:
-    """Caption that names the marks actually drawn for this family — not a static label."""
+def overlay_legend_entries(family: str) -> list[tuple[str, str]]:
+    """Named marks for the selected family — a chart legend, not a caption of dates."""
     if family == "gaps":
-        holes = [_date_str(m["trade_date"]) for m in marks if m.get("partial_gap")]
-        absent = [_date_str(m["trade_date"]) for m in marks if m.get("session") == "absent"]
-        return (
-            "Triangles: "
-            + (", ".join(holes) if holes else "none")
-            + ". Dashed: "
-            + (", ".join(absent) if absent else "none")
-            + "."
-        )
+        return [
+            ("Session-open hole", _GAP),
+            ("Settlement never arrived", _ABSENT),
+        ]
     if family == "duplicates":
-        pins = [_date_str(m["trade_date"]) for m in marks if m.get("duplicate")]
-        return "Pins on kept timestamps: " + (", ".join(pins) if pins else "none") + "."
+        return [("Kept timestamp", _DUP)]
     if family == "invalid":
-        painted = [_date_str(m["trade_date"]) for m in marks if m.get("invalid")]
-        volumes = [_date_str(m["trade_date"]) for m in marks if m.get("invalid_volume")]
-        return (
-            "Painted: "
-            + (", ".join(painted) if painted else "none")
-            + ". Volume pane: "
-            + (", ".join(volumes) if volumes else "none")
-            + "."
-        )
+        return [
+            ("Invalid value", _INVALID),
+            ("Volume defect", _VOLUME_BAD),
+        ]
     if family == "patterns":
-        banded = [_date_str(m["trade_date"]) for m in marks if m.get("pattern_member")]
-        return "Bands on participating sessions: " + (", ".join(banded) if banded else "none") + "."
-    return ""
+        return [("Participating session", _PATTERN)]
+    return []
 
 
-def candles(
+def _legend_layer(entries: list[tuple[str, str]]) -> alt.Chart:
+    """Invisible points whose colour encoding is the OHLCV legend."""
+    frame = pd.DataFrame(
+        {"mark": [name for name, _ in entries], "trade_date": pd.NaT, "y": [None] * len(entries)}
+    )
+    return (
+        alt.Chart(frame)
+        .mark_point(opacity=0, filled=True)
+        .encode(
+            x=alt.X("trade_date:T", title=None),
+            y=alt.Y("y:Q", title="Price", scale=alt.Scale(zero=False)),
+            color=alt.Color(
+                "mark:N",
+                scale=alt.Scale(
+                    domain=[name for name, _ in entries],
+                    range=[colour for _, colour in entries],
+                ),
+                legend=alt.Legend(title=None, orient="bottom", symbolOpacity=1),
+            ),
+        )
+    )
+
+
+def _x_zoom() -> alt.Parameter:
+    return alt.selection_interval(bind="scales", encodings=["x"], name="ohlcv_x")
+
+
+def ohlcv_chart(
     bars: list[dict[str, Any]],
     overlay: dict[str, Any] | None,
     *,
     family: str,
     height: int = 260,
-) -> None:
-    """Daily OHLCV with selected-family marks. Never a zero-filled absent bar."""
+) -> alt.Chart | None:
+    """Daily OHLCV + volume, shared-x pan/zoom, selected-family legend. Never a zero-filled bar."""
     marks = list((overlay or {}).get("ohlcv") or [])
     frame = overlay_frame(bars, marks)
     if frame.empty:
-        st.caption("No bars in this window.")
-        return
+        return None
 
     present = frame.dropna(subset=["open", "high", "low", "close"])
     layers: list[alt.Chart] = []
+    entries = overlay_legend_entries(family)
+    if entries:
+        layers.append(_legend_layer(entries))
 
     if family == "patterns":
         bands = frame[frame["pattern_member"]]
@@ -197,27 +217,46 @@ def candles(
             )
 
     if not layers:
+        return None
+
+    zoom = _x_zoom()
+    price = layers[0]
+    for layer in layers[1:]:
+        price = price + layer
+    price = price.properties(height=height)
+
+    volume = _volume_chart(frame, family)
+    if volume is None:
+        return price.add_params(zoom)
+    return alt.vconcat(price, volume).resolve_scale(x="shared").add_params(zoom)
+
+
+def candles(
+    bars: list[dict[str, Any]],
+    overlay: dict[str, Any] | None,
+    *,
+    family: str,
+    height: int = 260,
+) -> None:
+    """Daily OHLCV with selected-family marks. Never a zero-filled absent bar."""
+    chart = ohlcv_chart(bars, overlay, family=family, height=height)
+    if chart is None:
         st.caption("No bars in this window.")
         return
-    chart = layers[0]
-    for layer in layers[1:]:
-        chart = chart + layer
-    st.altair_chart(chart.properties(height=height), width="stretch")
-    st.caption(overlay_legend(family, marks))
-
-    _volume_pane(frame, family)
+    st.altair_chart(chart, width="stretch", theme=None)
+    st.caption(OHLCV_ZOOM_CAPTION)
 
 
-def _volume_pane(frame: pd.DataFrame, family: str) -> None:
+def _volume_chart(frame: pd.DataFrame, family: str) -> alt.Chart | None:
     present = frame.dropna(subset=["volume"])
     if present.empty:
-        return
+        return None
     present = present.copy()
     present["fill"] = [
         _VOLUME_BAD if family == "invalid" and bool(row.invalid_volume) else _VOLUME
         for row in present.itertuples()
     ]
-    chart = (
+    return (
         alt.Chart(present)
         .mark_bar()
         .encode(
@@ -227,7 +266,6 @@ def _volume_pane(frame: pd.DataFrame, family: str) -> None:
         )
         .properties(height=90)
     )
-    st.altair_chart(chart, width="stretch")
 
 
 def vwap_line(

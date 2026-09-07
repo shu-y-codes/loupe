@@ -1,7 +1,8 @@
 """The reviewer main column: cards, charts, picture, aggregated issues.
 
 HTTP only. Family membership, overlay marks and What-we-did come from `GET /v1/dq/checks`.
-This module does not group `findings[]` and does not import `quality`.
+This module does not group `findings[]` and does not import `quality`. The four cards *are*
+the family control; there is no Check row and no score caption.
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ import streamlit as st
 from . import charts
 from . import help as helptext
 from .client import ApiProblem
-from .runtime import checks_score_caption
 
 _FAMILY_ORDER = ("gaps", "duplicates", "invalid", "patterns")
 _FAMILY_LABEL = {
@@ -30,10 +30,9 @@ def render_review(
     bars: list[dict[str, Any]],
     vwap: dict[str, Any] | ApiProblem | None,
 ) -> None:
-    """Cards, score caption, Daily OHLCV, VWAP, picture, issues — that order is load-bearing."""
-    family = _family_control(checks)
+    """Cards, Daily OHLCV, VWAP, picture, issues — that order is load-bearing."""
+    family = _selected_family()
     _family_cards(checks, family)
-    st.caption(checks_score_caption(checks), help=helptext.JARGON["scope_signature"])
 
     if not checks.get("checked"):
         st.info("Validation has not finished for this contract yet.")
@@ -41,7 +40,7 @@ def render_review(
 
     overlay = checks.get("overlay") or {}
     st.subheader("Daily OHLCV")
-    st.caption("Clean series · selected family. Rule IDs are a caption, not the candle.")
+    st.caption("Clean series · selected family. Rule IDs stay off the candle.")
     charts.candles(bars, overlay, family=family)
 
     st.subheader("Rolling 15-minute VWAP")
@@ -51,32 +50,20 @@ def render_review(
     _issues(checks.get("issues") or [])
 
 
-def _family_control(checks: dict[str, Any]) -> str:
-    families = checks.get("families") or []
-    options = [row["family"] for row in families if row.get("family") in _FAMILY_ORDER]
-    if not options:
-        options = list(_FAMILY_ORDER)
-    labels = {
-        row["family"]: row.get("label") or _FAMILY_LABEL[row["family"]]
-        for row in families
-        if row.get("family") in _FAMILY_ORDER
-    }
-    for name in options:
-        labels.setdefault(name, _FAMILY_LABEL.get(name, name))
-    selected = st.segmented_control(
-        "Check",
-        options,
-        format_func=lambda name: labels.get(name, name),
-        key="family",
-        default="gaps" if "gaps" in options else options[0],
-        required=True,
-        width="stretch",
-        help=helptext.JARGON["marked sessions"],
-    )
-    return selected or "gaps"
+def _selected_family() -> str:
+    family = st.session_state.get("family") or "gaps"
+    if family not in _FAMILY_ORDER:
+        family = "gaps"
+        st.session_state["family"] = family
+    return family
+
+
+def _select_family(name: str) -> None:
+    st.session_state["family"] = name
 
 
 def _family_cards(checks: dict[str, Any], selected: str) -> None:
+    """The four cells are the family control. Help hangs on the count, not the title."""
     families = checks.get("families") or []
     by_id = {row["family"]: row for row in families}
     columns = st.columns(4)
@@ -91,16 +78,21 @@ def _family_cards(checks: dict[str, Any], selected: str) -> None:
         with column, st.container(border=True):
             if name == selected:
                 st.badge("Selected")
-            unit = card.get("unit") or ""
-            value = f"{card.get('count', 0)} {unit}".strip()
-            st.metric(
+            st.button(
                 card.get("label") or _FAMILY_LABEL[name],
-                value,
+                key=f"family_card_{name}",
+                type="primary" if name == selected else "secondary",
+                width="stretch",
+                on_click=_select_family,
+                args=(name,),
+            )
+            unit = card.get("unit") or ""
+            count_label = f"{card.get('count', 0)} {unit}".strip()
+            st.metric(
+                count_label,
+                card.get("detail") or " ",
                 help=helptext.CARDS.get(name),
             )
-            detail = card.get("detail") or ""
-            if detail:
-                st.caption(detail)
 
 
 def _vwap_panel(

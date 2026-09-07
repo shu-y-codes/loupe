@@ -9,7 +9,8 @@ Analytics semantics: `specs/analytics-semantics.md`. Rule IDs and score fields:
 examples are owned by `specs/sample-corpus.md`.
 
 Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
-issues for the one-page reviewer UI. Same day: ingest validate and
+issues for the one-page reviewer UI. The envelope still carries `score` / `scope_signature`;
+the reviewer page does not draw them (`specs/loupe-ui-design.md`). Same day: ingest validate and
 `POST /v1/dq/runs` materialise `mart.bar_daily` before returning (gap from slices 3/4).
 Revised 2026-09-06: promoted from research; first normative version. Same day: v1 vs
 extension boundaries for finding override, suggestion apply/dismiss, and catalogue
@@ -764,7 +765,8 @@ rather than these rows.
 
 One request for the one-page reviewer UI (`specs/loupe-ui-design.md`). Cards, overlay marks,
 picture payload, and aggregated issues are composed in `quality`. A client that can only
-build the page by grouping `GET /v1/dq/findings` in a widget has missed this route.
+build the page by grouping `GET /v1/dq/findings` in a widget has missed this route. The
+envelope still carries `score` and `scope_signature`; the reviewer page does not draw them.
 
 `contract` is **required** and names one contract. `family` selects the overlay and picture
 (`gaps` | `duplicates` | `invalid` | `patterns`; default `gaps`). `start` / `end` are trade

@@ -4,7 +4,7 @@
 family control, help on the count, no score line on the page, zoomable OHLCV + volume, a
 chart legend, and a grouped sidebar (ingested files by grain; planted defects by family).
 
-**Status.** pending
+**Status.** done — 2026-09-07
 
 Written 2026-09-07, after a demo-load click-test of [09-reviewer-ui.md](09-reviewer-ui.md).
 09 stays **done**. Do not reopen it except the pointer in that file. Do not reopen

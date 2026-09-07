@@ -7,7 +7,7 @@ page against that spec.
 **Status.** done — 2026-09-07
 
 Written 2026-09-07. Click-test chrome is [10-reviewer-chrome.md](10-reviewer-chrome.md)
-(pending). The README walkthrough is [11-readme-walkthrough.md](11-readme-walkthrough.md)
+(done). The README walkthrough is [11-readme-walkthrough.md](11-readme-walkthrough.md)
 and must describe the page **after** 10, not Summary / Specifics and not the score caption.
 
 Do not reopen [05-ui.md](05-ui.md) or [08-ingest-chrome.md](08-ingest-chrome.md). Those

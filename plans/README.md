@@ -33,7 +33,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
 | 8 | ingest chrome | **done** | [08-ingest-chrome.md](08-ingest-chrome.md) |
 | 9 | reviewer-facing UI | **done** | [09-reviewer-ui.md](09-reviewer-ui.md) |
-| 10 | reviewer chrome (click-test) | pending | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
+| 10 | reviewer chrome (click-test) | **done** | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
 | 11 | README walkthrough | pending | [11-readme-walkthrough.md](11-readme-walkthrough.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
