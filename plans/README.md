@@ -32,13 +32,16 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
 | 8 | ingest chrome | **done** | [08-ingest-chrome.md](08-ingest-chrome.md) |
 | 9 | README walkthrough | pending | [09-readme-walkthrough.md](09-readme-walkthrough.md) |
+| 10 | reviewer-facing UI | pending | [10-reviewer-ui.md](10-reviewer-ui.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
 was split out again once the ingest path itself changed — dropping the uploader and listing
-what loaded is chrome the walkthrough would otherwise describe wrongly. Slice 9 then carries
-three findings from slice 6's integration tier and a limitations list that is already decided,
-so it is assembly rather than discovery.
+what loaded is chrome the walkthrough would otherwise describe wrongly. Slice 10 rebuilds the
+main page around the brief’s four checks and two charts (no persona selector); slice 9 then
+carries three findings from slice 6's integration tier and a limitations list that is already
+decided, so it is assembly rather than discovery — and it must describe the page slice 10
+ships, not Summary / Specifics by persona.
 
 ## Archive
 

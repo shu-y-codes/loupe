@@ -3,19 +3,20 @@
 **Goal.** The delivered README a reviewer reads first: philosophy, architecture, trade-offs,
 limitations, extensibility, and a walkthrough against real `ESZ25` (solution brief §16).
 
-**Status.** pending
+**Status.** pending — blocked on [10-reviewer-ui.md](10-reviewer-ui.md)
 
 Written 2026-09-07, after slice 6 shipped and after the integration tier went in; renumbered
 from 07 when the demo-corpus work was split out ahead of it, then from 08 when ingest chrome
-was inserted ahead of that. Slices 1-6 each left the README a paragraph; this slice makes it
-the document the work is judged by. Three things are already known and should not be
-rediscovered — see "Carried in from slice 6".
+was inserted ahead of that. Slice 10 then replaced the persona Summary / Specifics page;
+this walkthrough describes **that** page, so it runs after 10, not in parallel.
 
-**Slices 7 and 8 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
-corpus and a sidebar. Until [07-demo-corpus.md](07-demo-corpus.md) there is no CSV file to
-name, no demo button to describe, and no answer to "what does a reviewer see first". Until
-[08-ingest-chrome.md](08-ingest-chrome.md) that sidebar still offers Upload files and does
-not show what was loaded. Write this after both, not alongside them.
+**Slices 7, 8 and 10 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
+corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md) there is no
+CSV file to name, no demo button to describe, and no answer to "what does a reviewer see first".
+Until [08-ingest-chrome.md](08-ingest-chrome.md) that sidebar still offers Upload files and does
+not show what was loaded. Until [10-reviewer-ui.md](10-reviewer-ui.md) the main column is still
+persona Summary / Specifics, which is not what the walkthrough should teach. Write this after
+all three, not alongside them.
 
 ## Done when
 
