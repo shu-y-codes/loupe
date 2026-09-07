@@ -242,10 +242,7 @@ def render_summary(
 
     contracts = summary.get("contracts", [])
     if not contracts:
-        st.info(
-            "No contracts loaded yet. Upload a CSV or Parquet file from the sidebar to see "
-            "quality for it."
-        )
+        st.info("No contracts loaded yet. Load demo data from the sidebar to see quality for it.")
         return None
 
     render_headline(persona, summary, trend)

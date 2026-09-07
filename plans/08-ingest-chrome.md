@@ -4,7 +4,7 @@
 uploader. After a load, the sidebar lists what was ingested and marks the files that ran as
 CSV.
 
-**Status.** pending
+**Status.** done — 2026-09-07
 
 Written 2026-09-07, split out of the README walkthrough (again). Slice 7 shipped the fetch,
 the conversion and the two buttons; the sidebar still offers **Upload files** beside them, and

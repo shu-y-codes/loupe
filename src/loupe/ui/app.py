@@ -116,9 +116,8 @@ def main() -> None:
     if health is None:
         return
 
-    state = render_sidebar(client)
-    # The demo panel sits under the uploader, because loading a curated corpus and uploading
-    # your own file are the same question asked two ways.
+    state = render_sidebar()
+    # Demo ingest is the only UI path into the store; the ingested-file list sits with it.
     render_demo(client, health)
     render_header(state.persona)
 

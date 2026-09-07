@@ -1,5 +1,9 @@
 # Loupe UI design
 
+Revised 2026-09-07: v1 sidebar ingest is **Load demo data**; after a load the sidebar lists
+ingested batches and marks demo CSVs converted from Parquet. Capability preview is not a
+sidebar panel.
+
 ## UI philosophy
 The design of the UI should be intuitive: the Summary module presents a view that answers the User's primary question at a high level and the Specifics table allows them to have a closer look.
 
@@ -60,13 +64,44 @@ Here is a suggestion based on reason and impact.
 
 ## Wireframe
 
-Same page for every persona. Sidebar holds persona, upload, and the date filter.
+Same page for every persona. Sidebar holds persona, trade dates, and demo ingest.
 Summary answers the primary question. Selecting a row drives Specifics.
 Specifics is a table first (why, impact, what to do); charts sit under it only
 when that persona will actually look at them.
 
 Risk manager is filled in below. Trader and analyst keep the boxes and swap
 contents per the motivations table.
+
+### Sidebar
+
+Persona, trade dates, and demo ingest. There is **no file uploader**.
+
+**Load demo data** is the only v1 UI ingest path. Locked decision 9 already named
+the button; it is chrome here, not only a sentence in the solution brief. It posts
+files already on local disk to `POST /v1/ingest/batches` with `origin=demo`
+(`specs/api-contract.md` §4.3). Arbitrary CSV or Parquet ingest remains an API
+path. The UI is not a second way to do the same thing.
+
+**Ingested files** appear after a successful load. The list is `GET /v1/ingest/batches`
+— filename, format, origin — inventory of what the store holds, not a second ingest
+control and not a walk of `data/samples/`. Converted rows show as CSV; the Parquet
+they replaced is not in the load (`specs/sample-corpus.md` §8).
+
+**CSV mark.** Rows with `origin = demo` and CSV (`file_format` or suffix) are marked
+**converted from Parquet**, so a reviewer can see the CSV half of "accept CSV or
+Parquet" without opening a directory. That copy is a format fact, not a defect.
+After injection the planted file is also a CSV; that mark is the synthetic
+disclosure (`origin = injected`), not this one. Do not key the conversion mark off
+"any CSV".
+
+**Empty store.** Summary says no contracts are loaded and points at Load demo data.
+A failed fetch is answered in place and does not point at an uploader.
+
+**Capability preview is not on this page.** `POST /v1/ingest/preview` stays as an
+API dry run. Demo load skips per-file preview (`validate=False`, then one
+corpus-wide run). Unavailable capabilities are disclosed in place on the dashboard
+after load — VWAP keeps its panel and says "needs minute bars"; a daily-only score
+caption names the missing minute tape. There is no pre-commit sidebar matrix.
 
 ### Page
 
@@ -83,15 +118,15 @@ contents per the motivations table.
 │  [2025-01-02]    │                                                          │
 │  [2025-12-19]    │  Contracts · worst first · click a row → Specifics       │
 │                  │  ┌────────┬────────┬─────────┬───────┬─────────────────┐ │
-│ [ Upload files ] │  │ Status │ Root   │ Contract│ Score │ Closing-day     │ │
-│                  │  │ ATTN   │ ZC     │ ZCZ25   │ 41    │ close outside HL│ │
-│ Preview          │  │ ATTN   │ CL     │ CLG26   │ 58    │ gap at EOD      │ │
-│  daily → bars+DQ │  │ OK     │ ES     │ ESZ25   │ 96    │ —               │ │
-│  no 15-min VWAP  │  └────────┴────────┴─────────┴───────┴─────────────────┘ │
-│  no minute tape  │  cmp+val+con+unq+tim · no reconciliation for 2 contracts │
-│  → no REC        │                                                          │
-│  (this role      │                                                          │
-│   does not need) │  SPECIFICS                                               │
+│ Demo data        │  │ Status │ Root   │ Contract│ Score │ Closing-day     │ │
+│ Inject defects   │  │ ATTN   │ ZC     │ ZCZ25   │ 41    │ close outside HL│ │
+│                  │  │ ATTN   │ CL     │ CLG26   │ 58    │ gap at EOD      │ │
+│ Ingested files   │  │ OK     │ ES     │ ESZ25   │ 96    │ —               │ │
+│  ESZ25.parquet   │  └────────┴────────┴─────────┴───────┴─────────────────┘ │
+│  parquet · demo  │  cmp+val+con+unq+tim · no reconciliation for 2 contracts │
+│  SR3G26.csv      │                                                          │
+│  csv · demo      │                                                          │
+│  from Parquet    │  SPECIFICS                                               │
 │                  │  why attention is needed · how you address it            │
 │                  │                                                          │
 │                  │  Selected: ZCZ25                    [ + contract ]       │

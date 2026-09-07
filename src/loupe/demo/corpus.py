@@ -3,8 +3,8 @@
 This module gets files onto disk and says what should be loaded. It does **not** touch the
 database. That separation is the layer boundary `specs/loupe-solution-design.md` §6 draws and
 slice 5 built the UI around: the pages talk to the API over HTTP and to nothing else, so the
-demo buttons fetch here and then ingest through `POST /v1/ingest/batches` exactly the way a
-person dragging a file into the sidebar does. A shortcut that wrote records directly would make
+demo buttons fetch here and then ingest through `POST /v1/ingest/batches` — the same HTTP
+path any file ingest uses. A shortcut that wrote records directly would make
 the demo a different code path from the one being demonstrated.
 
 **Two files are converted to CSV, and the rules for picking them are stated rather than

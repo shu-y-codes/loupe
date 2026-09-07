@@ -30,7 +30,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 5 | ui | **done** | [05-ui.md](05-ui.md) |
 | 6 | rec / suggestions / demo | **done** | [06-rec-suggestions-demo.md](06-rec-suggestions-demo.md) |
 | 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
-| 8 | ingest chrome | pending | [08-ingest-chrome.md](08-ingest-chrome.md) |
+| 8 | ingest chrome | **done** | [08-ingest-chrome.md](08-ingest-chrome.md) |
 | 9 | README walkthrough | pending | [09-readme-walkthrough.md](09-readme-walkthrough.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is

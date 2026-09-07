@@ -2,6 +2,8 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
+Revised 2026-09-07: v1 UI ingest is Load demo data; capability preview is API-only
+and disclosed in place on the dashboard (slice 8).
 Revised 2026-09-06: `specs/api-contract.md` promoted (slice 4 done-when 1).
 Revised 2026-09-05: `specs/analytics-semantics.md` promoted (slice 3 done-when 1).
 `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs (`data-model.md`,
@@ -94,8 +96,10 @@ five-dimension measurement is displayed on the same 0–100 scale as a six-dimen
 
 **One grain scores what a file says about itself; two grains score whether it is true.** Where
 a contract holds one, every surface that shows a score must say which dimensions were in scope
-(`specs/dq-rules-and-scoring.md` §11.3), and the upload preview should name the companion
-grain that is missing — as advice, in the terms of the persona it matters to, never as a gate.
+(`specs/dq-rules-and-scoring.md` §11.3), and the missing companion grain is named as advice —
+on `POST /v1/ingest/preview` for API callers, and in place on the dashboard after load, in
+the terms of the persona it matters to, never as a gate. The v1 UI does not host a pre-commit
+preview panel.
 
 ---
 
@@ -132,7 +136,12 @@ These are no longer open. State them in the delivered README.
 
 ## 4. Capability model
 
-Upload preview discloses what the file unlocks before commit.
+Capability follows from what was supplied. **The v1 UI does not host a pre-commit preview
+panel.** `POST /v1/ingest/preview` stays as an API dry run (and for any non-UI caller). Demo
+load already skips per-file preview (`validate=False`, then one corpus-wide run). The
+dashboard discloses what is unavailable **in place** after load — a daily-only contract keeps
+the VWAP panel and says "needs minute bars"; a daily-only score caption names the missing
+companion grain. There is no sidebar capability matrix before commit.
 
 | Uploaded | Daily OHLCV | Rolling 15-min VWAP | Reconciliation (`REC.*`) |
 |---|---|---|---|
@@ -227,16 +236,18 @@ HuggingFace dataset `lynx1231/historical-futures-data-sample` (public evaluation
 
 ### Ingestion principles
 
-- Preview first: headers, types, inferred timezone / interval / frequency, capability matrix
+- Preview first (API): headers, types, inferred timezone / interval / frequency, capability matrix.
+  The v1 UI does not host this panel.
 - Sync `POST /v1/ingest/batches` → **201** with finished summary (`dq_run_id`, row counts, elapsed)
 - Idempotent on `file_hash` (409 if duplicate)
 - Parse failures → `stage.record_reject`; nulls and soft defects → load + find
 - Frequency discriminator on every record: `(contract_id, frequency, ts_utc)` — loading daily and
   minute without it collides
-- **Name the companion grain at preview time** (§2, "Advise Risk users to load both grains"):
+- **Name the companion grain** (§2, "Advise Risk users to load both grains"):
   a daily file with no minute tape for that contract cannot be reconciled, which is the one
   gap that matters to the Risk manager's question. Neither file is refused and neither is
-  incomplete on its own terms — the preview says what the second one would add
+  incomplete on its own terms. The API preview says what the second file would add; the v1
+  UI says the same in place after load.
 
 ### Oracle (test asset, not runtime)
 
@@ -370,10 +381,10 @@ Full contract: `specs/api-contract.md`.
 Wireframes and tooltip copy: `specs/loupe-ui-design.md`. Journeys (historical, locked):
 `_notes/founding/loupe-solution-design.md` (App Usage).
 
-Shared chrome: sidebar (persona, trade dates, upload) + **Summary** then **Specifics**.
-Selecting a Summary row drives Specifics. Specifics is **Why / Impact / Address** first;
-charts sit under it only when that persona will look at them. Address is suggestion **text**
-in v1 (no apply button).
+Shared chrome: sidebar (persona, trade dates, Load demo data, ingested-file list) +
+**Summary** then **Specifics**. Selecting a Summary row drives Specifics. Specifics is
+**Why / Impact / Address** first; charts sit under it only when that persona will look at
+them. Address is suggestion **text** in v1 (no apply button).
 
 | | Summary | Specifics |
 |---|---|---|
@@ -381,9 +392,16 @@ in v1 (no apply button).
 | Trader | Name-sorted; Contracts + With warnings; Root, Contract, Score, Warning | One contract; window completeness; warnings; changelog **marks on the clean series** (click ↔ mark; raw ghost); OHLCV + VWAP or in-place “needs minute bars” |
 | Analyst | Score then name; finding counts; top issue; both-frequency count when relevant | Read-only findings log; raw neighbourhood of selected finding; patterns (lift); suggestions as text; engine changelog; diagnostic charts + `REC.*` when both frequencies exist |
 
-Upload flow: file → **preview / capability disclosure** → confirm → sync progress → dashboard
-updates on return. Unavailable capabilities are explained in place (disabled VWAP with reason),
-not silently omitted.
+v1 UI ingest path: **Load demo data** posts local files to `POST /v1/ingest/batches` with
+`origin=demo`. There is no file uploader, no confirm-upload, and no sidebar preview panel.
+After a successful load the sidebar lists batches from `GET /v1/ingest/batches` (filename,
+format, origin) — inventory of what was ingested, not a directory walk. Demo CSV rows
+(`origin = demo` and CSV) are marked converted from Parquet, not as defects; injected CSV
+is the synthetic disclosure, not that mark.
+
+Capability preview is **UI-absent and API-only.** `POST /v1/ingest/preview` stays.
+Unavailable capabilities are explained in place on the dashboard after load (disabled VWAP
+with reason), not silently omitted and not via a pre-commit sidebar matrix.
 
 Help on **named boxes** (KPI tiles and headers), one sentence, not every grid cell.
 Skip Why / Impact / Address rows and the findings What column. Streamlit: `st.metric(..., help=...)`,
@@ -486,12 +504,11 @@ User                    Streamlit                     FastAPI                   
  │                          │◄── JSON ───────────────────┤◄── aggregates ────────────┤
  │◄─ Trader dashboard ──────┤                            │                           │
  │                          │                            │                           │
- ├─ Upload + preview ──────►│                            │                           │
- │                          ├─ POST /ingest/preview ────►│  infer freq/tz/interval   │
- │◄─ Capability matrix ─────┤◄── enables / disables ─────┤                           │
- ├─ Confirm upload ────────►│                            │                           │
+ ├─ Load demo data ────────►│                            │                           │
  │                          ├─ POST /ingest/batches ────►│  load → rules → marts ───►│
  │                          │◄── 201 batch summary ──────┤                           │
+ │                          ├─ GET /ingest/batches ─────►│                           │
+ │◄─ Sidebar file list ─────┤◄── filename, format, origin┤                           │
  │◄─ Dashboard refresh ─────┤                            │                           │
  │                          │                            │                           │
  ├─ Change date filter ────►│  GET /analytics/...?start= │  re-query slice ─────────►│
@@ -507,7 +524,7 @@ User                    Streamlit                     FastAPI                   
 - [ ] Working app (venv and/or Docker)  
 - [ ] README: philosophy, architecture, trade-offs, limitations, extensibility, walkthrough  
 - [ ] Architecture overview (this doc + layer diagram in README)  
-- [ ] UI: Summary / Specifics + persona selector + capability-aware upload + named-box tooltips  
+- [ ] UI: Summary / Specifics + persona selector + Load demo data + ingested-file list + named-box tooltips  
 - [ ] Unit + integration tests; oracle test marked optional if samples absent  
 - [ ] `tools/fetch_samples.py` + gitignore for `data/samples/` and `*.duckdb`  
 
@@ -521,6 +538,8 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 2. `quality` — core rule families + score; fixtures first  
 3. `insights` — daily bars + VWAP; wire oracle test  
 4. `api` — routes matching `specs/api-contract.md`  
-5. `ui` — Summary/Specifics, persona selector, upload with capability disclosure, tooltips  
+5. `ui` — Summary/Specifics, persona selector, named-box tooltips  
 6. Reconciliation + **report-only** suggestions + demo injection (apply/override later)  
-7. README walkthrough against real `ESZ25` (or chosen volatile window)
+7. Demo corpus — fetch, CSV conversion, Load demo data and Inject  
+8. Ingest chrome — one sidebar ingest path; ingested-file list and CSV conversion mark  
+9. README walkthrough against real `ESZ25` (or chosen volatile window)

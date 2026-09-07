@@ -41,6 +41,9 @@ from .client import ApiProblem, ApiUnavailable, LoupeClient
 #: Marks every surface that could otherwise be read as a statement about vendor data.
 SYNTHETIC_MARK = "⚠️"
 
+#: Demo CSV rows: format fact, not a defect (`specs/loupe-ui-design.md`).
+CONVERTED_MARK = "Converted from Parquet"
+
 
 def render_demo(client: LoupeClient, health: dict[str, Any]) -> None:
     """The sidebar panel. Which controls appear follows the state of the store, not a flag."""
@@ -53,6 +56,7 @@ def render_demo(client: LoupeClient, health: dict[str, Any]) -> None:
         return
 
     st.sidebar.caption(f"{records:,} records loaded.")
+    _render_ingested_files(client)
     if synthetic:
         _render_remove(client, health)
     else:
@@ -95,8 +99,8 @@ def _render_load(client: LoupeClient) -> None:
             status.update(label="Could not fetch the corpus", state="error")
             st.write(str(exc))
             st.caption(
-                "The app is fully usable without it — upload any CSV or Parquet file in the "
-                "sidebar instead."
+                "The app is fully usable without the sample corpus. Try Load demo data again "
+                "when you have a network."
             )
             return
 
@@ -125,7 +129,7 @@ def _render_load(client: LoupeClient) -> None:
 
 
 def _ingest_all(client: LoupeClient, files, status) -> int | None:
-    """Upload each file through the API, the way a person dragging one in would.
+    """Post each file through the API — the same `POST /v1/ingest/batches` any ingest uses.
 
     `validate=False` on every upload because the corpus-wide run above supersedes them: running
     the rules 48 times over one batch each, then again over everything, is slower and answers a
@@ -154,6 +158,41 @@ def _ingest_all(client: LoupeClient, files, status) -> int | None:
             st.write(str(exc))
             return None
     return loaded
+
+
+def is_demo_csv_conversion(batch: dict[str, Any]) -> bool:
+    """CSV that arrived via demo load — converted from Parquet. Not any CSV.
+
+    Key off `file_format` / suffix **plus** `origin = demo`. After injection the planted
+    file is also a CSV; that mark is the synthetic disclosure, not this one.
+    """
+    origin = batch.get("origin")
+    fmt = (batch.get("file_format") or "").lower()
+    name = (batch.get("filename") or "").lower()
+    is_csv = fmt == "csv" or name.endswith(".csv")
+    return origin == "demo" and is_csv
+
+
+def _render_ingested_files(client: LoupeClient) -> None:
+    """Inventory of batches in the store — not a second ingest control, not a directory walk."""
+    try:
+        body = client.batches()
+    except (ApiProblem, ApiUnavailable) as exc:
+        st.sidebar.caption(f"Could not list ingested files. {exc}")
+        return
+    rows = [batch for batch in (body.get("data") or []) if isinstance(batch, dict)]
+    if not rows:
+        return
+    with st.sidebar.expander(f":material/folder: {len(rows)} ingested files", expanded=False):
+        st.caption("What this store holds — not a directory of downloads.")
+        for batch in rows:
+            name = batch.get("filename") or "—"
+            fmt = batch.get("file_format") or "—"
+            origin = batch.get("origin") or "—"
+            line = f"`{name}` · {fmt} · {origin}"
+            if is_demo_csv_conversion(batch):
+                line += f" · :blue-badge[{CONVERTED_MARK}]"
+            st.markdown(line)
 
 
 # ------------------------------------------------------------------- plant, and undo it

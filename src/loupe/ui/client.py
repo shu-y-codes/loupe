@@ -152,6 +152,7 @@ class LoupeClient:
     # ---------------------------------------------------------------- ingest
 
     def batches(self, **params: Any) -> dict[str, Any]:
+        """`GET /v1/ingest/batches` — the sidebar inventory reads this, not the sample directory."""
         return self.get("/ingest/batches", **params)
 
     def purge_batch(self, batch_id: str) -> dict[str, Any]:

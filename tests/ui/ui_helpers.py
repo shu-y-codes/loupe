@@ -45,6 +45,7 @@ class FakeClient:
             "compare": {"data": COMPARE},
             "insights_patterns": PATTERNS,
             "insights_suggestions": SUGGESTIONS,
+            "batches": BATCHES,
         }
         self._responses.update(overrides)
 
@@ -92,6 +93,9 @@ class FakeClient:
         Suggestions panel disagree about the same request — which the API cannot produce.
         """
         return self.get("/insights/suggestions", **p)
+
+    def batches(self, **p: Any):
+        return self._answer("batches", **p)
 
     def preview(self, filename: str, content: bytes):
         return self._answer("preview", filename=filename)
@@ -142,6 +146,74 @@ SYNTHETIC_HEALTH: dict[str, Any] = {
 
 #: A store nobody has loaded anything into — where the demo panel offers the fetch.
 EMPTY_HEALTH: dict[str, Any] = {**HEALTH, "records": 0, "contracts": 0, "batches": 0}
+
+
+def _batch(
+    *,
+    filename: str,
+    file_format: str,
+    origin: str,
+    batch_id: str,
+    frequency: str = "minute",
+) -> dict[str, Any]:
+    """A `BatchSummary`-shaped row. Keys are a subset of the model; see the stub-parity guard."""
+    return {
+        "batch_id": batch_id,
+        "status": "succeeded",
+        "filename": filename,
+        "file_format": file_format,
+        "origin": origin,
+        "file_hash": "0" * 64,
+        "frequency": frequency,
+        "source_timezone": "America/Chicago",
+        "ts_convention": "interval_start",
+        "session_boundary": "17:00 America/Chicago",
+        "rows_read": 100,
+        "rows_accepted": 100,
+        "rows_rejected": 0,
+        "contracts_detected": ["ESZ25"],
+        "sessions_detected": 10,
+        "trade_date_range": ["2024-01-18", "2025-12-19"],
+        "dq_run_id": "run-1",
+        "elapsed_ms": 100,
+    }
+
+
+#: `GET /v1/ingest/batches` after a demo load. One Parquet, one converted CSV (`origin=demo`).
+BATCHES: dict[str, Any] = {
+    "data": [
+        _batch(
+            filename="ESZ25.parquet",
+            file_format="parquet",
+            origin="demo",
+            batch_id="b-parq",
+        ),
+        _batch(
+            filename="SR3G26.csv",
+            file_format="csv",
+            origin="demo",
+            batch_id="b-csv",
+        ),
+    ],
+    "total": 2,
+}
+
+#: Same store after labelled defects were planted. The injected copy is also a CSV; that
+#: mark is the synthetic disclosure, not the conversion mark.
+SYNTHETIC_BATCHES: dict[str, Any] = {
+    "data": [
+        *BATCHES["data"],
+        _batch(
+            filename="SR3G26.injected.csv",
+            file_format="csv",
+            origin="injected",
+            batch_id="b-inj",
+        ),
+    ],
+    "total": 3,
+}
+
+EMPTY_BATCHES: dict[str, Any] = {"data": [], "total": 0}
 
 CONTRACTS = {
     "data": [

@@ -12,7 +12,13 @@ So every disclosure test here runs the page **twice** and asserts on the second 
 from __future__ import annotations
 
 import pytest
-from ui_helpers import EMPTY_HEALTH, HEALTH, SYNTHETIC_HEALTH, FakeClient
+from ui_helpers import (
+    EMPTY_HEALTH,
+    HEALTH,
+    SYNTHETIC_BATCHES,
+    SYNTHETIC_HEALTH,
+    FakeClient,
+)
 
 
 def _no_exception(test):
@@ -156,6 +162,7 @@ def test_pressing_nothing_fetches_nothing(app, monkeypatch):
 
     Guarded by making the network raise: `describe_corpus` is allowed, a request is not.
     """
+
     def refuse(*args, **kwargs):  # pragma: no cover - never called if the panel behaves
         raise AssertionError("the demo panel fetched without being asked")
 
@@ -163,3 +170,87 @@ def test_pressing_nothing_fetches_nothing(app, monkeypatch):
     client = FakeClient(health=EMPTY_HEALTH)
     _no_exception(app("Risk", client=client))
     assert not [name for name, _ in client.calls if name == "create_batch"]
+
+
+# -------------------------------------------------------------- ingest chrome (slice 8)
+
+
+def test_the_uploader_is_absent_from_every_demo_state(app):
+    for health in (EMPTY_HEALTH, HEALTH, SYNTHETIC_HEALTH):
+        test = _no_exception(app("Risk", client=FakeClient(health=health)))
+        assert not test.file_uploader
+        assert not test.sidebar.file_uploader
+        labels = [b.label for b in test.button]
+        assert "Confirm upload" not in labels
+        assert "Upload files" not in labels
+
+
+def test_the_conversion_mark_keys_off_demo_plus_csv_not_any_csv():
+    """Both sides of the filter: Parquet demo is unmarked, injected CSV is unmarked."""
+    from loupe.ui.demo import is_demo_csv_conversion
+
+    assert is_demo_csv_conversion(
+        {"filename": "SR3G26.csv", "file_format": "csv", "origin": "demo"}
+    )
+    assert is_demo_csv_conversion(
+        {"filename": "SR3G26.csv", "file_format": None, "origin": "demo"}
+    ), "suffix still counts when file_format is absent"
+    assert not is_demo_csv_conversion(
+        {"filename": "ESZ25.parquet", "file_format": "parquet", "origin": "demo"}
+    )
+    assert not is_demo_csv_conversion(
+        {"filename": "SR3G26.injected.csv", "file_format": "csv", "origin": "injected"}
+    )
+    assert not is_demo_csv_conversion(
+        {"filename": "user.csv", "file_format": "csv", "origin": "upload"}
+    )
+
+
+def test_a_loaded_store_lists_ingested_files_and_marks_demo_csv(app):
+    """After a stubbed load the list is present; converted rows are distinct from Parquet."""
+    client = FakeClient()
+    test = _no_exception(app("Risk", client=client))
+    assert any(name == "batches" for name, _ in client.calls), (
+        "the list is GET /v1/ingest/batches, not a directory walk"
+    )
+
+    markdown = [m.value for m in test.markdown]
+    parquet = [m for m in markdown if "ESZ25.parquet" in m]
+    converted = [m for m in markdown if "SR3G26.csv" in m and "injected" not in m]
+    assert parquet, "the Parquet row is listed"
+    assert converted, "the converted CSV row is listed"
+    assert any("Converted from Parquet" in m for m in converted)
+    assert not any("Converted from Parquet" in m for m in parquet)
+
+    labels = [e.label for e in test.expander]
+    assert any("ingested files" in label.lower() for label in labels)
+
+
+def test_injected_csv_does_not_get_the_conversion_mark(app):
+    """The synthetic/injected mark is still not this mark."""
+    client = FakeClient(health=SYNTHETIC_HEALTH, batches=SYNTHETIC_BATCHES)
+    test = _no_exception(app("Risk", client=client))
+
+    markdown = [m.value for m in test.markdown]
+    injected = [m for m in markdown if "SR3G26.injected.csv" in m]
+    demo_csv = [m for m in markdown if "SR3G26.csv" in m and "injected" not in m]
+    assert injected, "the planted file is still inventory"
+    assert not any("Converted from Parquet" in m for m in injected)
+    assert any("Converted from Parquet" in m for m in demo_csv)
+
+    banner = " ".join(w.value for w in test.warning)
+    assert "planted defects" in banner
+    assert "⚠️" in banner or "synthetic" in banner.lower()
+
+
+def test_an_empty_store_does_not_list_ingested_files(app):
+    client = FakeClient(health=EMPTY_HEALTH)
+    test = _no_exception(app("Risk", client=client))
+    assert not any(name == "batches" for name, _ in client.calls)
+    markdown = " ".join(m.value for m in test.markdown)
+    assert "ESZ25.parquet" not in markdown
+    assert not any("ingested files" in e.label.lower() for e in test.expander)
+    said = _text(test).lower()
+    assert "upload any csv" not in said
+    assert "from the sidebar instead" not in said
+

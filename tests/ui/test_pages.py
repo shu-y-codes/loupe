@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 from ui_helpers import (
+    BATCHES,
     CHANGELOG,
     CONTRACTS,
     FINDINGS,
@@ -19,6 +20,7 @@ from ui_helpers import (
     RECONCILED,
     SUGGESTIONS,
     SUMMARY,
+    SYNTHETIC_BATCHES,
     SYNTHETIC_HEALTH,
     VWAP_REFUSED,
     FakeClient,
@@ -50,6 +52,10 @@ def test_every_stub_matches_the_response_model_it_stands_in_for():
         ("SLICE", SUMMARY["slices"][0], models.SliceScore),
         ("HEALTH", HEALTH, models.Health),
         ("SYNTHETIC_HEALTH", SYNTHETIC_HEALTH, models.Health),
+        ("BATCHES", BATCHES, models.BatchesResponse),
+        ("BATCH", BATCHES["data"][0], models.BatchSummary),
+        ("SYNTHETIC_BATCHES", SYNTHETIC_BATCHES, models.BatchesResponse),
+        ("INJECTED_BATCH", SYNTHETIC_BATCHES["data"][2], models.BatchSummary),
         ("CORROBORATION", FINDINGS[0]["corroboration"], models.Corroboration),
         ("PATTERN", PATTERNS["data"][0], models.Pattern),
         ("PATTERNS", PATTERNS, models.PatternsResponse),
@@ -82,11 +88,13 @@ def test_the_page_renders_for_every_persona(app):
         _no_exception(app(persona))
 
 
-def test_the_sidebar_holds_persona_dates_and_upload(app):
+def test_the_sidebar_holds_persona_and_dates_and_no_uploader(app):
     test = _no_exception(app("Risk"))
     assert [r.label for r in test.sidebar.radio] == ["Persona"]
     assert set(test.sidebar.radio[0].options) == {"Risk", "Trader", "Analyst"}
     assert [d.label for d in test.sidebar.date_input] == ["From", "To"]
+    assert not test.file_uploader
+    assert not test.sidebar.file_uploader
 
 
 # --------------------------------------------------------- persona switching
@@ -516,7 +524,12 @@ def test_an_api_that_is_not_running_is_reported_rather_than_traced(app):
     assert any("No answer" in e.value for e in test.error)
 
 
-def test_an_empty_store_invites_an_upload(app):
-    client = FakeClient(summary={**SUMMARY, "contracts": [], "slices": []})
+def test_an_empty_store_invites_demo_load_not_upload(app):
+    from ui_helpers import EMPTY_HEALTH
+
+    client = FakeClient(health=EMPTY_HEALTH, summary={**SUMMARY, "contracts": [], "slices": []})
     test = _no_exception(app("Risk", client=client))
-    assert any("Upload" in i.value for i in test.info)
+    assert "Load demo data" in [b.label for b in test.button]
+    assert any("Load demo data" in i.value for i in test.info)
+    assert not any("Upload" in i.value for i in test.info)
+    assert not test.file_uploader
