@@ -10,7 +10,7 @@ Written 2026-09-08 after click-testing CLG26 against the demo load.
 [10-reviewer-chrome.md](10-reviewer-chrome.md) stays **done**. Do not reopen it.
 [12-readme-walkthrough.md](12-readme-walkthrough.md) is blocked on this slice and must
 describe the grain-honest page, not today's mixed-frequency claims.
-[13-compare-page.md](13-compare-page.md) also waits on this slice for honest Minute/Daily
+[13-overview-page.md](13-overview-page.md) also waits on this slice for honest Minute/Daily
 rows; it does not change Review’s main column.
 
 ## Why this slice exists
