@@ -4,7 +4,7 @@
 family control, help on the count, no score line on the page, zoomable OHLCV + volume, a
 chart legend, and a grouped sidebar (ingested files by grain; planted defects by family).
 
-**Status.** done — 2026-09-07
+**Status.** done — 2026-09-07; **follow-on pending** (click-test polish below)
 
 Written 2026-09-07, after a demo-load click-test of [09-reviewer-ui.md](09-reviewer-ui.md).
 09 stays **done**. Do not reopen it except the pointer in that file. Do not reopen
@@ -12,7 +12,8 @@ Written 2026-09-07, after a demo-load click-test of [09-reviewer-ui.md](09-revie
 pointed at.
 
 [11-readme-walkthrough.md](11-readme-walkthrough.md) stays pending and must describe **this**
-chrome. Write 11 after this slice, not against the score caption or the extra Check control.
+chrome **after the follow-on**. Write 11 after the follow-on, not against the score caption
+or the extra Check control.
 
 ## The change
 
@@ -144,3 +145,41 @@ Done-when 1–3 (specs) before any widget. 4 and 5 together. Do not start
 New rules, score formula, overlay payloads, apply/override, auth, file uploader, zoom on
 VWAP or the picture ribbon, a fifth family card, implementing from `_notes/`, starting the
 README walkthrough against the score caption.
+
+---
+
+## Follow-on — click-test polish (pending)
+
+Notes from a browser pass of the shipped chrome (`_notes/dev/markups.txt`; scrapbook only
+until promoted). Tiny UI polish. No new route, no overlay payload change, no score formula.
+
+**Spec change: yes, light — `specs/loupe-ui-design.md` only.** Demo lessons that change
+product copy or chart chrome patch the UI spec the same day
+(`.cursor/rules/docs-authority.mdc`). Do **not** touch solution brief §2/§12 unless a
+sentence would still teach the wrong sidebar disclosure. No API / DQ / analytics spec.
+
+Promote into the UI spec before widgets:
+
+| Note | Spec touch | Why |
+|---|---|---|
+| Count slightly larger than body; detail line at regular size | Family cards: type hierarchy (count leads; detail is body) | KPI chrome |
+| OHLCV hover: date, open, high, low, close, status (`clean` or defect type) | Daily OHLCV / Tooltips: marker and candle hover fields; status from selected-family marks | Tooltip law |
+| Absent: annotate on the chart (canvas-style label), not only a colour swatch in the legend | Daily OHLCV already says “dashed column **labelled** absent” — make the on-chart label explicit; legend may keep a colour entry | Overlay chrome; Vega legends do not show stroke-dash well |
+| Volume hover must not show raw `fill` | Volume pane: tooltip is date + volume (+ defect if any), not the colour field name | Tooltip law |
+| Sidebar synthetic warning: drop “findings below were planted”; list planted file(s) grouped by strip family | Synthetic disclosure: the **sidebar** warning carries the grouped list (reuse the same family map / filename nest); main-column expander may stay or thin | Product copy |
+
+### Done when (follow-on)
+
+1. **`specs/loupe-ui-design.md`** — one-line revision; Family cards type hierarchy; OHLCV
+   hover + on-chart absent label; volume tooltip; sidebar synthetic warning wording.
+2. **`ui`:** card typography; Altair tooltips + absent `mark_text` (or equivalent);
+   volume tooltip without `fill`; sidebar warning lists planted file under Gaps /
+   Duplicates / Invalid / Other (off the strip). Reuse `group_planted_by_family`.
+3. **Tests.** Chart helper: status tooltip fields / absent label present in the Vega
+   spec; volume tooltip excludes `fill`. AppTest or demo helper: sidebar synthetic copy
+   does not say “findings below”; grouped family labels appear when a stubbed manifest
+   is present.
+
+When the follow-on lands: flip this section to **done** with the date; set the plan
+**Status** back to plain **done**; update `plans/README.md` if it still says follow-on
+pending. Then start [11-readme-walkthrough.md](11-readme-walkthrough.md).
