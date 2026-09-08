@@ -33,6 +33,20 @@ The first API start creates `data/loupe.duckdb`, applies the schema, and seeds r
 data and the quality-rule catalogue. Set `LOUPE_DB` to use another store. Set
 `LOUPE_API_URL` to point the UI at another API base URL.
 
+To permanently delete all local Loupe data and start with a fresh database, stop the API
+and UI, then run from the repository root:
+
+```bash
+uv run python -c "from pathlib import Path; from loupe.data import database_path; p = database_path(); files = () if str(p) == ':memory:' else (p, Path(str(p) + '.wal')); [f.unlink(missing_ok=True) for f in files]"
+```
+
+This command works in Bash, PowerShell, and Command Prompt, respects `LOUPE_DB`, and removes
+the write-ahead log if one exists. The next API start recreates and seeds the database.
+
+## Primers and Worked Examples
+* [`docs/metrics-primer.md`](docs/metrics-primer.md) - scroll-through of Loupe and explanation of metrics as you see them **(Recommended)**
+* [`docs/how-loupe-works.md`](docs/how-loupe-works.md) - detailed end-to-end code map 
+
 ## Walkthrough
 
 1. Open **Overview**, the default landing page.

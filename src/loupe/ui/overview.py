@@ -143,7 +143,8 @@ def queue_open(contract_id: str, frequency: str) -> None:
 def render_overview_header() -> None:
     """Main-column title, before the synthetic notice — same slot as Review's header."""
     st.title("Loupe")
-    st.caption("Overview · loaded contracts × grain · full held window")
+    st.caption("Overview · loaded contracts by grain · full held window")
+    st.caption("Select a row to open it in Review")
 
 
 def render_overview(rows: list[OverviewRow]) -> None:
