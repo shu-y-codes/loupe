@@ -36,7 +36,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 10 | reviewer chrome (click-test) | **done** | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
 | 11 | grain-honest review | pending | [11-grain-honest-review.md](11-grain-honest-review.md) |
 | 12 | README walkthrough | pending | [12-readme-walkthrough.md](12-readme-walkthrough.md) |
-| 13 | overview page | pending | [13-overview-page.md](13-overview-page.md) |
+| 13 | overview page | **done** | [13-overview-page.md](13-overview-page.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8

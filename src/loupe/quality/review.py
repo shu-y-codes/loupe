@@ -1,6 +1,6 @@
 """Reviewer-strip cards, overlay marks, picture payloads and aggregated issues.
 
-The one-page UI (`specs/loupe-ui-design.md`) must not group `findings[]` in a widget.
+The Review UI (`specs/loupe-ui-design.md`) must not group `findings[]` in a widget.
 This module composes the envelopes `GET /v1/dq/checks` returns. Overlay marks are keyed
 on the selected family, not `max_severity`: a minute `CMP.MISSING_TIMESTAMP` can mark a
 derived daily session, and `CMP.SESSION_MISSING` can mark a day that has no `mart.bar_daily`
@@ -54,7 +54,7 @@ _RIBBON_SLOTS = 20
 
 @dataclass(frozen=True)
 class ReviewPage:
-    """The one-page envelope, before HTTP shaping."""
+    """The Review envelope, before HTTP shaping."""
 
     contract_id: str
     score: float | None

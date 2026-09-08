@@ -1,8 +1,9 @@
-"""The Loupe page. Run it with `streamlit run src/loupe/ui/app.py`.
+"""The Loupe UI. Run it with `streamlit run src/loupe/ui/app.py`.
 
-Composed of functions that take data and emit elements, deliberately: `AppTest` can only
-assert over a page shaped that way, and a script that interleaved `st.*` calls with fetching
-would be untestable without a live API (`plans/05-ui.md` done-when 4).
+Two destinations (Review, Overview). Composed of functions that take data and emit
+elements, deliberately: `AppTest` can only assert over a page shaped that way, and a
+script that interleaved `st.*` calls with fetching would be untestable without a live
+API (`plans/05-ui.md` done-when 4).
 
 The whole script is one `main()` so the module can be imported without drawing anything.
 """
@@ -15,9 +16,10 @@ import streamlit as st
 
 # Absolute, not relative: `streamlit run` executes this file as `__main__` rather than as a
 # module of the package, so a relative import fails at launch as well as under test.
-from loupe.ui.chrome import render_header, render_sidebar
+from loupe.ui.chrome import render_destination, render_header, render_sidebar
 from loupe.ui.client import ApiProblem, ApiUnavailable, LoupeClient
 from loupe.ui.demo import render_demo, render_synthetic_notice
+from loupe.ui.overview import cached_rows, render_overview, render_overview_header
 from loupe.ui.review import render_review
 from loupe.ui.runtime import get_client
 
@@ -28,11 +30,7 @@ def contract_ids(client: LoupeClient) -> list[str]:
         body = client.contracts()
     except (ApiProblem, ApiUnavailable):
         return []
-    return [
-        row["contract_id"]
-        for row in body.get("data", [])
-        if row.get("contract_id")
-    ]
+    return [row["contract_id"] for row in body.get("data", []) if row.get("contract_id")]
 
 
 def contract_catalogue(client: LoupeClient) -> list[dict[str, Any]]:
@@ -108,9 +106,7 @@ def load_checks(
         return None
 
 
-def load_bars(
-    client: LoupeClient, contract: str, start, end, frequency: str
-) -> dict[str, Any]:
+def load_bars(client: LoupeClient, contract: str, start, end, frequency: str) -> dict[str, Any]:
     try:
         return client.bars_daily(
             contract=contract,
@@ -127,9 +123,7 @@ def load_bars(
         return {"data": []}
 
 
-def load_vwap(
-    client: LoupeClient, contract: str, start, end
-) -> dict[str, Any] | ApiProblem | None:
+def load_vwap(client: LoupeClient, contract: str, start, end) -> dict[str, Any] | ApiProblem | None:
     try:
         return client.vwap(contract=contract, start=start, end=end)
     except ApiProblem as problem:
@@ -158,10 +152,14 @@ def main() -> None:
         for row in contract_rows
         if row.get("contract_id")
     }
-    state = render_sidebar(contracts, frequencies)
-    # Demo ingest is the only UI path into the store; the ingested-file list sits with it.
-    render_demo(client, health)
-    render_header(state)
+    destination = render_destination()
+    if destination == "Review":
+        state = render_sidebar(contracts, frequencies)
+        render_demo(client, health)
+        render_header(state)
+    else:
+        render_demo(client, health)
+        render_overview_header()
 
     if not store_is_ready(health):
         return
@@ -170,10 +168,13 @@ def main() -> None:
     # whether the data behind it was planted (`plans/07-demo-corpus.md` done-when 5).
     render_synthetic_notice(health)
 
-    if not state.contract:
-        st.info(
-            "No contracts loaded yet. Load demo data from the sidebar to see quality for it."
-        )
+    if destination == "Overview":
+        rows = cached_rows(client, health, contract_rows) if contract_rows else []
+        render_overview(rows)
+        return
+
+    if not state or not state.contract:
+        st.info("No contracts loaded yet. Load demo data from the sidebar to see quality for it.")
         return
     if not state.frequency:
         st.warning("The selected contract does not report a held quality grain.")
@@ -181,15 +182,11 @@ def main() -> None:
 
     st.session_state.setdefault("family", "gaps")
     family = st.session_state.get("family") or "gaps"
-    checks = load_checks(
-        client, state.contract, state.start, state.end, family, state.frequency
-    )
+    checks = load_checks(client, state.contract, state.start, state.end, family, state.frequency)
     if checks is None:
         return
 
-    bars = load_bars(
-        client, state.contract, state.start, state.end, state.frequency
-    )
+    bars = load_bars(client, state.contract, state.start, state.end, state.frequency)
     vwap = load_vwap(client, state.contract, state.start, state.end)
     render_review(
         checks,

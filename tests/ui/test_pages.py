@@ -77,12 +77,17 @@ def _no_exception(test):
 
 
 def _labels(test) -> list[str]:
-    return [b.label for b in test.button if b.label in {
-        "Gaps",
-        "Duplicates",
-        "Invalid values",
-        "Recurring patterns",
-    }]
+    return [
+        b.label
+        for b in test.button
+        if b.label
+        in {
+            "Gaps",
+            "Duplicates",
+            "Invalid values",
+            "Recurring patterns",
+        }
+    ]
 
 
 # ----------------------------------------------------------------- chrome
@@ -90,6 +95,13 @@ def _labels(test) -> list[str]:
 
 def test_the_page_renders(app):
     _no_exception(app())
+
+
+def test_review_nav_is_present_and_not_a_persona_radio(app):
+    test = _no_exception(app())
+    assert test.sidebar.segmented_control(key="destination_display").value == "Review"
+    assert not test.sidebar.radio
+    assert not test.radio
 
 
 def test_the_sidebar_holds_contract_and_dates_and_no_persona_or_uploader(app):
@@ -168,8 +180,9 @@ def test_four_family_labels_are_visible_after_a_stubbed_load(app):
 
 def test_cards_are_the_family_control_not_a_check_row(app):
     test = _no_exception(app())
-    assert not test.segmented_control
-    assert "Check" not in [getattr(c, "label", "") for c in test.segmented_control]
+    labels = [getattr(control, "label", "") or "" for control in test.segmented_control]
+    assert "Check" not in labels
+    assert test.sidebar.segmented_control(key="destination_display").value == "Review"
 
 
 def test_the_page_does_not_draw_a_score_caption(app):
@@ -227,7 +240,8 @@ def test_clicking_a_card_changes_the_overlay_family(app):
     """The cells are the selector. A second Check control would fail this click."""
     client = FakeClient()
     test = _no_exception(app(client=client))
-    assert not test.segmented_control
+    labels = [getattr(control, "label", "") or "" for control in test.segmented_control]
+    assert "Check" not in labels
     card = next(b for b in test.button if b.label == "Invalid values")
     after = _no_exception(card.click().run())
     assert after.session_state["family"] == "invalid"
@@ -267,9 +281,7 @@ def test_no_apply_or_override_control_exists_in_the_tree(app):
     labels += [s.label.lower() for s in test.selectbox]
     labels += [s.label.lower() for s in test.sidebar.selectbox]
     forbidden = ("apply", "override", "dismiss", "accept", "resolve", "edit")
-    assert not [
-        label for label in labels if any(word in label for word in forbidden)
-    ], labels
+    assert not [label for label in labels if any(word in label for word in forbidden)], labels
 
 
 # -------------------------------------------------------- capability refusal

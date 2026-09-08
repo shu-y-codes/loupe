@@ -1,8 +1,8 @@
-"""Shared chrome: contract and trade dates. One page, no persona radio.
+"""Shared chrome: page switch, contract and trade dates.
 
 The sidebar is the whole of the page's input surface (`specs/loupe-ui-design.md` Sidebar).
 Demo ingest and the ingested-file list live in `demo.py`, next to the button that produces
-them. There is no file uploader.
+them. There is no file uploader. Review | Overview is not a persona selector.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import date
 
 import streamlit as st
+
+PAGES = ("Review", "Overview")
 
 
 @dataclass(frozen=True)
@@ -22,13 +24,44 @@ class SidebarState:
     end: date | None
 
 
+def apply_pending_open() -> None:
+    """Overview click-through: land on Review with that contract and Quality grain."""
+    pending = st.session_state.pop("overview_open", None)
+    if not pending:
+        return
+    contract_id, frequency = pending
+    st.session_state["destination"] = "Review"
+    st.session_state["destination_display"] = "Review"
+    st.session_state["contract"] = contract_id
+    st.session_state["quality_grain"] = frequency
+    st.session_state["quality_grain_display"] = str(frequency).title()
+
+
+def render_destination() -> str:
+    """Review | Overview under the Loupe title. Default Review."""
+    apply_pending_open()
+    st.sidebar.title("Loupe")
+    current = st.session_state.get("destination") or "Review"
+    if current not in PAGES:
+        current = "Review"
+        st.session_state["destination"] = current
+    if "destination_display" not in st.session_state:
+        st.session_state["destination_display"] = current
+    selected = st.sidebar.segmented_control(
+        "Page",
+        list(PAGES),
+        key="destination_display",
+    )
+    destination = str(selected or "Review")
+    st.session_state["destination"] = destination
+    return destination
+
+
 def render_sidebar(
     contracts: list[str],
     frequencies_by_contract: dict[str, list[str]] | None = None,
 ) -> SidebarState:
     """Contract picker and trade dates. Demo ingest sits in `render_demo`, under this."""
-    st.sidebar.title("Loupe")
-
     contract: str | None = None
     if contracts:
         current = st.session_state.get("contract")

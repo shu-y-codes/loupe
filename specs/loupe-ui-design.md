@@ -1,15 +1,17 @@
 # Loupe UI design
 
-Revised 2026-09-08: grain-honest review — explicit Quality grain, source-aligned evidence,
-selected-family issues, pattern exposure chart, independent VWAP zoom and scope-keyed chart
-identity. Earlier the same day: click-test polish — card count/detail type hierarchy; OHLCV hover
-(date, OHLC, status); on-chart **absent** label; volume tooltip without colour-field
-noise; sidebar synthetic warning lists planted file(s) by strip family. Same day prior:
-reviewer chrome — cards *are* the family control (no Check row), no score line, OHLCV
-legend + shared-x zoom, ingested files grouped by contract coverage, planted defects
-grouped by strip family. Same day: one reviewer page — four family cards, Daily OHLCV
-then 15-minute VWAP with selected-family overlays, picture of the selected family below
-VWAP. No persona selector. Sidebar ingest is still **Load demo data**.
+Revised 2026-09-08: two pages — **Review** (one contract, four cards and two charts) and
+**Overview** (corpus family-tile table). Sidebar nav is Review | Overview; default Review.
+Review’s main-column order is unchanged. Earlier the same day: grain-honest review — explicit
+Quality grain, source-aligned evidence, selected-family issues, pattern exposure chart,
+independent VWAP zoom and scope-keyed chart identity. Same day: click-test polish — card
+count/detail type hierarchy; OHLCV hover (date, OHLC, status); on-chart **absent** label;
+volume tooltip without colour-field noise; sidebar synthetic warning lists planted file(s)
+by strip family. Same day prior: reviewer chrome — cards *are* the family control (no Check
+row), no score line, OHLCV legend + shared-x zoom, ingested files grouped by contract
+coverage, planted defects grouped by strip family. Same day: Review — four family cards,
+Daily OHLCV then 15-minute VWAP with selected-family overlays, picture of the selected family
+below VWAP. No persona selector. Sidebar ingest is still **Load demo data**.
 
 ## UI philosophy
 
@@ -52,7 +54,7 @@ did, from the changelog. This page does not apply a new rule.”
 
 ## Product questions
 
-The page answers the two questions in `specs/loupe-solution-design.md` §1, for **one
+**Review** answers the two questions in `specs/loupe-solution-design.md` §1, for **one
 selected contract** and the sidebar date window:
 
 | Question | What the page shows |
@@ -60,8 +62,12 @@ selected contract** and the sidebar date window:
 | Can I trust this data? | Four check cards (zero means the check ran). The cards *are* the family selector. Aggregated issues (What / Days / Records / What we did). No score line on this page. |
 | What does this data look like? | Daily OHLCV then rolling 15-minute VWAP, marks for the **selected family** only (legend on OHLCV), picture of that family below VWAP |
 
-Filter by **contract and date**. There is no book-grain inventory and no persona view
-selector. A book strip is an extension.
+**Overview** answers *which loaded contracts fire which cards*, so a reviewer can pick a
+noisy one before opening Review. It is a corpus scan, not a second Review and not a
+persona view.
+
+Filter Review by **contract and date**. There is no book-grain inventory and no persona
+view selector. A book strip is an extension.
 
 **v1 does not override findings or apply suggestions from the UI.** Address lives in
 What we did (changelog) and in picture copy. No apply, override, dismiss, or edit control.
@@ -108,9 +114,28 @@ the bar row does not.
 Widgets do not group `findings[]` to build cards or overlay marks. Those envelopes are
 composed in `quality`.
 
+## Navigation
+
+Two destinations, sidebar only. A segmented control under the Loupe title:
+**Review** | **Overview**. Default **Review**. Not a persona radio, not a main-column tab,
+not a third page. Copy is **Overview**, not Compare — `GET /v1/analytics/compare` already
+means raw vs clean or daily vs derived.
+
+**Shared.** Load demo data, inject, and the ingested-file list stay on both pages so
+Overview is reachable on an empty store without bouncing back.
+
+**Review-only.** Contract picker, Quality grain, trade dates. The only Review chrome this
+nav adds is the switch itself. Main-column order is unchanged.
+
+**Overview-only.** No contract picker, no Quality grain control, no From / To. A grain
+filter on the table (All / Daily / Minute) is a view filter, not Quality grain.
+
+Selecting an Overview row opens Review with that `contract` and `quality_grain` already
+set. Family stays whatever Review last had (default gaps).
+
 ## Sidebar
 
-Trade dates, contract picker, Quality grain, and demo ingest. There is **no file uploader** and **no
+Trade dates, contract picker, Quality grain, and demo ingest — on **Review**. There is **no file uploader** and **no
 persona radio**.
 
 **Contract.** One selected contract for the four cards, both charts, the picture, and the
@@ -164,6 +189,7 @@ missing minute tape. There is no pre-commit sidebar matrix.
 ```
 ┌──────────────────┬──────────────────────────────────────────────────────────┐
 │ LOUPE            │  ESZ25 · 2025-06-02 → 2025-06-30                         │
+│ [Review|Overview]│                                                          │
 │                  │                                                          │
 │ Contract         │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────────────┐  │
 │  [ESZ25     ▾]   │  │ Selected│ │Duplicates│ │ Invalid │ │ Recurring     │  │
@@ -204,6 +230,31 @@ missing minute tape. There is no pre-commit sidebar matrix.
 │                  │  └────────────────┴──────┴─────────┴──────────────────┘  │
 └──────────────────┴──────────────────────────────────────────────────────────┘
 ```
+
+### Overview
+
+```
+┌──────────────────┬──────────────────────────────────────────────────────────┐
+│ LOUPE            │  Overview · loaded contracts × grain · full held window  │
+│ [Review|Overview]│                                                          │
+│                  │  Contract   Grain   Gaps        Duplicates  Invalid  Patterns
+│ Demo data        │  ESZ25      Minute  5,209 runs  0 records   1 row    74 standing
+│ Inject defects   │  ZNZ25      Minute  8,554 runs  0           4        21
+│ Ingested files   │  SR3H26     Daily   35 runs     0           4        1
+│                  │  …                                                       │
+│ No contract      │  Grain filter: All | Daily | Minute                      │
+│ picker, grain,   │  Select a row → Review with that contract and grain.     │
+│ or dates         │                                                          │
+└──────────────────┴──────────────────────────────────────────────────────────┘
+```
+
+Rows are loaded contract × held grain (a dual-grain contract appears twice). Columns are
+the four family tiles (count, unit, detail) plus Grain. Full held window — empty date
+pickers. HTTP: `GET /v1/contracts`, then `GET /v1/dq/checks?contract=&frequency=` per row.
+The widget does not group `findings[]`. Cache the table for the current store fingerprint
+(records / synthetic batches) so a rerun does not re-hit checks once per contract. Empty
+store: same Load demo data invitation as Review. `checked: false`: say the check has not
+run; do not paint zeros as clean.
 
 ## Main column
 

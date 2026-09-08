@@ -2,7 +2,9 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-08: §12 makes grain/source, selected-family issues, pattern evidence and
+Revised 2026-09-08: two pages — Review (one contract) and Overview (corpus family tiles);
+locked decision 6 keeps no-auth and drops “one reviewer page” as a persona ban. Same day:
+§12 makes grain/source, selected-family issues, pattern evidence and
 chart identity explicit; §17 inserts slice 11 and moves the README walkthrough to 12.
 Revised 2026-09-07: reviewer chrome — cards are the family selector, no score
 caption, OHLCV legend + zoom, grouped sidebar. Same day: one reviewer page — four family
@@ -23,6 +25,7 @@ as binding. Execution sequence: `plans/`.
 | Detail | Document |
 |---|---|
 | Reviewer page (cards, overlay, charts, tooltips) | `specs/loupe-ui-design.md` |
+| Overview page (corpus family tiles) | `specs/loupe-ui-design.md` (Overview) |
 | Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` |
 | Data model / DDL | `specs/data-model.md` |
 | DQ rules and scoring | `specs/dq-rules-and-scoring.md` |
@@ -59,7 +62,9 @@ trading workstation or a data warehouse.
 ## 2. What the page answers
 
 No authentication in v1. RBAC is a documented extension that filters contract scope without
-changing endpoint signatures. The UI is **one reviewer page**, not three views.
+changing endpoint signatures. The UI is **two pages**, not a persona selector: **Review**
+(one contract, four cards and two charts) and **Overview** (loaded contracts × grain,
+family-tile table). Default landing is Review.
 
 | Product question (§1) | What the page shows |
 |---|---|
@@ -116,7 +121,8 @@ These are no longer open. State them in the delivered README.
    not zero or forward-filled.
 5. **Rules are deterministic and data-driven.** AI is a documented narrative extension only;
    raw market data never leaves the process.
-6. **No authentication.** The UI is one reviewer page, not a view selector.
+6. **No authentication.** Two pages, still not a persona selector: **Review** (one contract)
+   and **Overview** (corpus family tiles). Neither page is role-shaped.
 7. **Ingestion is synchronous.** Streamlit has no server push; at sample scale a job table buys
    nothing. Async is an extension if ingest exceeds ~30s; enforce a hard upload size cap.
 8. **Both granularities are accepted; capability follows from input.** Gate on CSV/Parquet only,
@@ -377,9 +383,12 @@ Full contract: `specs/api-contract.md`.
 Wireframes, overlay grammar, and tooltip copy: `specs/loupe-ui-design.md`. Journeys
 (historical, locked): `_notes/founding/loupe-solution-design.md` (App Usage).
 
-**One page.** Sidebar: contract picker, explicit Quality grain for dual-grain contracts
-(Minute default; single-grain is quiet context), trade dates, Load demo data, ingested files grouped
-by contract coverage (Daily + minute / Daily-only / Minute-only). No persona radio. Main
+**Two pages.** Sidebar: Review | Overview switch (default Review). Shared: Load demo data,
+ingested files grouped by contract coverage (Daily + minute / Daily-only / Minute-only). No
+persona radio.
+
+**Review.** Contract picker, explicit Quality grain for dual-grain contracts
+(Minute default; single-grain is quiet context), trade dates. Main
 column, in this order: four family cards (Gaps, Duplicates, Invalid values, Recurring
 patterns) — the cards *are* the family selector, no Check control and no score caption;
 Daily OHLCV then 15-minute VWAP, full width, **selected-grain and selected-family** marks
@@ -387,6 +396,10 @@ Daily OHLCV then 15-minute VWAP, full width, **selected-grain and selected-famil
 volume); picture of the selected family **below** VWAP; selected-family aggregated issues
 (What / Days / Records / What we did). Report-only:
 no apply or override.
+
+**Overview.** Corpus scan: one row per loaded contract × held grain; columns are the four
+family tiles plus Grain; full held window. No contract picker, Quality grain, or dates.
+Selecting a row opens Review on that contract and grain. Chrome: `specs/loupe-ui-design.md`.
 
 Invariants the chrome must keep:
 
@@ -445,7 +458,7 @@ on the count, dataframe column `help`. Overlay marks are a chart legend.
 | Contract | FastAPI `TestClient` against OpenAPI shapes | `tests/api/` |
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
-| UI | One-page assembly (no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| UI | Two-page assembly (Review + Overview, no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
 | Integration | Cold start, the real client against a real server, durability on disk | uvicorn on an ephemeral port over a file-backed store, `tests/integration/` |
 | Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `tests/ui/test_pages.py` |
 
@@ -538,6 +551,10 @@ User                    Streamlit                     FastAPI                   
  │◄─ Cards/charts update ───┤◄── JSON ───────────────────┤                           │
 ```
 
+Overview does not call bars or VWAP. It lists `GET /v1/contracts`, then one
+`GET /v1/dq/checks?contract=&frequency=` per held grain. The widget does not group
+`findings[]`. Selecting a row sets Review's contract and Quality grain.
+
 ---
 
 ## 16. Deliverables checklist
@@ -545,8 +562,9 @@ User                    Streamlit                     FastAPI                   
 - [ ] Working app (venv and/or Docker)  
 - [ ] README: philosophy, architecture, trade-offs, limitations, extensibility, walkthrough  
 - [ ] Architecture overview (this doc + layer diagram in README)  
-- [ ] UI: one reviewer page (four cards *are* the selector, family overlay with legend,
-      zoomable OHLCV + volume, picture below VWAP, no score caption) + Load demo data +
+- [ ] UI: Review (four cards *are* the selector, family overlay with legend,
+      zoomable OHLCV + volume, picture below VWAP, no score caption) + Overview
+      (corpus family tiles, click-through to Review) + Load demo data +
       ingested files grouped by coverage + planted defects grouped by family + named-box
       tooltips on counts
 - [ ] Unit + integration tests; oracle test marked optional if samples absent  
@@ -569,4 +587,5 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 9. Reviewer-facing UI — four family cards, selected-family overlay, picture below VWAP
 10. Reviewer chrome after click-test — cards as the family control, no score line, zoom + legend, grouped sidebar (`plans/10-reviewer-chrome.md`)
 11. Grain-honest review — explicit quality frequency, source-aligned evidence, honest Invalid/pattern pictures, VWAP zoom (`plans/11-grain-honest-review.md`)
-12. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page after slice 11
+12. README walkthrough against real `ESZ25` (or chosen volatile window), describing Review after slice 11 and the Overview switch if slice 13 has shipped
+13. Overview page — corpus family-tile table, Review main column unchanged (`plans/13-overview-page.md`)

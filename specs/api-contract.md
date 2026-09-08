@@ -9,7 +9,8 @@ Analytics semantics: `specs/analytics-semantics.md`. Rule IDs and score fields:
 examples are owned by `specs/sample-corpus.md`.
 
 Revised 2026-09-08: `/dq/checks` gains explicit frequency, selected-family issues and
-source-aligned Invalid/pattern evidence. Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
+source-aligned Invalid/pattern evidence. Same day: the UI is Review + Overview, still not
+persona-aware (§8). Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
 issues for the one-page reviewer UI. The envelope still carries `score` / `scope_signature`;
 the reviewer page does not draw them (`specs/loupe-ui-design.md`). Same day: ingest validate and
 `POST /v1/dq/runs` materialise `mart.bar_daily` before returning (gap from slices 3/4).
@@ -764,10 +765,10 @@ rather than these rows.
 
 ### 6.6 Checks (reviewer strip)
 
-One request for the one-page reviewer UI (`specs/loupe-ui-design.md`). Cards, overlay marks,
-picture payload, and aggregated issues are composed in `quality`. A client that can only
-build the page by grouping `GET /v1/dq/findings` in a widget has missed this route. The
-envelope still carries `score` and `scope_signature`; the reviewer page does not draw them.
+One request for Review (`specs/loupe-ui-design.md`). Cards, overlay marks,
+picture payload, and aggregated issues are composed in `quality`. Overview loops this
+route per contract × grain; it still must not group `GET /v1/dq/findings` in a widget. The
+envelope still carries `score` and `scope_signature`; Review does not draw them.
 
 `contract` is **required** and names one contract. `family` selects the overlay, picture,
 and `issues[]`
@@ -901,8 +902,8 @@ v1 surfaces suggestions as report-only text (exercise: identify and suggest, not
 
 ## 8. Authentication
 
-**None in v1.** The UI is one reviewer page, not a view selector and not an authorisation
-boundary. Nothing in this contract is persona-aware.
+**None in v1.** Two pages (Review and Overview), not a persona selector and not an
+authorisation boundary. Nothing in this contract is persona-aware.
 
 **Extension:** auth dependency at the FastAPI router level, role claim, filter `contract`
 scope per role. **No endpoint signature changes** — the API is resource-shaped, not

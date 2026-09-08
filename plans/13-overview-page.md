@@ -3,8 +3,7 @@
 **Goal.** Add a second Streamlit page that lists loaded contracts against the four family
 tiles, so a reviewer can cull the demo set. **Review’s main column does not change.**
 
-**Status.** pending — blocked on [11-grain-honest-review.md](11-grain-honest-review.md)
-for honest Minute/Daily rows. Spec amendments can land in parallel with 11.
+**Status.** done — 2026-09-08
 
 Written 2026-09-08, after a live-store scan of 40 contracts × grain. Keep
 [09-reviewer-ui.md](09-reviewer-ui.md), [10-reviewer-chrome.md](10-reviewer-chrome.md),
