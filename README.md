@@ -1,151 +1,199 @@
 # Loupe
 
-Lightweight app for **data quality** and **market insights** from historical futures data.
+Loupe is a local, first-scan application for assessing the quality of historical futures
+data and seeing what the usable series looks like.
 
-Stack: Python, Streamlit, FastAPI, DuckDB.
+It combines deterministic data-quality checks with daily OHLCV bars and rolling 15-minute
+VWAP. It is intentionally not a trading workstation, a warehouse, or a live-feed system.
 
-## Design
+Stack: Python 3.12+, Streamlit, FastAPI, and DuckDB.
 
-Committed docs: `specs/` (normative) and `plans/` (execution). `_notes/` is a local
-research scrapbook (gitignored; not in clones). Founding notes are locked historical.
+## Quick start
 
-- **[specs/](specs/)** — living product and calculation specs (normative)
-- **[specs/loupe-solution-design.md](specs/loupe-solution-design.md)** — implementation brief
-- **[specs/loupe-ui-design.md](specs/loupe-ui-design.md)** — reviewer page (four checks, two charts)
-- **[plans/](plans/)** — slice sequence and done-when
-- **[specs/data-model.md](specs/data-model.md)** — DuckDB schema and its invariants
-- **[specs/analytics-semantics.md](specs/analytics-semantics.md)** — trade date, grid, OHLCV, VWAP
-- **[specs/dq-rules-and-scoring.md](specs/dq-rules-and-scoring.md)** — rule catalogue and DQ score
-- **[specs/sample-corpus.md](specs/sample-corpus.md)** — what the sample holds, and the oracle
-
-## Setup
-
-Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Install [uv](https://docs.astral.sh/uv/), then:
 
 ```bash
-uv sync                              # create the venv and install
-git config core.hooksPath .githooks  # ruff + pytest on every commit (matches CI)
-uv run pytest                        # tests that need the corpus skip without it
+uv sync
+```
+
+Start the API and UI in separate terminals:
+
+```bash
+uv run uvicorn loupe.api.app:create_app --factory
+```
+
+```bash
+uv run streamlit run src/loupe/ui/app.py
+```
+
+Open <http://localhost:8501>. The API is at <http://127.0.0.1:8000/v1>, with generated
+OpenAPI documentation at <http://127.0.0.1:8000/v1/docs>.
+
+The first API start creates `data/loupe.duckdb`, applies the schema, and seeds reference
+data and the quality-rule catalogue. Set `LOUPE_DB` to use another store. Set
+`LOUPE_API_URL` to point the UI at another API base URL.
+
+## Walkthrough
+
+1. Open **Overview**, the default landing page.
+2. Select **Load demo data**. Loupe fetches the pinned vendor sample only after this explicit
+   action, converts two selected Parquet files to CSV, ingests both formats, runs quality
+   checks, and builds the marts. The sample is fetched because it has no redistribution
+   licence; it is never committed.
+3. Scan one row per loaded contract and held grain. The four family columns show headline
+   counts for **Gaps**, **Duplicates**, **Invalid values**, and **Recurring patterns**.
+4. Select a row to open **Review** with that contract and quality grain.
+5. For a dual-grain contract such as `ESZ25`, switch **Quality grain** between Minute and
+   Daily. Cards, issues, picture, OHLCV source, and overlays all follow that choice.
+6. Select a family card. The Daily OHLCV chart marks only that family; the issues table and
+   picture describe the same evidence. Zoom the OHLCV and rolling 15-minute VWAP charts
+   independently.
+7. Optionally select **Inject demo defects**. Loupe writes a labelled copy, never changes the
+   vendor file, and discloses synthetic records on every rerun. **Remove demo defects**
+   restores the clean file.
+
+The vendor corpus is close to defect-free. The separate injector makes otherwise unreachable
+checks visible without presenting planted defects as vendor facts.
+
+To fetch the sample without the UI:
+
+```bash
+uv run python tools/fetch_samples.py --csv
+```
+
+Arbitrary CSV and Parquet ingestion remains available through the API. The v1 UI deliberately
+uses the curated demo path rather than hosting a second upload workflow.
+
+## Architecture
+
+```text
+Browser
+  │
+  ▼
+Streamlit UI ── HTTP/JSON ──► FastAPI /v1
+                                 │
+                    ┌────────────┼────────────┐
+                    ▼            ▼            ▼
+                 quality      insights       data
+                    └────────────┼────────────┘
+                                 ▼
+                              DuckDB
+```
+
+The boundaries are functional:
+
+- `data` loads and queries DuckDB.
+- `quality` runs checks, scores, cleaning rules, reconciliation, and pattern detection.
+- `insights` derives bars, VWAP, comparisons, and publish-gate results.
+- `api` exposes typed HTTP envelopes over those services.
+- `ui` is a thin HTTP client. Streamlit callbacks contain no SQL, scoring, or bar math.
+
+FastAPI owns one locked DuckDB connection. That fits the single-user design and protects
+temporary assessment tables from concurrent requests; it is not a multi-user architecture.
+
+## Data and calculation choices
+
+1. **Raw records are immutable.** Cleaning produces a derived view and a replayable
+   changelog; it never edits source rows in place.
+2. **Exchange-local time is authoritative.** UTC is derived at ingest, and the timezone
+   decision is recorded with the batch.
+3. **A day means a per-root trading session, not a calendar date.** The sample includes
+   three session profiles. The common CME-family profile has 1,380 expected minute slots.
+4. **VWAP is a trailing 15-minute time window.** It is partitioned by contract and trade
+   date and never crosses a session. Undefined values remain `NULL`.
+5. **Rules are deterministic and data-driven.** Rule definitions and weights are seeded
+   as rows. AI is limited to a possible future narrative over aggregate statistics.
+6. **The UI has Overview and Review, not role-specific views.** There is no authentication
+   in v1.
+7. **Ingestion is synchronous.** This keeps the local workflow inspectable; asynchronous
+   jobs become worthwhile only above the current sample scale.
+8. **Daily and minute inputs are both accepted.** Capability follows the supplied grain.
+   Daily-only data gets bars and checks but not a fabricated 15-day substitute for VWAP.
+9. **Fetching and ingest are separate.** Ingest never contacts the network.
+10. **Findings and suggestions are report-only in the UI.** Coded cleaning rules still
+    produce the clean view and changelog; users do not apply or dismiss suggestions in v1.
+
+## Quality semantics
+
+Loupe seeds 38 rules across completeness, validity, consistency, uniqueness, timeliness, and
+cross-frequency reconciliation. The four UI families are a reviewer-facing grouping, not the
+complete catalogue; statistical `OUT.*` rules stay off the strip.
+
+The API computes a 0–100 score as a weighted mean over dimensions in scope. It is a navigation
+tool, not a grade. Every score carries a `scope_signature`, and an undersized scope returns an
+absent score with `insufficient_data`, not zero. Neither UI page currently draws the score.
+
+Reconciliation requires both daily and minute data. A batch-scoped run only assesses that
+batch, so API callers must run corpus-wide `POST /v1/dq/runs` after the companion grain arrives.
+**Load demo data** already does this. In the measured ES sample, open/high/low reconcile
+exactly over 67 coverage-gated sessions, while 18 closes differ because settlement can be
+nearer the last trade than the configured 15:00 print.
+
+## API coverage
+
+| Requirement | Endpoint |
+|---|---|
+| Accept CSV or Parquet | `POST /v1/ingest/preview`, `POST /v1/ingest/batches` |
+| Process Contract/Timestamp/OHLCV | `POST /v1/ingest/batches`, `GET /v1/contracts` |
+| Handle missing, duplicate, malformed rows | `GET /v1/ingest/batches/{id}/rejects`, `GET /v1/dq/findings` |
+| Daily OHLCV bars | `GET /v1/analytics/bars/daily` |
+| Rolling 15-minute VWAP | `GET /v1/analytics/vwap` |
+| Filter by contract and date | Query parameters on analytic and DQ endpoints |
+| Missing timestamps and gaps | `GET /v1/dq/checks?family=gaps`, `GET /v1/dq/findings?rule_id=CMP.MISSING_TIMESTAMP` |
+| Duplicate records | `GET /v1/dq/checks?family=duplicates`, `GET /v1/dq/findings?rule_id=UNQ.*` |
+| Invalid prices or volumes | `GET /v1/dq/checks?family=invalid`, `GET /v1/dq/findings?rule_id=VAL.*` |
+| Statistical outliers | `GET /v1/dq/findings?rule_id=OUT.*` |
+| Recurring patterns | `GET /v1/dq/checks?family=patterns`, `GET /v1/insights/patterns` |
+| Suggest cleansing or validation rules | `GET /v1/insights/suggestions` |
+| Cross-granularity reconciliation | `GET /v1/dq/findings?rule_id=REC.*`, `GET /v1/analytics/compare?compare=frequency` |
+
+## Trade-offs and limitations
+
+- Two processes preserve a real UI/API boundary, at the cost of two startup commands.
+- Streamlit keeps the interface small and testable, but reruns the script on interaction and
+  has no server push.
+- Overview currently requests `/dq/checks` once per contract and grain, cached against the
+  store fingerprint. A bulk endpoint should be added only if measurement shows this loop is
+  too slow.
+- DuckDB makes analytics inspectable and local, but the single locked connection is designed
+  for one user and one writer.
+- A daily-only contract keeps the VWAP panel and says **needs minute bars**.
+- Pattern `field` and `rule` dimensions have no exposure denominator, so lift is undefined.
+- Three suggestion generators remain absent because grouped findings lack per-finding field
+  attribution.
+- The configured settlement mark is seeded only for the default CME profile. Unsupported
+  roots under-report rather than make an unjustified comparison.
+- The sample calendar is measured from the supplied corpus, not a complete holiday service
+  for every venue.
+- Continuous or back-adjusted series, live feeds, multi-user concurrency, and telemetry are
+  outside v1.
+
+## Extending Loupe
+
+- **New rule:** add a catalogue entry, a focused runner, and a fixture; seed it into
+  `dq.dq_rule`.
+- **New vendor layout:** extend ingest column mapping and preview validation.
+- **New root or venue:** seed product, timezone, tick, and session-calendar facts. Do not infer
+  a new venue from the existing CME defaults.
+- **Larger ingest:** introduce a job table and polling when synchronous load exceeds the
+  documented threshold.
+- **Workflow features:** finding override and suggestion apply/dismiss fit behind new API
+  routes without changing immutable raw data.
+- **AI narrative:** operate only on aggregated pattern statistics; raw ticks stay local.
+
+## Development
+
+```bash
+git config core.hooksPath .githooks
+uv run pytest
 uv run ruff check .
 ```
 
-You do not need to fetch data to start — **Load demo data** in the running app does it. To do
-it from a terminal instead:
+Tests requiring the fetched corpus are marked `samples` and skip when it is absent. The suite
+also includes a real-process integration tier, API contract tests, DuckDB rule/query tests,
+and Streamlit `AppTest` coverage. The test map is
+[`docs/how-tests-work.md`](docs/how-tests-work.md).
 
-```bash
-uv run python tools/fetch_samples.py --csv   # ~16 MB of vendor sample data, gitignored
-```
-
-The sample corpus carries **no redistribution licence**, so it is fetched and never committed
-(`specs/sample-corpus.md` §1). Nothing fetches **during ingest** — reading a file touches the
-filesystem and the database and nothing else (locked decision 9). The download happens when a
-person asks for it, by running that script or by pressing that button, and the app says what it
-is about to download and from where before it does.
-
-## Running the app
-
-Two processes: the API serves `/v1`, the UI talks to it over HTTP. Keeping them apart is
-what makes the thin-client boundary real rather than asserted
-(`specs/loupe-solution-design.md` §6).
-
-```bash
-uv run uvicorn loupe.api.app:create_app --factory   # http://127.0.0.1:8000/v1
-uv run streamlit run src/loupe/ui/app.py           # http://localhost:8501
-```
-
-**That is the whole setup.** On a store that does not exist yet, the first start creates it,
-applies the schema, and seeds both the reference data and the rule catalogue — so the two
-commands above take a fresh clone to a page you can upload a file to. Nothing to run in a REPL
-first, and no second factory name to remember: `loupe.api.app:bootstrapped_app` still works and
-is now just an alias.
-
-The store it resolved is printed on the way up, so a mistyped `LOUPE_DB` shows as the wrong path
-rather than as an empty corpus. `GET /v1/health` reports `schema_applied` and `rules_seeded`, and
-the UI reads it before offering you anything.
-
-The UI reads `LOUPE_API_URL` and falls back to `http://127.0.0.1:8000/v1`, so pointing it at
-another host needs no code change:
-
-```bash
-LOUPE_API_URL=http://localhost:9000/v1 uv run streamlit run src/loupe/ui/app.py
-```
-
-`GET /v1/docs` serves the OpenAPI the app generates. On an empty store the page invites an
-upload; the sidebar previews the file, discloses what it cannot support (a daily-only file
-gets bars and quality but no 15-minute VWAP), and only then commits it.
-
-## The demo, in two clicks
-
-**Load demo data** fetches 40 daily files and eight minute files — all six exchanges, all three
-session profiles, both odd tick regimes — and loads them. Two of the eight are converted from
-Parquet to CSV first, so both accepted formats actually run: the earliest file by
-`first_timestamp_ms` and the smallest by `row_count`, picked from the vendor's own manifest
-rather than by name. The whole thing takes about three quarters of a minute — mostly parsing —
-and every finding it produces is real.
-
-**Inject demo defects** is a second, separate click, and the separation is the point. The
-vendor corpus is close to defect-free — 17 of 37 rules fire on it and 20 cannot
-(`specs/sample-corpus.md` §8.1) — so the injector plants nine labelled defects to show six that
-are otherwise unreachable, including a key conflict, an inverted bar and a negative volume. It
-writes a defective *copy*, refuses to touch the vendor file, and records a manifest naming the
-rule each defect should trip.
-
-**While any of it is loaded the app says so, on every screen and every rerun.** A banner names
-how many records are synthetic, the manifest is one expander away, and **Remove demo defects**
-puts the clean file back. A planted defect that a reader could mistake for a vendor one would
-make every number in the app unciteable, which is the one thing this demo may not trade away
-for convenience.
-
-The injector is also available from a terminal:
-
-```bash
-uv run python -m loupe.demo.injection tests/fixtures/injection_base.csv --out /tmp/demo.csv
-```
-
-`tests/demo/` runs the real engine over an injected file and asserts the findings agree with the
-manifest, which is what makes it a test asset rather than a prop.
-
-## Status
-
-Slices 1-6 are done: DuckDB schema, reference seed, upload preview and synchronous ingest;
-the quality engine — 38 rules seeded as rows, default cleaning, and the DQ score; daily bars,
-VWAP and the raw/clean compare; the FastAPI `/v1` surface; the Streamlit reviewer page
-(four checks and two charts — `specs/loupe-ui-design.md`); and cross-frequency reconciliation
-with the pattern and suggestion reports. The README walkthrough follows — see **[plans/](plans/)**.
-
-**Reconciliation needs both grains.** `REC.*` compares vendor daily bars against bars derived
-from the minute tape, so it runs only where a contract holds both — and where it does, the
-score is a weighted mean over six dimensions rather than five. Every score states which
-dimensions were in scope and what it was renormalised by, because the two are not the same
-measurement (`specs/dq-rules-and-scoring.md` §11.3).
-
-```python
-from pathlib import Path
-from loupe.data import apply_schema, connect, load_file, preview_file, seed_reference
-from loupe.quality import RunScope, assess, scoped, seed_quality, worklist
-
-con = connect()                       # data/loupe.duckdb; LOUPE_DB overrides
-apply_schema(con)
-seed_reference(con, manifest=Path("data/samples/files.csv"))
-seed_quality(con)                     # rules and score weights are rows, not code
-
-preview = preview_file(con, "data/samples/data/minute/CME/ES/ESZ25.parquet")
-print(preview.frequency, preview.source_timezone.value, preview.session_boundary)
-print({name: cap.available for name, cap in preview.capabilities.items()})
-
-result = load_file(con, preview.path, preview=preview)
-print(result.status, result.rows_accepted, result.rows_rejected)
-
-run, scores = assess(con, batch_id=result.batch_id)
-print(run.findings_by_rule, run.cleaning, run.refusals)
-for score in scores:
-    print(score.overall, score.scope_signature, score.as_json()["dimensions"])
-    with scoped(con, RunScope(batch_id=result.batch_id)):   # what to fix first
-        for entry in worklist(con, run.run_id, score.contract_id, score.frequency)[:3]:
-            print(entry.rule_id, entry.rank, entry.score_if_resolved)
-```
-
-The score is a 0-100 quality index where higher is better, and it is a **navigation tool
-rather than a grade**: show the per-dimension breakdown first, state the denominator, and
-say which dimensions were in scope (`specs/dq-rules-and-scoring.md` §11.5).
-
+Product and calculation truth lives in [`specs/`](specs/). Execution status lives in
+[`plans/`](plans/). [`docs/how-loupe-works.md`](docs/how-loupe-works.md) is the detailed
+end-to-end code map. `_notes/` is local research and is not normative.

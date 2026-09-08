@@ -6,25 +6,37 @@ actually requests, and where you can extend without rewriting.
 **This is a map, not the spec.** Product and calculation truth live in `specs/`. If this
 document and a spec disagree, the spec wins.
 
+To read the pages as a reviewer — what each number means, with UI mocks —
+see `docs/metrics-primer.md`. How the test folders line up with these layers:
+`docs/how-tests-work.md`.
+
+For one real row-to-chart example, including source rows, daily OHLCV arithmetic,
+rolling VWAP arithmetic, API payloads, and Streamlit mocks, see
+`docs/clg26-data-journey.md`.
+
 | Want the exact… | Read |
 |---|---|
+| One real CLG26 source-to-screen walkthrough | `docs/clg26-data-journey.md` |
+| What Overview and Review numbers mean | `docs/metrics-primer.md` |
+| How `tests/` is layered, and how one test runs | `docs/how-tests-work.md` |
 | Positioning, locked decisions, layers | `specs/loupe-solution-design.md` |
 | HTTP paths and envelopes | `specs/api-contract.md` |
 | Trade date, bars, VWAP | `specs/analytics-semantics.md` |
 | Rule IDs, score, cleaning | `specs/dq-rules-and-scoring.md` |
 | DuckDB tables | `specs/data-model.md` |
-| Reviewer page chrome | `specs/loupe-ui-design.md` |
+| Reviewer chrome (Overview + Review) | `specs/loupe-ui-design.md` |
 
 ---
 
 ## 1. What the app is
 
 Loupe is a **first-scan** tool for *historical* futures data. One local user, two
-processes, one DuckDB file. It answers two questions for one contract and a date window:
+processes, one DuckDB file. The UI has **two destinations**:
 
-1. **Can I trust this data?** — four named checks (gaps, duplicates, invalid values,
-   recurring patterns), plus a table of what the engine did.
-2. **What does it look like?** — daily OHLCV candles, then a rolling 15-minute VWAP.
+| Destination | Question | What you see |
+|---|---|---|
+| **Overview** (default landing) | Which loaded contracts fire which checks? | Table of contract × grain vs four family headlines. Click a row to open Review. |
+| **Review** | For **one** contract, grain, and date window: can I trust this, and what does it look like? | Four named checks (gaps, duplicates, invalid values, recurring patterns), daily OHLCV, rolling 15-minute VWAP, picture, issues table. |
 
 It is not a trading workstation, not a warehouse, and not a live feed. Raw rows are never
 edited in place. Cleaning is a derived view driven by rules.
@@ -56,7 +68,7 @@ flowchart LR
 ```
 
 The UI never runs SQL, never scores a finding, and never aggregates bars. Widgets call
-HTTP. That boundary is load-bearing: it is how the page stays testable, and how a second
+HTTP. That boundary is load-bearing: it is how the pages stay testable, and how a second
 client (curl, a notebook) gets the same answers.
 
 ---
@@ -192,10 +204,11 @@ flowchart TB
     PubBars["published_bars"]
     PubVwap["published_vwap"]
   end
-  subgraph ui [6. Page]
-    Cards[Four family cards]
-    Charts[OHLCV + VWAP]
-    Picture[Picture of the family]
+  subgraph ui [6. UI]
+    Overview[Overview table]
+    Cards[Review: four family cards]
+    Charts[Review: OHLCV + VWAP]
+    Picture[Review: picture + issues]
   end
 
   Fetch --> File
@@ -206,14 +219,17 @@ flowchart TB
   Assess --> Checks
   Build --> PubBars
   Build --> PubVwap
+  Checks --> Overview
   Checks --> Cards
   PubBars --> Charts
   PubVwap --> Charts
   Checks --> Picture
+  Overview -->|"row click: contract + grain"| Cards
 ```
 
 Demo load and a one-file API upload take slightly different quality paths (see §5.3).
-Both end in the same tables, and both are read by the same GET routes.
+Both end in the same tables. Overview and Review both read `GET /v1/dq/checks`; Review
+also reads bars and VWAP.
 
 ---
 
@@ -265,7 +281,8 @@ Decisions that later reprocessing must reproduce are stored on `stage.ingest_bat
 frequency, timezone, timestamp convention, session boundary, column mapping.
 
 The v1 UI does **not** host a preview panel. `POST /v1/ingest/preview` stays for API
-callers. After load, the page discloses gaps in place (VWAP panel stays and says why).
+callers. After load, Review discloses gaps in place (VWAP panel stays and says why).
+Overview does not draw a score to name a missing grain either.
 
 ### 5.2 Load — write immutable rows
 
@@ -399,6 +416,9 @@ normal session as missing is worse than reporting nothing.
 ### 6.2 Rule families (what the engine actually runs)
 
 Prefix is the dimension. ~38 rules are seeded. The reviewer strip only *labels* a subset.
+Cards, overlay, picture and issues are then filtered to the **Quality grain** (`minute` or
+`daily`) the page asked for — so a daily Invalid finding cannot paint a minute-derived
+candle.
 
 | Prefix | Dimension | Examples | On the four cards? |
 |---|---|---|---|
@@ -429,7 +449,7 @@ cleans.
 `what_we_did` on the page is this changelog, aggregated by rule × trade date × action
 (`quality.changelog.changelog`). The client does not re-derive it.
 
-### 6.4 Score (on the wire; the page may not draw it)
+### 6.4 Score (on the wire; neither page draws it)
 
 Per-dimension 0–100; overall = weighted mean over dimensions **in scope**. Default weights:
 completeness 0.30, validity 0.25, consistency 0.20, uniqueness 0.15, timeliness 0.10,
@@ -437,11 +457,10 @@ reconciliation **0.20 when both grains exist**. Denominator is 1.20 or 1.00 afte
 renormalising. Every score carries `scope_signature` so you do not rank a five-dimension
 score against a six-dimension one.
 
-The number always lives on the API (`GET /v1/dq/checks` still carries `score` and
-`scope_signature`). The shipped page currently prints a short caption under the cards from
-that envelope (`ui.runtime.checks_score_caption`). The UI spec’s intended chrome takes that
-line off the page so the four cards stay the whole “can I trust this?” answer — same
-payload either way.
+The number still travels on `GET /v1/dq/checks` and `GET /v1/dq/summary`. Review does
+**not** print it (no score caption, no `scope_signature` line). Daily-only VWAP already
+says “needs minute bars”; that is the missing-grain copy. When some other surface *does*
+show a score, `specs/dq-rules-and-scoring.md` §11.3 still applies.
 
 ### 6.5 Patterns and suggestions
 
@@ -452,7 +471,8 @@ payload either way.
 
 Apply / dismiss are **extensions** (absent routes, not 405). Recurring-patterns **card
 count** is standing patterns, not finding count. `review_checks` calls `find_patterns`
-internally so the UI does not group `findings[]` itself.
+with the same `frequency` as the findings, so the UI does not group `findings[]` itself
+and a Minute row is not mixed with Daily concentrations.
 
 ---
 
@@ -491,7 +511,9 @@ number and must not be tuned to match.
 - First 15 minutes of the session flagged `is_warmup`
 
 Daily-only contracts: `capability_gap` → `CAP.FREQUENCY_UNAVAILABLE`. No fake 15-*day*
-VWAP.
+VWAP. VWAP is **always minute tape**. On Review, if Quality grain is Daily but the
+contract also holds minute records, the line still draws, labelled **Minute tape ·
+context only for Daily quality grain**, with selected-family VWAP marks suppressed.
 
 ### 7.3 Publish gate
 
@@ -546,7 +568,7 @@ no server push; at sample scale a job table buys nothing.
 | Method | Path | Calls | For |
 |---|---|---|---|
 | GET | `/health` | SQL on information_schema + counts | Liveness, schema/rules seeded, synthetic disclosure |
-| GET | `/contracts` | `ref.contract` + coverage from `stage.market_record` | Sidebar picker, date bounds, `frequencies_available` |
+| GET | `/contracts` | `ref.contract` + coverage from `stage.market_record` | Review picker, Quality grain options, Overview rows, ingested-file coverage buckets |
 | GET | `/contracts/{id}` | same, one row | Detail |
 | GET | `/calendar` | `ref.session_calendar` | Expected slots / holidays (API; UI does not call it) |
 
@@ -580,7 +602,7 @@ settlement bars*. Both return daily bars. They are not the same numbers.
 | Method | Path | Calls | For |
 |---|---|---|---|
 | GET | `/dq/summary` | `scoped`, `score_slice`, `contract_rows`, `worst_field` | Book-level score envelope (UI does not use this) |
-| GET | `/dq/checks` | `review_checks` | **The reviewer page envelope** |
+| GET | `/dq/checks` | `review_checks` | **Review + Overview envelope** (cards, overlay, picture, selected-family issues) |
 | GET | `/dq/metrics` | `mart.dq_metric_daily` or findings grouped by rule | Trends |
 | GET | `/dq/findings` | SQL + `corroborate` | Paginated findings + tape qualification of daily claims |
 | GET | `/dq/findings/{id}` | same | One finding |
@@ -592,11 +614,20 @@ settlement bars*. Both return daily bars. They are not the same numbers.
 Absent in v1 (on purpose, not 405): `POST /dq/findings/{id}/review`, `POST/PATCH /dq/rules`.
 
 `GET /dq/checks` is the important one. Cards, overlay booleans, picture payload, and
-issues are composed in `quality.review.review_checks`. A widget that grouped
-`GET /dq/findings` would be doing the quality layer’s job.
+**selected-family** issues are composed in `quality.review.review_checks`. A widget that
+grouped `GET /dq/findings` would be doing the quality layer’s job.
 
-`review_checks` itself calls `latest_run`, findings SQL, `find_patterns`, changelog
-actions, `score_slice`, and overlay/picture helpers.
+`frequency` is `minute` or `daily`. API callers may omit it (finest grain held). Review
+and Overview **always pass it**. Asking for a grain the contract does not hold is **422
+`CAP.FREQUENCY_UNAVAILABLE`**, not an empty card strip. Findings and patterns are
+filtered to that grain before cards, issues, overlay and picture are built. Overlay
+presence uses `mart.bar_daily.source` (`derived` at minute, `vendor` at daily) so a
+vendor-only invalid bar cannot mark a minute-derived candle.
+
+`review_checks` itself calls `latest_run`, grain-filtered findings SQL, `find_patterns`,
+changelog actions, `score_slice`, and overlay/picture helpers (Invalid pictures carry
+`evidence_frequency` / `evidence_source`; pattern pictures are one `(rule_id, dimension)`
+group with findings vs record-exposure shares).
 
 ### 8.5 Insights reports — `api/routes/insights.py`
 
@@ -611,76 +642,112 @@ Apply / dismiss are extensions and are **not registered**.
 
 ## 9. What feeds the UI
 
-One page (`ui/app.py` → `ui/review.py`). Sidebar: contract, trade dates, demo controls
-(`ui/chrome.py`, `ui/demo.py`). Charts in `ui/charts.py` (Altair). HTTP only via
-`LoupeClient`.
+Two destinations in one Streamlit script (`ui/app.py`). Sidebar switch: **Overview | Review**,
+default **Overview** (`ui/chrome.render_destination`). Shared on both: demo ingest
+(`ui/demo.py`). Charts in `ui/charts.py` (Altair). HTTP only via `LoupeClient`.
 
 ```mermaid
-sequenceDiagram
-  participant Page as ui/app.main
-  participant C as LoupeClient
-  participant API as FastAPI
-  participant Q as quality / insights
-
-  Page->>C: health()
-  C->>API: GET /health
-  Page->>C: contracts()
-  C->>API: GET /contracts
-  Note over Page: sidebar: contract + dates; demo panel
-
-  alt store already has records
-    Page->>C: batches()
-    C->>API: GET /ingest/batches
-  else Load demo data
-    Page->>C: create_batch × N, origin=demo, validate=false
-    C->>API: POST /ingest/batches
-    Page->>C: run_rules()
-    C->>API: POST /dq/runs
+flowchart TB
+  subgraph shared [Every rerun]
+    H[GET /health]
+    C[GET /contracts]
+    Demo[Load demo / inject / ingested files]
+  end
+  subgraph overview [Overview]
+    Loop["GET /dq/checks per contract × grain"]
+    Table[Family headlines table]
+  end
+  subgraph review [Review]
+    Side[Contract + Quality grain + dates]
+    Checks["GET /dq/checks?frequency=&family="]
+    Bars["GET /analytics/bars/daily?frequency="]
+    Vwap[GET /analytics/vwap]
   end
 
-  Page->>C: checks(contract, start, end, family)
-  C->>API: GET /dq/checks
-  API->>Q: review_checks
-  Page->>C: bars_daily(..., basis=clean)
-  C->>API: GET /analytics/bars/daily
-  API->>Q: published_bars
-  Page->>C: vwap(...)
-  C->>API: GET /analytics/vwap
-  API->>Q: published_vwap
-  Note over Page: cards, OHLCV, VWAP, picture, issues table
+  H --> Demo
+  C --> overview
+  C --> Side
+  Loop --> Table
+  Table -->|"click: contract + grain"| Side
+  Side --> Checks
+  Side --> Bars
+  Side --> Vwap
 ```
 
-### 9.1 Page load — who calls what
+### 9.1 Overview
+
+Corpus scan so a reviewer can pick a noisy contract before opening Review. **No** contract
+picker, Quality grain control, or date filters. A Grain segmented control (All / Daily /
+Minute) is a *view* filter, not Quality grain.
+
+| UI function | Client method | Endpoint |
+|---|---|---|
+| `cached_rows` | `contracts` then `checks(contract, family=gaps, frequency=)` | `GET /contracts`, then `GET /dq/checks` once per held grain |
+| `render_overview` | — | `st.dataframe`; row click queues Review |
+
+A dual-grain contract appears **twice** (Minute then Daily). Cells are `count unit` only;
+detail stays on Review. Cache key is store fingerprint (`records` / `batches` /
+`synthetic_batches` / contract ids) so a family click on Review does not re-hit 40×
+checks. `checked: false` says the check has not run — zeros are not painted as clean.
+
+Click-through (`overview_open` → `apply_pending_open`) opens Review with that `contract`
+and `quality_grain`. Family stays whatever Review last had (default `gaps`).
+
+### 9.2 Review
+
+Main-column order is load-bearing: **cards, Daily OHLCV, VWAP, picture, issues**. No
+score line. The four cards *are* the family selector (button on each card; no Check row).
+
+**Quality grain** (sidebar): dual-grain contracts get Minute | Daily (default Minute).
+Single-grain contracts show the held grain as a caption. Header and OHLCV subtitle name
+the resolved grain. Minute reads **derived** daily bars; Daily reads **supplied** vendor
+daily bars. Changing family never changes grain.
 
 | UI function | Client method | Endpoint | Domain function |
 |---|---|---|---|
 | `read_health` | `health` | `GET /health` | SQL counts |
-| `contract_ids` | `contracts` | `GET /contracts` | `ref.contract` + coverage |
-| `render_demo` / list | `batches` | `GET /ingest/batches` | `_summary` |
+| `contract_catalogue` | `contracts` | `GET /contracts` | picker + held grains |
+| `render_demo` / list | `batches` (+ contracts for coverage) | `GET /ingest/batches` | `_summary`; grouped Daily + minute / Daily-only / Minute-only |
 | Load demo | `create_batch` | `POST /ingest/batches` | `load_file` (+ `build_bars`; no `assess`) |
 | After demo files | `run_rules` | `POST /dq/runs` | `assess` + `build_bars` |
-| Inject / remove | `create_batch` / `purge_batch` | POST / DELETE ingest | `load_file` / `purge_batch` then `run_rules` |
-| `load_checks` | `checks` | `GET /dq/checks` | `review_checks` |
-| `load_bars` | `bars_daily` | `GET /analytics/bars/daily` | `published_bars` |
-| `load_vwap` | `vwap` | `GET /analytics/vwap` | `published_vwap` |
+| Inject / remove | `create_batch` / `purge_batch` | POST / DELETE ingest | then `run_rules` |
+| `load_checks` | `checks` | `GET /dq/checks` | `review_checks` (grain + family) |
+| `load_bars` | `bars_daily` | `GET /analytics/bars/daily` | `published_bars` (same grain) |
+| `load_vwap` | `vwap` | `GET /analytics/vwap` | `published_vwap` (always minute) |
 
-Family is selected on the page (`st.session_state["family"]`, default `gaps`). Changing it
-re-runs the Streamlit script and hits `/dq/checks?family=` again. Overlay marks and the
-picture come from that envelope. Charts do **not** paint `max_severity`; they join bars to
-overlay booleans by `trade_date`. An absent settlement is a mark with no OHLC — never a
-zero bar.
+Family lives in `st.session_state["family"]`. Changing it re-runs the script and hits
+`/dq/checks?family=` again; zoom is preserved (chart identity does not include family).
+Changing contract, grain, or From / To **resets** zoom via `charts.chart_scope_key`.
+OHLCV and volume share one x (trade date); VWAP has its own (intraday timestamps).
 
-A `CAP.FREQUENCY_UNAVAILABLE` on VWAP is **panel content** (`ApiProblem` caught in
-`load_vwap`), not an empty chart.
+Overlay marks come from the checks envelope. Charts do **not** paint `max_severity`; they
+join bars by `trade_date`. An absent settlement is a dashed column with an on-chart
+**absent** label — never a zero bar. Hover shows date, OHLC, and selected-family
+**status**.
 
-### 9.2 Routes the UI does not call
+A `CAP.FREQUENCY_UNAVAILABLE` on VWAP is **panel content**, not an empty chart. Issues
+heading is **Issues in selected family** — the table matches the card, not every family
+at once.
+
+### 9.3 Demo chrome (both destinations)
+
+Ingested files group by **contract coverage**, not the file’s own frequency. Both files of
+a dual-grain contract sit under **Daily + minute**. CSV with `origin=demo` is marked
+converted from Parquet (format fact, not a defect).
+
+Planted defects (`origin=injected`) group by the same catalogue map as the cards
+(`strip_family`). Recurring patterns is not a planted family. Off-strip injectables land
+in **Other (off the strip)**. The sidebar warning lists planted **filenames** under those
+families; it does not say “findings below were planted.”
+
+### 9.4 Routes the UI does not call
 
 They still exist for notebooks, OpenAPI, and a future chrome:
 
 - `/ingest/preview`, `/analytics/compare`
 - `/dq/summary`, `/dq/metrics`, `/dq/findings`, `/dq/changelog`, `/dq/rules`
-- `/insights/patterns`, `/insights/suggestions` (`LoupeClient.suggestions` exists; the
-  page does not render a suggestions table — What we did is the changelog)
+- `/insights/patterns`, `/insights/suggestions` (`LoupeClient.suggestions` exists; neither
+  page renders a suggestions table — What we did is the changelog)
 - `/calendar`
 
 ---
@@ -715,7 +782,8 @@ flowchart TB
   DB --> Pub
   Checks --> HTTP[JSON envelopes]
   Pub --> HTTP
-  HTTP --> ST[Streamlit widgets]
+  HTTP --> OV[Overview table]
+  HTTP --> RV[Review cards and charts]
 ```
 
 Mental model:
@@ -725,11 +793,14 @@ Mental model:
 2. **Rules** look at those rows (and the calendar) and write findings + cleaning actions.
 3. **Marts** turn clean/raw records into daily bars; VWAP is a SQL window over minute rows.
 4. **HTTP** is a typed facade. One connection, finished results.
-5. **The page** is a projector: picker in, three GETs, charts out.
+5. **Overview** projects every contract × grain onto four family headlines.
+6. **Review** projects one contract × one grain: picker in, three GETs, charts out.
+   Cards, bars, overlay and issues all use that grain.
 
 If a number looks wrong, ask: was it assigned at ingest (timezone / trade date), at the
-rule (finding), at cleaning (excluded from clean), at the bar (positional open/close), or
-at the gate (session withheld)? Those are different layers.
+rule (finding), at cleaning (excluded from clean), at the bar (positional open/close), at
+the **Quality grain** (minute-derived vs vendor daily), or at the gate (session withheld)?
+Those are different layers.
 
 ---
 
@@ -747,6 +818,8 @@ Designed as data or a new function behind an existing seam.
 | RBAC | FastAPI dependency; filter `contract` | **No path changes** — API is resource-shaped |
 | Async ingest | Job table + 202 when a load exceeds ~30s | Streamlit would need polling; size cap until then |
 | AI narrative | Over **aggregated pattern stats only** | Raw ticks never leave the process |
+| Bulk `/dq/checks` | Only if Overview’s per-row loop is too slow for demo | Measure first; the cache is the current answer |
+| Book-grain inventory strip | UI spec names it an extension | Do not fold it into Overview’s table |
 
 ### Hard boundaries (v1 non-goals)
 
@@ -756,6 +829,7 @@ Designed as data or a new function behind an existing seam.
 - Interactive apply / override from the UI
 - SQL, scores, or bar math inside Streamlit callbacks
 - Inventing a 15-day VWAP so a daily-only contract “has a line”
+- Persona views (Risk / Trader / Analyst) — Overview is a corpus scan, not a role
 
 ---
 
@@ -767,6 +841,9 @@ Every locked decision has a cost. The interesting ones:
 |---|---|---|
 | **Two processes, HTTP between UI and API** | Real layer boundary; UI tests stub `LoupeClient`; OpenAPI is evidence | Two commands; 120s client timeout because ingest is sync |
 | **Streamlit** | Fast reviewer UI; `st.status` around demo load | Full script rerun on every click; no push; family change = another `/dq/checks` |
+| **Two destinations, Overview first** | Scan 40 contracts without stuffing a table above Review’s charts | Overview loops `GET /dq/checks` per grain; cache + fingerprint, not a new route |
+| **Explicit Quality grain** | Cards, bars and overlay judge the same tape | Dual-grain contracts need a control; family-dependent auto-source was rejected because cards would jump |
+| **VWAP always minute** | A 15-minute window cannot be faked from daily bars | Daily quality grain still shows the line as context-only, or “needs minute bars” |
 | **FastAPI + Pydantic** | Typed contract, RFC 7807, `TestClient` | Handlers must stay thin or they become a second scorer |
 | **DuckDB, one file** | SQL is inspectable; persist and query are one engine | Single writer; lock around every request; not a warehouse |
 | **DuckDB vs Polars** | Analytics stay reviewable SQL; single-user is *why* one writer is OK | Less of a dataframe pipeline culture |
@@ -778,6 +855,7 @@ Every locked decision has a cost. The interesting ones:
 | **Rules as rows** | Tune severity/params without redeploying runners | A disabled row looks like “the rule found nothing” unless you check the catalogue |
 | **Report-only UI** | Exercise asks to identify and suggest, not mutate | Suggestions can rot relative to the live catalogue |
 | **No preview panel in the UI** | Demo is the ingest path; less chrome | API-only callers still preview; reviewers learn capability *after* load |
+| **No score on Review** | Four cards are the trust answer | `scope_signature` stays on the wire; mixed-scope ranking is an API caller’s problem |
 | **Publish gate in `insights`, not `quality`** | Quality must not know about charts | Two modules must agree on which findings touch a session (`gate.session_quality_sql`) |
 | **Purge leaves some corpus-wide findings** | A session finding may describe two batches | After DELETE you should re-run rules; the API says so rather than guessing |
 
@@ -785,12 +863,14 @@ Every locked decision has a cost. The interesting ones:
 
 ## 13. A compact call graph (ingest → screen)
 
-Useful when debugging “why is this card empty / why is VWAP refused / why is recon missing”.
+Useful when debugging “why is this card empty / why is VWAP refused / why is recon missing /
+why does Overview disagree with Review”.
 
 ```
 Streamlit  ui/app.py:main
   LoupeClient.health                    → GET  /health
   LoupeClient.contracts                 → GET  /contracts
+  render_destination                    → Overview | Review (default Overview)
   LoupeClient.batches                   → GET  /ingest/batches
   LoupeClient.create_batch              → POST /ingest/batches
         preview_file
@@ -804,15 +884,23 @@ Streamlit  ui/app.py:main
         build_bars
   LoupeClient.run_rules                 → POST /dq/runs     (demo, after all files)
         assess (unscoped) → build_bars
-  LoupeClient.checks                    → GET  /dq/checks
+
+  Overview  ui/overview.cached_rows
+    LoupeClient.checks × (contract, frequency)
+                                → GET  /dq/checks?family=gaps&frequency=
+        review_checks (full held window, no dates)
+    render_overview             → table; row click → Review
+
+  Review    ui/review.render_review
+    LoupeClient.checks          → GET  /dq/checks?frequency=&family=
         review_checks
-          latest_run, findings, find_patterns, changelog, score_slice
-          overlay + picture
-  LoupeClient.bars_daily                → GET  /analytics/bars/daily
-        published_bars → read mart.bar_daily + gate
-  LoupeClient.vwap                      → GET  /analytics/vwap
+          latest_run, grain-filtered findings, find_patterns(frequency=)
+          changelog, score_slice, overlay + picture, selected-family issues
+    LoupeClient.bars_daily      → GET  /analytics/bars/daily?frequency=
+        published_bars → mart.bar_daily source derived|vendor + gate
+    LoupeClient.vwap            → GET  /analytics/vwap
         published_vwap → vwap_15m + capability_gap + gate
-  ui/review.render_review + ui/charts   (no SQL)
+    ui/charts                   (no SQL; scope-keyed zoom)
 ```
 
 ---
@@ -825,10 +913,11 @@ src/loupe/
   quality/      catalogue, runner, rules/*, scoring, cleaning, review, patterns, suggestions
   insights/     bars, vwap, compare, gate
   api/          app factory, deps (lock), routes/*, Pydantic models, RFC 7807
-  ui/           app.py, client.py, chrome, demo, review, charts
+  ui/           app.py, client.py, chrome, demo, overview, review, charts
   demo/         fetch, corpus prepare, labelled injection
 ```
 
 Tests follow the same seams: unit fixtures for rules, `TestClient` for HTTP shapes,
-`AppTest` with a stub client for page assembly, and `tests/integration/` with a real
-uvicorn port and a file-backed DuckDB — the only tier that stubs neither side.
+`AppTest` with a stub client for page assembly (including Overview click-through), and
+`tests/integration/` with a real uvicorn port and a file-backed DuckDB — the only tier
+that stubs neither side. The map is `docs/how-tests-work.md`.

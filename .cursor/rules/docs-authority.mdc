@@ -9,10 +9,11 @@ alwaysApply: true
 |---|---|---|
 | `specs/` | Normative product + computation + API + UI | commit |
 | `plans/` | Slice sequence and done-when | commit |
+| `docs/` | Explanatory primers (maps, not law) | commit |
 | `_notes/` | Research scrapbook (non-binding) | ignore |
 | `_notes/founding/` | Locked historical brief | ignore; never edit |
 
-If a spec and a note disagree, **the spec wins**. Do not implement solely from `_notes/`.
+If a spec and a note disagree, **the spec wins**. Do not implement solely from `_notes/`. Primers in `docs/` explain the running app and the test suite; they are not a second spec. If a primer and a spec disagree, **the spec wins** — then patch the primer.
 
 ## Graduate, then build
 
@@ -31,6 +32,7 @@ Amend in place. No `*-v2.md`, no copies into `_notes/founding/` or `plans/archiv
 | Formula, grid, DDL, rule IDs, API shapes, sample claims | The sibling spec that owns it | Research may start in `_notes/`; promote before it is law |
 | Locked decisions (solution brief §3) | Rewrite the numbered item; do not leave two truths | Grep `plans/` and other specs for the old sentence |
 | Sequence / done-when only | `plans/` | Do not shadow-spec |
+| How the running app or tests are wired | the matching `docs/` primer | Keep `specs/` as the pointer for truth |
 
 Conflict after an edit: **intent / v1 boundary → spec**; **how a number is computed or what the sample contains → fix the spec** (notes are not a veto). Demo lessons that change product copy patch the UI spec the same day. Oracle lessons patch the analytics/sample spec, then one sentence in the brief if §3/§8 would still teach the wrong rule.
 
@@ -41,6 +43,11 @@ Post-v1 features: new numbered plan, and a spec subsection marked **extension** 
 - Committed. One index plus one file per slice (not solution vs UI).
 - Done slices stay in place; mark done in the index. Move to `plans/archive/` only when **superseded**.
 - Plans do not restate the design. Pointers only.
+
+## Primers
+
+- `docs/` explains the running app, page numbers, and the test suite. Maps, not law.
+- Patch the matching primer in the same commit when the map would otherwise lie (`.cursor/rules/docs-on-commit.mdc`).
 
 ## Notes
 
