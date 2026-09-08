@@ -6,7 +6,9 @@ rolling 15-minute VWAP, and the MAD method for `OUT.*`. Promoted from research
 §8. Storage: `specs/data-model.md`. Sample and oracle claims cited here are owned by
 `specs/sample-corpus.md`. Rule IDs and severities: `specs/dq-rules-and-scoring.md`.
 
-Revised 2026-09-08: the reviewer passes one explicit frequency/source to checks and bars.
+Revised 2026-09-08: “no SQL in a Streamlit callback” is now “no SQL in the UI client” — the
+UI is a React SPA (`plans/17-react-ui.md`) and the rule was never about a toolkit. Same day:
+the reviewer passes one explicit frequency/source to checks and bars.
 Revised 2026-09-07: the reviewer overlay is not the `max_severity` join (§3.3).
 Revised 2026-09-05: promoted from research; first normative version. Same day: §3.1 defines
 `open_interest` on a derived bar (last reported, never summed) — `mart.bar_daily` carried the
@@ -18,8 +20,8 @@ struct-wrapped, and §3.3's `file` row joins on the finding's timestamp span, be
 
 Validated against DuckDB 1.4.5 with the `icu` extension. Every SQL snippet below was executed
 before being written down. These calculations belong in the `insights` layer (bars, VWAP) and
-the `quality` layer (the expected grid). No SQL from this document appears in a Streamlit
-callback.
+the `quality` layer (the expected grid). No SQL from this document appears in the UI client:
+it speaks HTTP and nothing else, and its charts draw envelopes the API already decided.
 
 **Scope of authority.** This spec owns *how a trade date is assigned, how the expected grid is
 built, how a daily bar is aggregated, how rolling VWAP is windowed, and the MAD formula*. It

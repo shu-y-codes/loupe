@@ -12,12 +12,13 @@ translation in one readable list instead of scattered through `try` blocks.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import duckdb
 from duckdb import CatalogException
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from loupe.data import LoupeDataError, apply_schema, connect, seed_reference
 from loupe.data.connection import database_path
@@ -27,7 +28,7 @@ from loupe.quality.errors import LoupeQualityError
 
 from .deps import Database
 from .errors import ProblemError, problem_response, validation_problem
-from .routes import analytics, dq, ingest, insights, reference
+from .routes import analytics, demo, dq, ingest, insights, reference
 
 API_PREFIX = "/v1"
 
@@ -92,11 +93,51 @@ def create_app(
     app.state.database = Database(con)
 
     for router in (reference.router, ingest.router, analytics.router, dq.router,
-                   insights.router):
+                   insights.router, demo.router):
         app.include_router(router, prefix=API_PREFIX)
 
     _register_error_handlers(app)
+    _mount_web(app)
     return app
+
+
+#: The built SPA. `web/` is the source; `web/dist` is what `npm run build` writes.
+WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
+
+
+def _mount_web(app: FastAPI) -> None:
+    """Serve the built React app when it exists, so production is **one origin**.
+
+    Same origin is the point, not a convenience: the SPA calls `/v1/...` with a relative path,
+    so no CORS policy has to be written, maintained, or accidentally widened. In development
+    the same shape is produced by Vite proxying `/v1` to this server — two processes, one
+    origin as far as the browser is concerned (`specs/api-contract.md` §4.4).
+
+    **Two narrow routes rather than a catch-all, and that is load-bearing.** Mounting
+    `StaticFiles(html=True)` at `/` is the usual SPA recipe and it silently breaks the v1
+    boundary: the mount matches every unrouted path, and because static files answer only GET,
+    a `POST /v1/insights/suggestions/{id}/apply` stops being **404 Not Found** and becomes
+    **405 Method Not Allowed** — which is precisely the answer §6.3 refuses to give, because a
+    405 tells a client the route exists and invites it to keep the button. Extensions are
+    absent, and absence has to read as absence.
+
+    Nothing is lost by being narrow: there is no client-side router here (Overview | Review is
+    page state, not a URL), so no deep link needs an `index.html` fallback.
+
+    Absent `web/dist` this is a no-op. An unbuilt checkout should still serve the API rather
+    than fail to start, and the README's `uvicorn` command is the same either way.
+    """
+    if not WEB_DIST.is_dir():
+        return
+    from fastapi.staticfiles import StaticFiles
+
+    @app.get("/", include_in_schema=False)
+    def _index() -> FileResponse:
+        return FileResponse(WEB_DIST / "index.html")
+
+    assets = WEB_DIST / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
 
 def bootstrapped_app() -> FastAPI:

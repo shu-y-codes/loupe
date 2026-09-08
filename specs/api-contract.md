@@ -8,7 +8,10 @@ Analytics semantics: `specs/analytics-semantics.md`. Rule IDs and score fields:
 `specs/dq-rules-and-scoring.md`. Storage: `specs/data-model.md`. Sample numbers cited in
 examples are owned by `specs/sample-corpus.md`.
 
-Revised 2026-09-08: `/dq/checks` gains explicit frequency, selected-family issues and
+Revised 2026-09-08: §4.5 adds the **demo** routes — `POST /v1/demo/load|inject|remove`,
+`GET /v1/demo/corpus` and `GET /v1/demo/injection` — because the UI is now a browser SPA
+and cannot reach the filesystem or Hugging Face; §4.4's synchronous rationale is restated
+without naming a UI toolkit. Same day: `/dq/checks` gains explicit frequency, selected-family issues and
 source-aligned Invalid/pattern evidence. Same day: the UI is Review + Overview, still not
 persona-aware (§8). Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
 issues for the one-page reviewer UI. The envelope still carries `score` / `scope_signature`;
@@ -33,6 +36,7 @@ layers those sibling specs already define.
 |---|---|---|
 | Reference | `GET /health`, `/contracts`, `/calendar` | — |
 | Ingest | preview, batches (201 / `file_hash` 409), list, detail, rejects, soft-delete purge | Async job table + 202 (only if ingest exceeds ~30s) |
+| Demo | `POST /demo/load`, `/demo/inject`, `/demo/remove` (NDJSON progress); `GET /demo/corpus`, `/demo/injection` | — |
 | Analytics | bars/daily, vwap, compare | — |
 | DQ | summary, **checks**, metrics, findings **GET** (read-only), changelog **GET** (read-only), rules **GET**, runs POST/GET | `POST .../findings/{id}/review`; `POST` / `PATCH` `/dq/rules` |
 | Insights | patterns **GET**, suggestions **GET** | `POST .../suggestions/{id}/apply`, `.../dismiss` |
@@ -179,9 +183,19 @@ GET    /v1/ingest/batches?frequency=  list
 GET    /v1/ingest/batches/{id}        status and counts
 GET    /v1/ingest/batches/{id}/rejects paginated rejected rows
 DELETE /v1/ingest/batches/{id}        purge this batch and its derived rows
+
+GET    /v1/demo/corpus                what a demo load would download (no network call)
+POST   /v1/demo/load                  fetch the sample corpus and ingest it → NDJSON progress
+POST   /v1/demo/inject                swap in a copy carrying labelled defects → NDJSON
+POST   /v1/demo/remove                take them out, restore the clean file → NDJSON
+GET    /v1/demo/injection             the planted manifest, grouped by strip family
 ```
 
 ### 4.1 Both granularities accepted
+
+**Same origin, no CORS.** The SPA calls `/v1/...` with relative paths. In development Vite
+proxies `/v1` to uvicorn; in production FastAPI serves `web/dist` at `/` beside the API. There
+is no cross-origin policy in this contract because there is no cross-origin request.
 
 **Loupe accepts `minute` and `daily` uploads alike, and rejects an upload only on file
 format** (CSV or Parquet). A granularity gate would invent a rejection the brief does not
@@ -337,9 +351,16 @@ cannot be skipped by a page that forgot.
 
 ### 4.4 Why synchronous; async as extension
 
-Streamlit re-runs on every interaction and has no server push. Async ingest would need a
-job table, client polling, and a rerun trigger — unjustified under single-user, local
-DuckDB, sample-scale assumptions. Blocking is simpler and honest about completion.
+Single user, local DuckDB, sample scale. Async ingest would need a job table, a poll loop, a
+status vocabulary and a way to be told the job finished — machinery that buys nothing a
+blocking call does not already give, and that introduces a state ("running") the caller has to
+be able to reason about. Blocking is simpler and honest about completion: a write that returns
+cannot be lying about whether it happened.
+
+That reasoning is about the deployment, not about a UI toolkit. An earlier revision of this
+section blamed the UI ("no server push"), which made a locked decision look like a workaround
+for a framework — and would have implied the decision should be revisited when the framework
+changed. It changed, in slice 17, and the decision did not.
 
 **Extension:** job table, **202** with a job handle, UI polling. Trigger when sustained
 ingest exceeds ~30s; enforce a hard upload size cap meanwhile.
@@ -358,6 +379,77 @@ way; the query producing the metrics took 0.1 seconds. Written set-based the sam
 always about a second of analysis wrapped in four minutes of round trips, and a change that
 reintroduces a per-row loop will show up as this endpoint crossing 30s long before anything
 else does.
+
+### 4.5 Demo routes
+
+Chrome for locked decision 9, not a second ingest pipeline.
+
+**Why they exist at all.** The two demo actions read the local filesystem, write derived files
+and reach Hugging Face on an explicit press. A browser can do none of those, so when the UI
+became an SPA the work moved to the process that can. What did *not* move is the rule: the
+network is touched when a person asks for the corpus, and never while a file is being read.
+
+**They reuse the one ingest path.** Every file a demo route loads goes through the same
+preview, loader, validation and bar rebuild that `POST /v1/ingest/batches` uses. What these
+routes skip is the multipart hop of a server posting bytes to itself. Arbitrary file ingest
+stays on `/ingest/batches`; there is no second way in.
+
+```
+GET /v1/demo/corpus  → 200
+{"repo": "…", "revision": "29efdfa2…", "url": "https://huggingface.co/datasets/…",
+ "approx_mb": 16, "minute_files": 8, "licence_note": "The publisher grants no licence: …"}
+```
+
+Said *before* the button and making no network call of its own: `specs/sample-corpus.md` §1
+found no licence grant anywhere in the vendor package, so downloading for evaluation is plainly
+intended and redistribution is not authorised — and a fetch nobody described is not one anybody
+consented to.
+
+**`POST /v1/demo/load`** fetches the pinned corpus, ingests each file with `origin=demo` and
+`validate=false`, then runs the rules **once, corpus-wide**. One run at the end rather than one
+per file is faster and *more correct*: an upload validates its own batch only, so
+cross-frequency reconciliation cannot be in scope until a run has seen both grains (§6.4).
+`?all_minute=true` fetches every minute file (~104 MB) instead of the curated eight.
+
+**`POST /v1/demo/inject`** swaps one clean minute file for a copy carrying labelled defects,
+and **`POST /v1/demo/remove`** takes them out and restores the clean file. Swap rather than
+add: the injected copy is the same contract and the same sessions, so loading it alongside
+would make almost every row an exact duplicate and bury the planted defects under `UNQ.*`
+findings nobody planted.
+
+**The swap forgets, where a purge would remember.** `DELETE /v1/ingest/batches/{id}` is a soft
+delete and keeps the batch's `file_hash`, so re-uploading those bytes is recognised as the
+duplicate it is (`specs/data-model.md`, `UNIQUE (file_hash)`) — right for a delete, wrong for a
+replacement, because it refuses the restore as a duplicate of a batch holding no records. The
+demo swap therefore drops the row it replaces. The public purge route is unchanged.
+
+**Progress is NDJSON, and it is telemetry rather than a job.** One JSON object per line,
+flushed as it happens, so a browser can draw "Fetching 3/48 · ESZ25.parquet" instead of showing
+a minute of silence. Nothing is persisted, no handle is returned, and there is nothing to poll:
+the `done` event *is* the result, which is §4.4 holding rather than an exception to it.
+
+| `event` | Carries | Means |
+|---|---|---|
+| `started` | `phase` | A stage began (`fetch`, `ingest`, `validate`, `purge`, `stage`) |
+| `progress` | `phase`, `done`, `total`, `file` | One file, mid-stage |
+| `warning` | `file` | Something to report that does not stop the run (a checksum mismatch) |
+| `error` | `title`, `hint` | It stopped. The stream already began, so a refusal is an event, not a status code |
+| `done` | stage-specific counts | Finished. This is the response |
+
+```
+GET /v1/demo/injection  → 200
+{"loaded": true, "filename": "SR3G26_with_defects.csv", "manifest_available": true,
+ "source": "…", "output": "…", "rows_in": 345, "rows_out": 346, "seed": 20260906,
+ "groups": [{"family": "invalid", "label": "Invalid values",
+             "defects": [{"source_row": 12, "rule_id": "VAL.NEGATIVE_VOLUME",
+                          "kind": "negate_volume", "original": "100", "injected": "-100"}]}]}
+```
+
+Grouped by `strip_family` **server-side**, so no client re-implements the catalogue map that
+the family cards already use. `manifest_available: false` when defects are loaded and their
+manifest is not on disk — an honest absence beats an empty list that reads as "nothing was
+planted". Recurring patterns is absent by construction: a pattern is an insight over findings,
+so nothing can be planted *as* one.
 
 ---
 

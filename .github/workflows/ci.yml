@@ -27,3 +27,32 @@ jobs:
       - name: Test
         # Vendor corpus is gitignored (no redistribution licence); those tests skip.
         run: uv run pytest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web
+        run: npm --prefix web ci
+
+      - name: Refresh the OpenAPI document
+        # The stub-parity guard reads a document generated from the app rather than a
+        # committed copy, which is the whole point: a committed one can go stale silently.
+        # Written straight from the factory — no server to start, and no port to wait on.
+        run: |
+          uv run python -c "
+          import json, pathlib
+          from loupe.api import create_app
+          from loupe.data import connect
+          spec = create_app(connect(':memory:')).openapi()
+          pathlib.Path('web/src/api/schema.json').write_text(json.dumps(spec, indent=2))
+          "
+
+      - name: Build web
+        # `npm run build` typechecks first, so this covers `tsc --noEmit` too.
+        run: npm --prefix web run build
+
+      - name: Test web
+        run: npm --prefix web test

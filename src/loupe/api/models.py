@@ -662,3 +662,66 @@ class SuggestionsResponse(BaseModel):
     scope: Scope
     data: list[Suggestion]
     total: int
+
+
+# --------------------------------------------------------------------------------- demo
+
+
+class CorpusDescription(BaseModel):
+    """What a demo load *would* download, so a reader can consent before it happens.
+
+    No network call produced any of this. `specs/sample-corpus.md` §1 is the reason it exists
+    at all: the vendor package grants no licence, so downloading for evaluation is plainly
+    intended and redistribution is not authorised — and a button that fetches without saying
+    what and from where is not consent.
+    """
+
+    repo: str = Field(description="Hugging Face dataset id.")
+    revision: str = Field(description="Pinned commit, so every fetch gets the same bytes.")
+    url: str
+    approx_mb: int = Field(description="Approximate on purpose; an exact figure would drift.")
+    minute_files: int
+    licence_note: str
+
+
+class PlantedDefect(BaseModel):
+    """One row of the injection manifest — the rule it should trip, and what was changed."""
+
+    source_row: int | None = Field(
+        None, description="1-based row in the injected file, matching `stage.market_record`."
+    )
+    rule_id: str
+    kind: str = Field(description="What was done, e.g. `negate_volume`.")
+    original: str | None = None
+    injected: str | None = None
+
+
+class PlantedGroup(BaseModel):
+    """Planted rows under one strip family, grouped server-side.
+
+    Grouped here because `strip_family` is the same catalogue map the family cards use. A
+    client that re-implemented it would be a second, quietly different one
+    (`specs/loupe-solution-design.md` §6).
+    """
+
+    family: str = Field(description="`gaps`, `duplicates`, `invalid` or `off_strip`.")
+    label: str
+    defects: list[PlantedDefect]
+
+
+class InjectionResponse(BaseModel):
+    """The planted manifest for the store as it stands, or the honest absence of one."""
+
+    loaded: bool = Field(description="True when an `origin = injected` batch is loaded.")
+    filename: str | None = None
+    manifest_available: bool = Field(
+        False,
+        description="False when defects are loaded but their manifest is not on disk. The "
+        "disclosure says so rather than implying the evidence is complete.",
+    )
+    source: str | None = None
+    output: str | None = None
+    rows_in: int | None = None
+    rows_out: int | None = None
+    seed: int | None = None
+    groups: list[PlantedGroup] = Field(default_factory=list)

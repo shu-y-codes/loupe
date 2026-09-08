@@ -1,0 +1,35 @@
+---
+description: React, FastAPI, and DuckDB patterns for Loupe
+globs: "**/*.{py,sql,ts,tsx}"
+alwaysApply: false
+---
+
+# React (`web/`)
+
+- Vite + React + TypeScript. Pages in `web/src/pages/`, shared parts in `web/src/components/`
+- `web/src/api/client.ts` is the only place that knows the API exists. Relative `/v1` paths
+  only — Vite proxies in dev, FastAPI serves `web/dist` in production, so there is no CORS
+- No SQL, rule grouping, scoring or bar math in a component. A chart may drop marks it cannot
+  fit; it may not average them into new ones
+- Charts are the project's own SVG (`web/src/charts/`). An absent session is a dashed labelled
+  column, never a zero-height bar — that is why there is no chart library here
+- Never spread a series into a call (`Math.max(...points)`): a real VWAP window is >100k points
+  and that is a stack overflow. Use `extremes` / `bucketSeries` in `charts/scale.ts`
+- Colours come from the tokens in `web/src/theme/`. No gradients, box-shadows, emoji status,
+  rainbow colour or KPI-sized type
+- Tests: Vitest + Testing Library over a stubbed `fetch`. New envelope keys go in the parity
+  list in `web/src/api/schema.test.ts`
+
+# FastAPI
+
+- Routes in `src/loupe/api/`; Pydantic models for request/response
+- API owns HTTP; domain logic lives in `quality` / `insights` / `data`
+- Return JSON the UI can plot; do not return raw DuckDB relations
+- One ingest path (`POST /v1/ingest/batches`). The demo routes reuse its loader rather than
+  adding a second pipeline
+
+# DuckDB
+
+- One connection factory; read-heavy analytics in SQL, not Python loops
+- Parameterized queries only. Durable files under `data/` (gitignored except fixtures)
+- Prefer views for repeated quality/insight queries

@@ -40,6 +40,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 14 | overview table chrome | **done** | [14-overview-table.md](14-overview-table.md) |
 | 15 | overview headlines only | **done** | [15-overview-headlines.md](15-overview-headlines.md) |
 | 16 | overview default landing | **done** | [16-overview-default.md](16-overview-default.md) |
+| 17 | React reviewer UI | **done** | [17-react-ui.md](17-react-ui.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
@@ -58,7 +59,15 @@ Slice 14 is Overview chrome after a live pass of 13: table fits and wraps, Overv
 to the left of Review, default landing stays Review. Slice 15 drops family *detail* from
 Overview cells after a Glide probe showed newlines do not render; the grid keeps
 `count unit` only. Slice 16 supersedes only the landing default: cold sessions now open
-on Overview; selecting a row still opens Review.
+on Overview; selecting a row still opens Review. Slice 17 changes the UI *technology* and
+nothing about the product: a Vite + React + TypeScript SPA in `web/` implements the same
+`specs/loupe-ui-design.md`, with the canvases' editorial language replacing Streamlit's
+widget defaults. It needed no promote — the UI spec was already law — but it amended four
+specs (`loupe-solution-design.md`, `loupe-ui-design.md`, `api-contract.md`,
+`analytics-semantics.md`) and added `POST /v1/demo/load|inject|remove`,
+`GET /v1/demo/corpus` and `GET /v1/demo/injection`, because a browser cannot fetch a corpus,
+read `data/samples/`, or write a defective copy. Slice 11's rules were spec text already and
+are implemented by 17; slice 12 now describes the React walkthrough.
 
 ## Archive
 

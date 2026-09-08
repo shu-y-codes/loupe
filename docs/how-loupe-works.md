@@ -11,7 +11,7 @@ see `docs/metrics-primer.md`. How the test folders line up with these layers:
 `docs/how-tests-work.md`.
 
 For one real row-to-chart example, including source rows, daily OHLCV arithmetic,
-rolling VWAP arithmetic, API payloads, and Streamlit mocks, see
+rolling VWAP arithmetic, API payloads, and UI mocks, see
 `docs/clg26-data-journey.md`.
 
 | Want the exact… | Read |
@@ -46,8 +46,8 @@ flowchart LR
   subgraph user [You]
     Browser[Browser]
   end
-  subgraph processes [Two processes]
-    UI["Streamlit UI<br/>localhost:8501"]
+  subgraph processes [One origin]
+    UI["React SPA<br/>web/dist, served at /"]
     API["FastAPI /v1<br/>localhost:8000"]
   end
   subgraph layers [Domain layers]
@@ -75,12 +75,17 @@ client (curl, a notebook) gets the same answers.
 
 ## 2. Starting the app
 
-Two commands, two processes on purpose:
+Build the UI once, then run one server:
 
 ```bash
-uv run uvicorn loupe.api.app:create_app --factory   # http://127.0.0.1:8000/v1
-uv run streamlit run src/loupe/ui/app.py            # http://localhost:8501
+npm --prefix web run build                          # → web/dist
+uv run uvicorn loupe.api.app:create_app --factory   # http://127.0.0.1:8000
 ```
+
+FastAPI serves `web/dist` at `/` and the API at `/v1`, so the browser sees one origin and
+there is no CORS policy anywhere in this project. While working on the UI, run
+`npm --prefix web run dev` alongside the API instead: Vite serves the app on `:5173` with
+hot reload and proxies `/v1` to uvicorn, which produces the same one-origin shape.
 
 On first start the API **bootstraps** the store:
 
@@ -106,9 +111,11 @@ sequenceDiagram
 | `seed_reference` | `data.reference` | Products, ticks, session calendar from measured profiles |
 | `seed_quality` | `quality.seed` | Writes the rule catalogue into `dq.dq_rule` and weights into `dq.score_weight` |
 
-The UI reads `LOUPE_API_URL` (default `http://127.0.0.1:8000/v1`) through
-`LoupeClient`. Importing `loupe.api` from Streamlit is forbidden: that would fuse the
-layers and make the thin-client boundary untestable.
+The SPA calls `/v1/...` with relative paths through `web/src/api/client.ts`. Python callers
+— scripts, and `tests/integration/` — use `loupe.client.LoupeClient`, which reads
+`LOUPE_API_URL` (default `http://127.0.0.1:8000/v1`). Importing `loupe.api` from either is
+forbidden: that would fuse the layers and make the thin-client boundary untestable *as* a
+boundary.
 
 **One connection, serialised.** FastAPI holds a single DuckDB connection and a lock
 (`api.deps.Database`). Quality runs materialise temp tables (`dq_scope_records`); two
@@ -560,8 +567,10 @@ Conventions: UTC on the wire; dates are **trade dates**; `basis=raw|clean`;
 `frequency=minute|daily` (grain *read from*, not grain returned); errors are RFC 7807
 with `STR.*` (structurally unacceptable) or `CAP.*` (data cannot support the request).
 
-Writes are **synchronous**: 201 with a finished batch, not 202 + a job id. Streamlit has
-no server push; at sample scale a job table buys nothing.
+Writes are **synchronous**: 201 with a finished batch, not 202 + a job id. Single user,
+local DuckDB, sample scale — a job table buys nothing a blocking call does not already give.
+The demo routes stream NDJSON progress, which is telemetry rather than a job: nothing is
+persisted and there is no handle to poll.
 
 ### 8.1 Reference — `api/routes/reference.py`
 
@@ -642,9 +651,13 @@ Apply / dismiss are extensions and are **not registered**.
 
 ## 9. What feeds the UI
 
-Two destinations in one Streamlit script (`ui/app.py`). Sidebar switch: **Overview | Review**,
-default **Overview** (`ui/chrome.render_destination`). Shared on both: demo ingest
-(`ui/demo.py`). Charts in `ui/charts.py` (Altair). HTTP only via `LoupeClient`.
+Two destinations in one React app (`web/src/App.tsx`). Sidebar switch: **Overview | Review**,
+default **Overview** (`web/src/components/Sidebar.tsx`). Shared on both: the demo panel
+(`web/src/components/DemoPanel.tsx`). Charts are the project's own SVG
+(`web/src/charts/`). HTTP only, via `web/src/api/client.ts`.
+
+There is no router: two destinations sharing one store and one sidebar are page state, and a
+URL surface is not something v1 was asked for.
 
 Review reuses the selected row from `GET /contracts` for its header; it makes no detail
 request. The caption shows contract month, exchange, the resolved grain's full **observed**
@@ -653,7 +666,7 @@ filtered chart never makes its selected dates look like listing or expiry dates.
 
 ```mermaid
 flowchart TB
-  subgraph shared [Every rerun]
+  subgraph shared [On load, and after a demo action]
     H[GET /health]
     C[GET /contracts]
     Demo[Load demo / inject / ingested files]
@@ -687,16 +700,16 @@ Minute) is a *view* filter, not Quality grain.
 
 | UI function | Client method | Endpoint |
 |---|---|---|
-| `cached_rows` | `contracts` then `checks(contract, family=gaps, frequency=)` | `GET /contracts`, then `GET /dq/checks` once per held grain |
-| `render_overview` | — | `st.dataframe`; row click queues Review |
+| `OverviewPage` | `api.contracts()` then `api.checks({family: "gaps", frequency})` | `GET /contracts`, then `GET /dq/checks` once per held grain |
+| `Overview` | — | The table; the Contract cell is the control that opens Review |
 
 A dual-grain contract appears **twice** (Minute then Daily). Cells are `count unit` only;
-detail stays on Review. Cache key is store fingerprint (`records` / `batches` /
-`synthetic_batches` / contract ids) so a family click on Review does not re-hit 40×
-checks. `checked: false` says the check has not run — zeros are not painted as clean.
+detail stays on Review. The rows are fetched once when Overview mounts and again only when a
+demo action changes the store, so a family click on Review does not re-hit 40× checks.
+`checked: false` says the check has not run — zeros are not painted as clean.
 
-Click-through (`overview_open` → `apply_pending_open`) opens Review with that `contract`
-and `quality_grain`. Family stays whatever Review last had (default `gaps`).
+Click-through (`openInReview`) opens Review with that `contract` and quality grain. Family
+stays whatever Review last had (default `gaps`).
 
 ### 9.2 Review
 
@@ -710,20 +723,27 @@ daily bars. Changing family never changes grain.
 
 | UI function | Client method | Endpoint | Domain function |
 |---|---|---|---|
-| `read_health` | `health` | `GET /health` | SQL counts |
-| `contract_catalogue` | `contracts` | `GET /contracts` | picker + held grains |
-| `render_demo` / list | `batches` (+ contracts for coverage) | `GET /ingest/batches` | `_summary`; grouped Daily + minute / Daily-only / Minute-only |
-| Load demo | `create_batch` | `POST /ingest/batches` | `load_file` (+ `build_bars`; no `assess`) |
-| After demo files | `run_rules` | `POST /dq/runs` | `assess` + `build_bars` |
-| Inject / remove | `create_batch` / `purge_batch` | POST / DELETE ingest | then `run_rules` |
-| `load_checks` | `checks` | `GET /dq/checks` | `review_checks` (grain + family) |
-| `load_bars` | `bars_daily` | `GET /analytics/bars/daily` | `published_bars` (same grain) |
-| `load_vwap` | `vwap` | `GET /analytics/vwap` | `published_vwap` (always minute) |
+| `App` | `api.health()` | `GET /health` | SQL counts |
+| `App` | `api.contracts()` | `GET /contracts` | picker + held grains |
+| `DemoPanel` list | `api.batches()` (+ contracts for coverage) | `GET /ingest/batches` | `_summary`; grouped Daily + minute / Daily-only / Minute-only |
+| Load demo | `streamDemo` | `POST /demo/load` | fetch → `ingest_path` per file → one corpus-wide `assess` |
+| Inject / remove | `streamDemo` | `POST /demo/inject`, `/demo/remove` | `forget_batch` + `ingest_path`, then `assess` |
+| Planted manifest | `api.injection()` | `GET /demo/injection` | `strip_family` grouping |
+| `ReviewPage` | `api.checks()` | `GET /dq/checks` | `review_checks` (grain + family) |
+| `ReviewPage` | `api.barsDaily()` | `GET /analytics/bars/daily` | `published_bars` (same grain) |
+| `ReviewPage` | `api.vwap()` | `GET /analytics/vwap` | `published_vwap` (always minute) |
 
-Family lives in `st.session_state["family"]`. Changing it re-runs the script and hits
-`/dq/checks?family=` again; zoom is preserved (chart identity does not include family).
-Changing contract, grain, or From / To **resets** zoom via `charts.chart_scope_key`.
-OHLCV and volume share one x (trade date); VWAP has its own (intraday timestamps).
+Family lives in `useAppState`. Changing it re-fetches `/dq/checks?family=` and keeps the
+charts up; zoom is preserved because chart identity does not include family. Changing
+contract, grain, or From / To **resets** zoom via `chartScopeKey` and blanks the column until
+the new envelope arrives — the header already names the new contract, so the old one's numbers
+must not still be under it. Content derived from an envelope names the family *that envelope*
+answered, so a picture and its caption can never disagree mid-fetch.
+
+OHLCV and volume share one x (trade date); VWAP has its own (intraday timestamps). A minute
+tape is ~114,000 VWAP points against a ~720-unit pane, so the VWAP chart draws at most one mark
+per unit — selected points, never averaged ones, and a bucket holding any null window stays a
+break.
 
 Overlay marks come from the checks envelope. Charts do **not** paint `max_severity`; they
 join bars by `trade_date`. An absent settlement is a dashed column with an on-chart
@@ -741,9 +761,15 @@ a dual-grain contract sit under **Daily + minute**. CSV with `origin=demo` is ma
 converted from Parquet (format fact, not a defect).
 
 Planted defects (`origin=injected`) group by the same catalogue map as the cards
-(`strip_family`). Recurring patterns is not a planted family. Off-strip injectables land
-in **Other (off the strip)**. The sidebar warning lists planted **filenames** under those
-families; it does not say “findings below were planted.”
+(`strip_family`), **on the server** — `GET /demo/injection` returns the grouped manifest so no
+client re-implements the map. Recurring patterns is not a planted family. Off-strip injectables
+land in **Other (off the strip)**. The sidebar warning lists planted **filenames** under those
+families as a warning Callout; it does not say “findings below were planted.”
+
+Load, inject and remove run on the API and stream NDJSON progress
+(`POST /demo/load|inject|remove`), because a browser cannot reach Hugging Face on the app's
+behalf, read `data/samples/`, or write a defective copy. The consent sentence comes from
+`GET /demo/corpus`, which makes no network call of its own.
 
 ### 9.4 Routes the UI does not call
 
@@ -821,7 +847,7 @@ Designed as data or a new function behind an existing seam.
 | New pattern / suggestion generator | `quality.patterns` / `suggestions` | GET envelopes already exist |
 | Suggestion apply / finding override | New POST routes (named extensions) | Mutate catalogue/calendar, re-run in the same request |
 | RBAC | FastAPI dependency; filter `contract` | **No path changes** — API is resource-shaped |
-| Async ingest | Job table + 202 when a load exceeds ~30s | Streamlit would need polling; size cap until then |
+| Async ingest | Job table + 202 when a load exceeds ~30s | The SPA would need polling and a status vocabulary; size cap until then |
 | AI narrative | Over **aggregated pattern stats only** | Raw ticks never leave the process |
 | Bulk `/dq/checks` | Only if Overview’s per-row loop is too slow for demo | Measure first; the cache is the current answer |
 | Book-grain inventory strip | UI spec names it an extension | Do not fold it into Overview’s table |
@@ -832,7 +858,8 @@ Designed as data or a new function behind an existing seam.
 - Runtime Hugging Face fetches during ingest
 - Continuous / back-adjusted series as a product feature (`roll_date` exists for later)
 - Interactive apply / override from the UI
-- SQL, scores, or bar math inside Streamlit callbacks
+- SQL, scores, or bar math inside the UI (a chart may drop marks it cannot fit; it may not
+  average them into new ones)
 - Inventing a 15-day VWAP so a daily-only contract “has a line”
 - Persona views (Risk / Trader / Analyst) — Overview is a corpus scan, not a role
 
@@ -844,8 +871,10 @@ Every locked decision has a cost. The interesting ones:
 
 | Choice | Why | What you give up |
 |---|---|---|
-| **Two processes, HTTP between UI and API** | Real layer boundary; UI tests stub `LoupeClient`; OpenAPI is evidence | Two commands; 120s client timeout because ingest is sync |
-| **Streamlit** | Fast reviewer UI; `st.status` around demo load | Full script rerun on every click; no push; family change = another `/dq/checks` |
+| **HTTP between UI and API** | Real layer boundary; UI tests stub `fetch`; OpenAPI is evidence | A build step, and two processes while developing; long client waits because ingest is sync |
+| **React + Vite + TypeScript** | Typed components; a family click re-fetches one envelope rather than re-running the page | Needs Node to build; the API and the Python suite do not |
+| **Hand-drawn SVG charts** | An absent settlement is a dashed labelled column; no library can draw a candle with no OHLC without inventing a zero bar | Zoom, pan, reset and downsampling are ours to maintain |
+| **Demo work on the server** | A browser cannot fetch a corpus or read `data/samples/`; the routes reuse the one ingest path | Five routes that exist only for chrome; progress needs a stream |
 | **Two destinations, Overview first** | Scan 40 contracts without stuffing a table above Review’s charts | Overview loops `GET /dq/checks` per grain; cache + fingerprint, not a new route |
 | **Explicit Quality grain** | Cards, bars and overlay judge the same tape | Dual-grain contracts need a control; family-dependent auto-source was rejected because cards would jump |
 | **VWAP always minute** | A 15-minute window cannot be faked from daily bars | Daily quality grain still shows the line as context-only, or “needs minute bars” |
@@ -872,40 +901,43 @@ Useful when debugging “why is this card empty / why is VWAP refused / why is r
 why does Overview disagree with Review”.
 
 ```
-Streamlit  ui/app.py:main
-  LoupeClient.health                    → GET  /health
-  LoupeClient.contracts                 → GET  /contracts
-  render_destination                    → Overview | Review (default Overview)
-  LoupeClient.batches                   → GET  /ingest/batches
-  LoupeClient.create_batch              → POST /ingest/batches
-        preview_file
-        load_file
-          _open_batch
-          _insert_records / _insert_*_rejects
-          ensure_contract, _extend_calendar
-        assess                          (if validate=true)
-          scoped → run_rules body → persist_daily_metrics → score_slice
-          apply_default_cleaning
-        build_bars
-  LoupeClient.run_rules                 → POST /dq/runs     (demo, after all files)
-        assess (unscoped) → build_bars
+React      web/src/App.tsx
+  api.health                            → GET  /health
+  api.contracts                         → GET  /contracts
+  Sidebar                               → Overview | Review (default Overview)
+  api.batches                           → GET  /ingest/batches
+  streamDemo("/demo/load")              → POST /demo/load     (NDJSON progress)
+        prepare_demo_corpus             (fetch, pinned; explicit press only)
+        ingest_path × file              (validate=false, origin=demo)
+          preview_file
+          load_file
+            _open_batch
+            _insert_records / _insert_*_rejects
+            ensure_contract, _extend_calendar
+          build_bars
+        assess (unscoped)               → corpus-wide run, once, at the end
+  streamDemo("/demo/inject" | "/remove")→ POST /demo/inject | /demo/remove
+        prepare_injection               (writes the labelled copy; never over its source)
+        forget_batch                    (purge *and* drop the row, so the swap is reversible)
+        ingest_path → assess (unscoped)
+  api.injection                         → GET  /demo/injection   (strip_family grouping)
 
-  Overview  ui/overview.cached_rows
-    LoupeClient.checks × (contract, frequency)
+  Overview  web/src/App.tsx:OverviewPage
+    api.checks × (contract, frequency)
                                 → GET  /dq/checks?family=gaps&frequency=
         review_checks (full held window, no dates)
-    render_overview             → table; row click → Review
+    pages/Overview              → table; row click → Review
 
-  Review    ui/review.render_review
-    LoupeClient.checks          → GET  /dq/checks?frequency=&family=
+  Review    web/src/pages/Review.tsx
+    api.checks                  → GET  /dq/checks?frequency=&family=
         review_checks
           latest_run, grain-filtered findings, find_patterns(frequency=)
           changelog, score_slice, overlay + picture, selected-family issues
-    LoupeClient.bars_daily      → GET  /analytics/bars/daily?frequency=
+    api.barsDaily               → GET  /analytics/bars/daily?frequency=
         published_bars → mart.bar_daily source derived|vendor + gate
-    LoupeClient.vwap            → GET  /analytics/vwap
+    api.vwap                    → GET  /analytics/vwap
         published_vwap → vwap_15m + capability_gap + gate
-    ui/charts                   (no SQL; scope-keyed zoom)
+    web/src/charts              (no SQL; scope-keyed zoom; marks bucketed to the pane)
 ```
 
 ---
@@ -917,12 +949,18 @@ src/loupe/
   data/         connect, DDL, preview, load, purge, reference, sessions
   quality/      catalogue, runner, rules/*, scoring, cleaning, review, patterns, suggestions
   insights/     bars, vwap, compare, gate
-  api/          app factory, deps (lock), routes/*, Pydantic models, RFC 7807
-  ui/           app.py, client.py, chrome, demo, overview, review, charts
+  api/          app factory, deps (lock), routes/* (incl. demo), Pydantic models, RFC 7807
+  client.py     the Python HTTP client — scripts and tests/integration/, not a page
   demo/         fetch, corpus prepare, labelled injection
+
+web/
+  src/api/      client.ts, types.ts, and the generated schema the stub is checked against
+  src/charts/   SVG OHLCV, VWAP, gap ribbon, pattern histogram; overlay join; zoom
+  src/components/  Sidebar, DemoPanel, SyntheticNotice, and the canvas primitives
+  src/pages/    Review, Overview
 ```
 
-Tests follow the same seams: unit fixtures for rules, `TestClient` for HTTP shapes,
-`AppTest` with a stub client for page assembly (including Overview click-through), and
-`tests/integration/` with a real uvicorn port and a file-backed DuckDB — the only tier
-that stubs neither side. The map is `docs/how-tests-work.md`.
+Tests follow the same seams: unit fixtures for rules, `TestClient` for HTTP shapes, Vitest with
+a stubbed `fetch` for page assembly (including Overview click-through), and
+`tests/integration/` with a real uvicorn port and a file-backed DuckDB — the only tier that
+stubs neither side. The map is `docs/how-tests-work.md`.

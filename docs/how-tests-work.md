@@ -103,7 +103,7 @@ flowchart LR
   subgraph fast [Fast folders — each fakes a neighbour]
     DATA["data / quality / insights<br/>real DuckDB in memory<br/>no HTTP"]
     API["api<br/>real HTTP in-process<br/>handed a ready database"]
-    UI["ui<br/>real Streamlit page<br/>fake API client<br/>no DuckDB"]
+    UI["web<br/>real React pages<br/>stubbed fetch<br/>no DuckDB"]
   end
 
   subgraph slow [Slow folder — fakes nothing]
@@ -112,16 +112,16 @@ flowchart LR
 
   DATA -. "never opens a port" .-> INT
   API -. "never builds a multipart body" .-> INT
-  UI -. "never sends HTTP" .-> INT
+  UI -. "never opens a socket" .-> INT
 ```
 
 Read it this way:
 
 | Folder | Real | Fake / not there |
 |---|---|---|
-| `data`, `quality`, `insights`, `demo` | DuckDB + the layer's Python | HTTP, Streamlit |
+| `data`, `quality`, `insights`, `demo` | DuckDB + the layer's Python | HTTP, the UI |
 | `api` | FastAPI + DuckDB | No TCP socket. `TestClient` talks in-process. Database is already set up. |
-| `ui` | Streamlit page widgets | The API. A stub returns canned JSON. No DuckDB. |
+| `web` | React components, in jsdom | The API. A stubbed `fetch` returns canned JSON. No DuckDB. |
 | `integration` | Server, client, file on disk | Almost nothing. Small on purpose. |
 
 That last row exists because three first-run bugs reached `main` behind a green
@@ -196,14 +196,14 @@ flowchart LR
   ICON[icon]
   APICON[api_con]
   CLIENT[client]
-  FAKE[fake + app]
+  FAKE[stubApi]
   LIVE[live_api + api_client]
 
   QCON --> RF["quality: run_fixture<br/>load CSV → run rules"]
   ICON --> LB["insights: load_and_build<br/>load CSV → build bars"]
   APICON --> CLIENT
   CLIENT --> UP["api: upload<br/>POST /v1/ingest/batches"]
-  FAKE --> AT["ui: AppTest over FakeClient"]
+  FAKE --> AT["web: render(&lt;App /&gt;) over a stubbed fetch"]
   LIVE --> UC["integration: real LoupeClient<br/>on a real port"]
 ```
 
@@ -376,36 +376,46 @@ cover “first start against an empty file” — that is integration.
 | `test_findings_corroboration.py` | Confirmed / disputed / absent. |
 | `test_purge_route.py` | HTTP side of purge. |
 
-### `tests/ui/` — what the page draws
+### `web/` — what the page draws
 
-Question: given canned JSON, does Streamlit show the right cards, table, and
-refusals?
+Question: given canned JSON, does the app show the right cards, table, and
+refusals? Run it with `npm --prefix web test`.
 
 ```mermaid
 flowchart LR
-  PAGE["app.py"] --> RT["runtime.get_client()"]
-  RT --> FAKE[FakeClient]
-  FAKE --> JSON[canned envelopes]
-  PAGE --> AT[AppTest]
-  AT --> W[buttons, tables, captions]
+  APP["<App />"] --> FETCH["stubbed fetch"]
+  FETCH --> JSON[canned envelopes]
+  APP --> RTL["Testing Library"]
+  RTL --> W[buttons, tables, captions, SVG marks]
 ```
 
-No DuckDB. No HTTP. If a page test needed a database it would be re-testing
-quality.
-
-`FakeClient` lives in `tests/ui/ui_helpers.py` (not `helpers.py` — pytest puts
-each test folder on `sys.path`, so two `helpers` modules collide).
+No DuckDB. No socket. If a page test needed a database it would be re-testing
+quality. `fetch` is replaced globally in `src/test/setup.ts`, so a component
+that reaches the network without a stub fails loudly instead of hanging.
 
 | File | What it checks |
 |---|---|
-| `test_pages.py` | Review assembly; stub keys match the Pydantic models. |
-| `test_overview.py` | Corpus table, click-through to Review, no bars/VWAP fetch. |
-| `test_charts.py` | Overlay legend and Vega zoom spec. |
-| `test_demo_panel.py` | Demo load / inject; disclosure still there after a rerun. |
+| `src/App.test.tsx` | Both destinations; Review assembly and order; the VWAP refusal; click-through; no apply control; failure states. |
+| `src/charts/overlay.test.ts` | The bar↔mark join, the status vocabulary, chart identity, and series at real size. |
+| `src/charts/Ohlcv.test.tsx` | The marks themselves, in the SVG: absent is dashed and never a zero bar; paint is `invalid` alone. |
+| `src/components/DemoPanel.test.tsx` | Consent copy, the two separate buttons, coverage grouping, the CSV mark, streamed progress. |
+| `src/api/schema.test.ts` | Stub parity against `/v1/openapi.json`. |
 
-The stub-parity test is the guardrail: every canned dict's keys must exist on
-the API model it stands in for. A stub written to match the page can only
-confirm the page's own guesses.
+The stub-parity test is the guardrail: every canned key must exist on the
+schema it stands in for. A stub written to match the page can only confirm the
+page's own guesses — and it earned its place immediately, catching a `meta`
+field the test data gave `VwapResponse` and the API never had.
+
+It reads `src/api/schema.json`, which `npm --prefix web run types` pulls from a
+running API. **When that file is absent the parity tests skip**, so a checkout
+with no server can still run the suite; a skipped guard is visible in the
+report, where a silently passing one would not be.
+
+**What a page test cannot tell you.** Fixtures are small and real payloads are
+not. Three defects in this tier's own subject reached a live pass unseen: a VWAP
+window of 114,477 points that overflowed the stack, an inject/remove round trip
+that reported a restore it had not done, and two contracts' data sharing one
+screen mid-fetch. Each is now a test — but the live pass is what found them.
 
 ### `tests/integration/` — the joins
 
@@ -524,9 +534,11 @@ loud case).
 
 **3. Build UI stubs from a real response, not from the page.**
 
-Copy the API envelope. Then assert the stub's keys against the Pydantic model
-(`tests/ui/test_pages.py`). A stub invented to match the widgets will never
-catch a widget that expects a field the API does not send.
+Copy the API envelope. Then assert the stub's keys against the generated
+OpenAPI document (`web/src/api/schema.test.ts`). A stub invented to match the
+components will never catch a component that expects a field the API does not
+send — and this is not hypothetical: the guard's first run found a `meta` key on
+`VwapResponse` that only the stub had.
 
 ---
 
@@ -544,7 +556,7 @@ flowchart TD
   Q --> H{"HTTP status, JSON keys, error code?"}
   H -->|yes| AF["tests/api/"]
   Q --> P{"What the page shows?"}
-  P -->|yes| UF["tests/ui/ — extend FakeClient if you add a call"]
+  P -->|yes| UF["web/src/**/*.test.tsx — extend stubApi if you add a call"]
   Q --> S{"Empty store, real upload, file on disk?"}
   S -->|yes| INTF["tests/integration/ — keep it a seam, not a behaviour dump"]
   Q --> J{"Injector / manifest?"}
@@ -555,7 +567,7 @@ Name the test `test_<behaviour>`. Prefer a real in-memory DuckDB over mocking
 SQL. Mock network I/O (the Hugging Face fetch), not the store.
 
 If you add a UI envelope, add it to the stub-parity list in
-`tests/ui/test_pages.py`.
+`web/src/api/schema.test.ts`.
 
 ---
 
@@ -567,6 +579,12 @@ uv run pytest tests/quality            # one folder
 uv run pytest tests/quality/test_rules_validity.py -k negative_volume
 uv run pytest -m samples               # only the corpus-gated tests
 uv run pytest tests/integration        # real port + file; slower
+```
+
+```bash
+npm --prefix web test                  # the UI tier: Vitest + Testing Library
+npm --prefix web run types             # refresh schema.json from a running API,
+                                       # which un-skips the stub-parity guard
 ```
 
 CI: `.github/workflows/ci.yml` runs `uv run ruff check .` then `uv run pytest`.

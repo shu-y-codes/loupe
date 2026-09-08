@@ -244,25 +244,43 @@ def create_batch(
     """
     path = _spooled(file)
     try:
-        preview = _preview_or_problem(con, path)
-        try:
-            result: LoadResult = load_file(con, path, preview=preview, origin=origin)
-        except DuplicateFileError as exc:
-            existing = _summary(con, exc.existing_batch_id)
+        summary, duplicate = ingest_path(con, path, validate=validate, origin=origin)
+        if duplicate:
             response.status_code = status.HTTP_409_CONFLICT
-            return existing
-
-        run_id = None
-        if validate:
-            run, _scores = assess(con, batch_id=result.batch_id)
-            run_id = run.run_id
-        # Charts read `mart.bar_daily`; without this the analytics routes stay empty after
-        # a successful load. Call even when validate=false so raw bars exist for the UI.
-        contracts = tuple(result.contracts) or None
-        build_bars(con, contract_ids=contracts)
-        return _summary(con, result.batch_id, dq_run_id=run_id)
+        return summary
     finally:
         _discard(path)
+
+
+def ingest_path(
+    con, path: Path, *, validate: bool = True, origin: str = "upload"
+) -> tuple[BatchSummary, bool]:
+    """Load one file **already on disk**, and say whether these bytes were already held.
+
+    Extracted from `create_batch` so the demo routes load the fetched corpus through exactly
+    this code — the same preview, the same loader, the same bar rebuild — rather than a second
+    pipeline beside it. `specs/api-contract.md` §4 still has one ingest path; what the demo
+    skips is only the multipart hop, which a server posting to itself would have to invent.
+
+    Returns `(summary, duplicate)`. A duplicate is not raised because it is not an error at
+    either call site: the HTTP handler answers **409 with the existing batch** (§4.3), and the
+    demo re-presses the button on a half-loaded store and expects it to finish the job.
+    """
+    preview = _preview_or_problem(con, path)
+    try:
+        result: LoadResult = load_file(con, path, preview=preview, origin=origin)
+    except DuplicateFileError as exc:
+        return _summary(con, exc.existing_batch_id), True
+
+    run_id = None
+    if validate:
+        run, _scores = assess(con, batch_id=result.batch_id)
+        run_id = run.run_id
+    # Charts read `mart.bar_daily`; without this the analytics routes stay empty after
+    # a successful load. Call even when validate=false so raw bars exist for the UI.
+    contracts = tuple(result.contracts) or None
+    build_bars(con, contract_ids=contracts)
+    return _summary(con, result.batch_id, dq_run_id=run_id), False
 
 
 @router.get("/batches", response_model=BatchesResponse, summary="List batches")

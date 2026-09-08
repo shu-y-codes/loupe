@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Generated from a running API by `npm run types`. The API is the source of truth, and a
+# committed copy is one that can go stale without anything noticing.
+src/api/schema.json
+src/api/schema.ts

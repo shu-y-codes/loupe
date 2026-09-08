@@ -15,7 +15,7 @@ Use Opus (or equivalent high-cost reasoning) for:
 - DQ engine design, scoring, reconciliation
 - Sticky bugs involving timezone, DST, session boundaries, or dual-frequency (`minute` vs `daily`)
 
-Prefer cheaper Cursor models (Composer / Grok) for scaffolding, boilerplate routes, Streamlit chrome, stub tests, and mechanical edits — unless the user has already directed otherwise.
+Prefer cheaper Cursor models (Composer / Grok) for scaffolding, boilerplate routes, React chrome, stub tests, and mechanical edits — unless the user has already directed otherwise.
 
 Avoid Opus fast mode unless the user asks for speed; standard rates are enough.
 

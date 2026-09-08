@@ -37,6 +37,15 @@ V1_PATHS = {
     # reports existed.
     "/v1/insights/patterns",
     "/v1/insights/suggestions",
+    # Slice 17 (plans/17-react-ui.md): the demo buttons moved off the UI process. A browser
+    # cannot fetch from Hugging Face, read `data/samples/`, or write a defective copy, so the
+    # two chrome actions locked decision 9 already permitted are routes now. Not a second
+    # ingest pipeline — they call the same loader `POST /v1/ingest/batches` does.
+    "/v1/demo/corpus",
+    "/v1/demo/load",
+    "/v1/demo/inject",
+    "/v1/demo/remove",
+    "/v1/demo/injection",
 }
 
 
@@ -60,6 +69,20 @@ def test_no_extension_routes_are_exposed(spec):
         assert "/dismiss" not in path
     # Catalogue mutation is an extension: rules are readable and nothing more.
     assert set(spec["paths"]["/v1/dq/rules"]) == {"get"}
+
+
+def test_demo_routes_are_chrome_not_a_second_ingest_path(spec):
+    """Load / inject / remove are writes; corpus and injection are reads. Nothing else.
+
+    The point of asserting the verbs is that a demo router is the obvious place for a second
+    way to ingest an arbitrary file to appear. There is one ingest path
+    (`specs/api-contract.md` §4), and it is multipart on `/v1/ingest/batches`.
+    """
+    assert set(spec["paths"]["/v1/demo/load"]) == {"post"}
+    assert set(spec["paths"]["/v1/demo/inject"]) == {"post"}
+    assert set(spec["paths"]["/v1/demo/remove"]) == {"post"}
+    assert set(spec["paths"]["/v1/demo/corpus"]) == {"get"}
+    assert set(spec["paths"]["/v1/demo/injection"]) == {"get"}
 
 
 def test_findings_are_read_only_in_the_document(spec):
@@ -107,3 +130,46 @@ def test_frequency_parameter_documents_the_default(spec):
     params = spec["paths"]["/v1/analytics/bars/daily"]["get"]["parameters"]
     frequency = next(p for p in params if p["name"] == "frequency")
     assert "finest granularity" in frequency["description"]
+
+
+# --------------------------------------------------------------- serving the built SPA
+
+
+def test_the_spa_mount_does_not_turn_an_absent_route_into_405(client, tmp_path, monkeypatch):
+    """A static catch-all at `/` would answer every unrouted path, and only for GET.
+
+    `POST /v1/insights/suggestions/{id}/apply` would then be **405 Method Not Allowed** rather
+    than **404 Not Found** — which is exactly the answer §6.3 refuses to give, because a 405
+    tells a client the route exists and invites it to keep the button. This is asserted with a
+    `dist` directory present, because with none the mount is a no-op and the test is vacuous.
+    """
+    import duckdb
+
+    from loupe.api import app as app_module
+    from loupe.quality import seed_quality
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>Loupe</title>")
+    (dist / "assets" / "index.js").write_text("// built")
+    monkeypatch.setattr(app_module, "WEB_DIST", dist)
+
+    con = duckdb.connect(":memory:")
+    from loupe.data import apply_schema, seed_reference
+
+    apply_schema(con)
+    seed_reference(con)
+    seed_quality(con)
+
+    from fastapi.testclient import TestClient
+
+    with TestClient(app_module.create_app(con)) as served:
+        assert served.get("/").status_code == 200, "the built app is served at the root"
+        assert served.get("/assets/index.js").status_code == 200
+
+        # Absence still reads as absence, whatever the verb.
+        assert served.post("/v1/insights/suggestions/abc/apply").status_code == 404
+        assert served.post("/v1/dq/findings/abc/review").status_code == 404
+        assert served.get("/v1/nope").status_code == 404
+        # And the API still answers.
+        assert served.get("/v1/health").status_code == 200

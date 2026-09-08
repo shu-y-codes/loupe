@@ -218,6 +218,8 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
+# Streamlit is gone (plans/17-react-ui.md); the entry stays because an old checkout may
+# still have one and a secrets file is not something to start tracking by accident.
 .streamlit/secrets.toml
 
 # Loupe — analytics store
@@ -236,3 +238,11 @@ data/samples/
 
 # macOS
 .DS_Store
+
+# --- web/ -------------------------------------------------------------------------------
+# The React UI. `dist/` is already ignored above; these are the rest.
+web/node_modules/
+# Generated from a running API by `npm --prefix web run types` (and by CI, from the factory).
+# The API is the source of truth; a committed copy can go stale without anything noticing.
+web/src/api/schema.json
+web/src/api/schema.ts

@@ -18,6 +18,7 @@ from .purge import (
     BatchAlreadyPurged,
     BatchNotFound,
     PurgeResult,
+    forget_batch,
     purge_batch,
 )
 from .reference import SeedSummary, seed_reference
@@ -40,6 +41,7 @@ __all__ = [
     "database_path",
     "load_file",
     "preview_file",
+    "forget_batch",
     "purge_batch",
     "schema_is_applied",
     "seed_reference",

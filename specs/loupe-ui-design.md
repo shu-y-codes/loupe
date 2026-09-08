@@ -1,6 +1,9 @@
 # Loupe UI design
 
-Revised 2026-09-08: Review header names contract month, exchange, selected-grain observed
+Revised 2026-09-08: the page is **React** (Vite + TypeScript, `web/`). Widget names are
+React components; help is a native `title` plus an accessible description; charts are
+hand-drawn SVG; the synthetic disclosure is a warning Callout rather than `⚠️`. Every
+product rule below is unchanged. Same day: Review header names contract month, exchange, selected-grain observed
 coverage, Quality grain, and the independent filtered review window. Same day:
 **Overview** is the default landing. Same day: Overview family cells
 show headline `count unit` only; detail stays on Review. Same day: Overview table fits the
@@ -29,9 +32,11 @@ It provides **report-only** evidence. Findings and suggestions are identified, n
 ## Tooltips
 
 Help on **named boxes** (family-card **counts**, KPI-style tiles, column headers), not on
-every grid cell. One sentence, in this page’s language — not a persona dialect. Streamlit:
-help on the count line, dataframe column `help`. Overlay marks are a chart legend, not a
-hover glossary.
+every grid cell. One sentence, in this page’s language — not a persona dialect. Delivered as
+a native `title` plus an accessible description, on the count line and on table column headers:
+the browser’s own affordance is keyboard- and screen-reader-reachable, and a hover card the app
+built itself would have to earn that on touch and with a keyboard. Overlay marks are a chart
+legend, not a hover glossary.
 
 **Chart hover** (Daily OHLCV and markers): date, open, high, low, close, and **status**
 (`clean`, or a plain defect type such as `gap: session-open hole` / `gap: session missing`
@@ -56,6 +61,43 @@ did, from the changelog. This page does not apply a new rule.”
 - Glossary sentences on candle bodies (the legend + status hover cover that)
 - Rule IDs or expected-effect JSON in a hover. Rule IDs are a **caption**, never the
   headline
+
+## Visual language
+
+One light editorial theme, from CSS variables mapped to the canvas tokens
+(`text.primary|secondary|tertiary|quaternary`, `stroke.*`, `fill.*`, `accent.primary`,
+`category.red|orange|blue`, `diff.stripRemoved`). Components are `Stack`, `Row`, `Pill`,
+`Badge`, `Stat`, `Callout`, `Table` and the family-card grid. No component hardcodes a colour;
+a dark theme is a second set of variable values, not a second design.
+
+**Not allowed:** gradients, box-shadows, emoji as status, rainbow colour, KPI-sized type. Those
+are the canvas slop rules, and they are also what a widget toolkit hands you by default. The
+count line on a card is *slightly* larger than body text and nothing on the page is huge.
+
+**Status is never an emoji.** The synthetic-data disclosure is a warning **Callout** — a titled
+block with a coloured rule — not `⚠️`. The emoji was doing the work of saying "this matters";
+the page says it in words.
+
+**Charts are hand-drawn SVG**, not a chart library. The overlay needs a mark no candlestick
+library can draw: an **absent** session is a dashed labelled column where a candle would be,
+and a library handed no OHLC draws a zero bar or nothing at all. A zero-filled bar for a
+settlement that never arrived is the exact lie this overlay exists to prevent. Zoom, pan and
+double-click-to-reset are therefore also the page's own.
+
+**What a chart may decide.** Choosing a pixel, a colour, a tick label, or **which observed
+points to draw** is presentation. Computing a value that is then shown as data is not. A
+minute tape is ~114,000 VWAP points and a chart pane is ~720 units wide, so a chart may drop
+marks it cannot fit — by selecting points that are really in the series, never by averaging
+them into new ones — and **a dropped point may never hide a break**: a bucket holding any null
+window stays a break, because drawing a connected line across dropped volume is the one thing
+`specs/analytics-semantics.md` forbids.
+
+**One scope on screen at a time.** Contract, Quality grain and From / To change what the page
+is *about*; while a new one loads, the main column says so rather than leaving the previous
+contract's cards and candles under a header that already names the new one. A family change is
+different — it changes which marks are drawn, not what they are drawn on — so it does not blank
+the column, and content derived from an envelope names the family **that envelope** answered
+rather than the one just clicked.
 
 ## Product questions
 
@@ -176,10 +218,22 @@ From / To independently scope the evidence. When either is set, append
 coverage segment whose metadata is unavailable rather than inventing it.
 
 **Load demo data** is the only v1 UI ingest path. Locked decision 9 already named the
-button; it is chrome here, not only a sentence in the solution brief. It posts files
-already on local disk to `POST /v1/ingest/batches` with `origin=demo`
-(`specs/api-contract.md` §4.3). Arbitrary CSV or Parquet ingest remains an API path. The
+button; it is chrome here, not only a sentence in the solution brief. **The work runs on the
+server**: a browser cannot reach Hugging Face on the app's behalf, read `data/samples/`, or
+write a defective copy, so the button calls `POST /v1/demo/load` and the route ingests through
+the same loader `POST /v1/ingest/batches` uses, with `origin=demo`
+(`specs/api-contract.md` §4.3, §4.5). Arbitrary CSV or Parquet ingest remains an API path. The
 UI is not a second way to do the same thing.
+
+**Consent before bytes.** `GET /v1/demo/corpus` describes what a load would download — repo,
+pinned revision, file count, approximate size and the licence note — and makes no network call
+of its own. The panel shows that *before* the button, because a reader cannot consent to an
+unnamed fetch.
+
+**Progress.** The demo routes stream NDJSON, and the panel renders the last line
+("Fetching 3/48 · ESZ25.parquet"). A minute of silence after a press reads as a hang. A failed
+fetch is answered in place with its hint and does not point at an uploader; a checksum warning
+is shown and does not stop the load.
 
 **Ingested files** appear after a successful load. The list is `GET /v1/ingest/batches`
 plus `GET /v1/contracts` (already sidebar HTTP) — filename, format, origin — inventory of
@@ -277,10 +331,11 @@ Rows are loaded contract × held grain (a dual-grain contract appears twice). Co
 the four family headlines (`count unit`) plus Grain. Detail stays on Review. Full held
 window — empty date pickers. The table fits the main-column width without horizontal
 scroll; Contract is visually heavier than the family headlines. Family meaning stays on
-the column-header help. Stay on `st.dataframe` so a row click still opens Review. HTTP:
+the column-header help. HTTP:
 `GET /v1/contracts`, then `GET /v1/dq/checks?contract=&frequency=` per row.
 The widget does not group `findings[]`. Cache the table for the current store fingerprint
-(records / synthetic batches) so a rerun does not re-hit checks once per contract. Empty
+(records / synthetic batches) so returning to Overview does not re-hit checks once per
+contract. Empty
 store: same Load demo data invitation as Review. `checked: false`: say the check has not
 run; do not paint zeros as clean.
 
@@ -326,8 +381,8 @@ The **clean** series. Overlay marks from `checks.overlay.ohlcv` for the selected
   clean series — the defect is missing time, not a bad close.
 - **Gaps, absent settlement:** dashed column with an on-chart **absent** label (canvas-style
   annotation). No OHLC. Never a zero-filled candle. The legend may keep a colour entry for
-  “Settlement never arrived”; Vega legends do not show stroke-dash well, so the on-chart
-  label is the readable mark.
+  “Settlement never arrived”, drawn with its own dashed swatch rather than a colour square —
+  a swatch cannot show a stroke dash, and the on-chart label is the readable mark.
 - **Duplicates:** pin on the kept timestamp. Do not recolor the body.
 - **Invalid values:** paint that candle. Volume defects sit on the volume pane.
 - **Patterns:** shaded band on every participating session, including absences that
@@ -376,7 +431,7 @@ Same family as the cards and overlay. Lives **below VWAP**.
 
 | Family | Picture |
 |---|---|
-| Gaps | Ribbon of expected minute slots around the hole (present vs missing). An absent settlement is a sentence: the column never arrived; Loupe did not invent a bar. Draw the ribbon with a Vega chart, not SVG via `st.html`. |
+| Gaps | Ribbon of expected minute slots around the hole (present vs missing). An absent settlement is a sentence: the column never arrived; Loupe did not invent a bar. |
 | Duplicates | Two-row table: kept vs dropped, same timestamp. |
 | Invalid values | The accused stage record or source-aligned bar, naming the actual subject field and evidence grain/source. A volume rule never falls back to `close`. |
 | Recurring patterns | One focused `(rule_id, dimension)` group: sentence, rule ID and chart all refer to it. Say **Showing 1 of N standing patterns** (or how many related buckets are shown). The x title is the plain dimension; y is **Share (%)**; paired series are **Findings** and **Records (exposure)**; each bucket carries a lift label. Hover includes bucket, both shares, lift, support and distinct days. Explain that over-representation is findings share above record exposure and that the standing threshold, not count alone, admits a pattern. |
@@ -430,8 +485,14 @@ bucket for that card.
 is not on the strip) get a named group **Other (off the strip)** — not dropped, not a
 fifth card.
 
+**Grouping is the server's.** `GET /v1/demo/injection` returns the manifest already grouped by
+`strip_family`, so no client re-implements the catalogue map — a second copy of it would be a
+quietly different one. A store holding planted defects whose manifest is not on disk reports
+`manifest_available: false`, and the page says the evidence cannot be listed rather than showing
+an empty group that reads as "nothing was planted".
+
 **Sidebar warning.** When synthetic batches are loaded, the sidebar says how many synthetic
 records are loaded and lists the planted **file(s) grouped by strip family** (same map /
-filename nest as above). Do **not** say “findings below were planted” — nothing follows
-that sentence in the sidebar. The main-column expander may still show the full planted
-table for evidence.
+filename nest as above), as a warning **Callout** rather than an emoji. Do **not** say
+“findings below were planted” — nothing follows that sentence in the sidebar. The main-column
+disclosure may still show the full planted table for evidence.

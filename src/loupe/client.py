@@ -1,13 +1,18 @@
-"""The only thing in `ui` that knows the API exists.
+"""The Python HTTP client for the Loupe API.
 
-One module holds the base URL, the verbs and the error translation, for two reasons. It is
-the layer boundary `specs/loupe-solution-design.md` §6 draws — `ui` owns pages and thin
-clients, never SQL or rule logic — and it is the seam the page tests stub, which is what lets
-`streamlit.testing.v1.AppTest` assert view assembly without a server or a database.
+One module holds the base URL, the verbs and the error translation. It is the layer boundary
+`specs/loupe-solution-design.md` §6 draws — a caller owns its own presentation, never SQL or
+rule logic — and it is the seam `tests/integration/` drives, which is what lets the wire
+between a real client and a real server be tested as a wire.
+
+**It sits at the package root rather than inside a UI tree.** The browser UI is a React SPA
+with its own `web/src/api/client.ts`, so this client no longer belongs to any page. What it
+still is: the integration-test seam, and the object any Python caller (a script, a notebook,
+`tools/`) uses to talk to a running API without importing `loupe.api`.
 
 Talking HTTP rather than importing `loupe.api` is deliberate. Importing the app would be one
 process and no port, but it would fuse the two layers and make the thin-client boundary
-untestable *as* a boundary — the pages would keep working if someone reached past the client
+untestable *as* a boundary — a caller would keep working if someone reached past the client
 into `quality`, and nothing would notice.
 """
 
@@ -155,7 +160,7 @@ class LoupeClient:
     # ---------------------------------------------------------------- ingest
 
     def batches(self, **params: Any) -> dict[str, Any]:
-        """`GET /v1/ingest/batches` — the sidebar inventory reads this, not the sample directory."""
+        """`GET /v1/ingest/batches` — an inventory of the store, not a directory walk."""
         return self.get("/ingest/batches", **params)
 
     def purge_batch(self, batch_id: str) -> dict[str, Any]:

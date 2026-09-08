@@ -2,7 +2,10 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-08: Review header names contract context, selected-grain observed coverage,
+Revised 2026-09-08: the UI is a **React** SPA (Vite + TypeScript) served by FastAPI, not a
+Streamlit app; the demo buttons became `POST /v1/demo/load|inject|remove`; §3.7's
+synchronous-ingest rationale is restated without Streamlit; §13's UI tier is Vitest.
+Product behaviour is unchanged. Same day: Review header names contract context, selected-grain observed coverage,
 Quality grain, and the independent filtered window. Same day: Overview is the default landing.
 Same day: Overview family cells show
 headline `count unit` only; detail stays on Review. Same day: Overview | Review in the sidebar;
@@ -127,8 +130,11 @@ These are no longer open. State them in the delivered README.
    raw market data never leaves the process.
 6. **No authentication.** Two pages, still not a persona selector: **Review** (one contract)
    and **Overview** (corpus family tiles). Neither page is role-shaped.
-7. **Ingestion is synchronous.** Streamlit has no server push; at sample scale a job table buys
-   nothing. Async is an extension if ingest exceeds ~30s; enforce a hard upload size cap.
+7. **Ingestion is synchronous.** Single user, local DuckDB, sample scale: a job table, a
+   poll loop and a status vocabulary buy nothing a blocking call does not already give, and a
+   write that returns the finished result cannot lie about completion. Async is an extension if
+   ingest exceeds ~30s; enforce a hard upload size cap. (The demo routes *stream* progress, which
+   is UI telemetry rather than a job: nothing is persisted and there is no handle to poll.)
 8. **Both granularities are accepted; capability follows from input.** Gate on CSV/Parquet only,
    never on daily vs minute.
 9. **Sample data is fetched at setup time**, via a pinned script and optionally a "Load demo
@@ -189,8 +195,8 @@ HuggingFace dependency — which we reject.
 
 ```
 ┌─────────────┐     HTTP /v1      ┌─────────────┐      SQL       ┌────────────┐
-│  Streamlit  │ ───────────────►  │   FastAPI   │ ─────────────► │  DuckDB    │
-│     UI      │ ◄───────────────  │     API     │ ◄───────────── │  *.duckdb  │
+│  React SPA  │ ───────────────►  │   FastAPI   │ ─────────────► │  DuckDB    │
+│   web/      │ ◄───────────────  │     API     │ ◄───────────── │  *.duckdb  │
 └─────────────┘                   └─────────────┘                └────────────┘
                                          │
                     ┌────────────────────┼────────────────────┐
@@ -204,20 +210,29 @@ HuggingFace dependency — which we reject.
 
 | Layer | Owns | Does not own |
 |---|---|---|
-| `quality` | Rules, findings, score, patterns, suggestions, reconciliation | Charts, Streamlit widgets |
+| `quality` | Rules, findings, score, patterns, suggestions, reconciliation | Charts, UI components |
 | `insights` | Daily bars, VWAP, raw/clean compare | SQL loaders, DQ rule definitions |
 | `data` | DuckDB connect, ingest, reference seed, marts | UI, HTTP |
 | `api` | FastAPI routes, Pydantic models | Business math duplicated in handlers |
-| `ui` | Streamlit pages, thin API clients | SQL, rule logic, aggregation |
+| `web` | React pages and one thin `fetch` client | SQL, rule logic, aggregation |
+| `loupe.client` | The Python HTTP client (scripts, `tests/integration/`) | Anything above HTTP |
 
-No SQL, quality rules, or insight maths in Streamlit callbacks.
+No SQL, quality rules, or insight maths in UI code. The React app draws its own SVG charts,
+which means the line between *presentation* and *arithmetic* has to be stated rather than
+assumed: choosing a pixel, a colour, a tick label or **which observed points to draw** is
+presentation; computing a value that is then shown as data is not. A chart may drop marks it
+cannot fit; it may not average them into new ones.
+
+**One origin.** In development Vite proxies `/v1` to uvicorn; in production FastAPI serves
+`web/dist` at `/` beside `/v1`. The client only ever uses relative paths, so there is no CORS
+policy to write, maintain, or widen by accident.
 
 ### Tech stack and trade-offs
 
 | Choice | Why |
 |---|---|
 | **Python** | Exercise-native; one language across UI, API, analytics |
-| **Streamlit** | Fast business UI; progress around sync ingest (`st.status`) |
+| **React + Vite + TypeScript** | A typed UI with real components and its own SVG chart grammar; the overlay needs marks (a dashed *absent* column with no bar) that chart libraries cannot draw |
 | **FastAPI** | Typed contract, OpenAPI as architecture evidence, testable with `TestClient` |
 | **DuckDB** | SQL as inspectable analytics; out-of-core; single-file persistence matches single-user assumption |
 
@@ -448,8 +463,10 @@ Unavailable capabilities are explained in place on the dashboard after load (dis
 with reason), not silently omitted and not via a pre-commit sidebar matrix.
 
 Help on **named boxes** (family-card counts, headers), one sentence, not every grid cell.
-Skip aggregated-issue What cells and picture sentences. Streamlit: `st.metric(..., help=...)`
-on the count, dataframe column `help`. Overlay marks are a chart legend.
+Skip aggregated-issue What cells and picture sentences. Delivered as a native `title` plus an
+accessible description on the count line and on table column headers — the browser's own
+affordance is keyboard- and screen-reader-reachable, which a hover card the app builds itself
+would have to earn. Overlay marks are a chart legend.
 
 ### Demo priorities
 
@@ -469,9 +486,9 @@ on the count, dataframe column `help`. Overlay marks are a chart legend.
 | Contract | FastAPI `TestClient` against OpenAPI shapes | `tests/api/` |
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
-| UI | Two-page assembly (Review + Overview, no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| UI | Two-page assembly (Review + Overview, no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | Vitest + Testing Library over a stubbed `fetch`, `web/src/**/*.test.tsx` |
 | Integration | Cold start, the real client against a real server, durability on disk | uvicorn on an ephemeral port over a file-backed store, `tests/integration/` |
-| Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `tests/ui/test_pages.py` |
+| Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `web/src/api/schema.test.ts`, against `/v1/openapi.json` |
 
 Edge cases to fixture explicitly: exact dup, key conflict, mid-session gap, missing day,
 negative volume, `high < low`, close outside range, unparseable timestamp, empty file,
@@ -540,7 +557,7 @@ override from the UI.
 ## 15. Data flow (reviewer page, sync)
 
 ```
-User                    Streamlit                     FastAPI                      DuckDB
+User                    React SPA                     FastAPI                      DuckDB
  │                          │                            │                           │
  ├─ Pick contract + dates ─►│                            │                           │
  │                          ├─ GET /dq/checks ──────────►│                           │
@@ -552,8 +569,10 @@ User                    Streamlit                     FastAPI                   
  │◄─ Overlay + picture ─────┤◄── JSON ───────────────────┤                           │
  │                          │                            │                           │
  ├─ Load demo data ────────►│                            │                           │
- │                          ├─ POST /ingest/batches ────►│  load → rules → marts ───►│
- │                          │◄── 201 batch summary ──────┤                           │
+ │                          ├─ POST /demo/load ─────────►│  fetch corpus (explicit)  │
+ │                          │                            ├─ ingest each file ───────►│
+ │                          │◄── NDJSON progress ────────┤  corpus-wide rule run ───►│
+ │◄─ "Fetching 3/48 · file" ┤◄── done ───────────────────┤                           │
  │                          ├─ GET /ingest/batches ─────►│                           │
  │◄─ Sidebar file list ─────┤◄── filename, format, origin┤                           │
  │◄─ Dashboard refresh ─────┤                            │                           │
@@ -591,7 +610,7 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 2. `quality` — core rule families + score; fixtures first  
 3. `insights` — daily bars + VWAP; wire oracle test  
 4. `api` — routes matching `specs/api-contract.md`  
-5. `ui` — first chrome (slice 5); later rebuilt as the one reviewer page (slice 9)
+5. `ui` — first chrome (slice 5); later rebuilt as the one reviewer page (slice 9), and rewritten in React as `web/` (slice 17)
 6. Reconciliation + **report-only** suggestions + demo injection (apply/override later)
 7. Demo corpus — fetch, CSV conversion, Load demo data and Inject
 8. Ingest chrome — one sidebar ingest path; ingested-file list and CSV conversion mark
@@ -603,3 +622,4 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 14. Overview table chrome — fit and wrap, Overview left of Review; its Review default is superseded by slice 16 (`plans/14-overview-table.md`)
 15. Overview family headlines only — `count unit` in the grid, detail stays on Review (`plans/15-overview-headlines.md`)
 16. Overview default landing — cold sessions open on the corpus scan (`plans/16-overview-default.md`)
+17. React reviewer UI — the same two pages as a Vite + React + TypeScript SPA in `web/`, served by FastAPI at one origin; demo load / inject / remove move onto `/v1/demo/*` because a browser cannot fetch a corpus or read the filesystem (`plans/17-react-ui.md`)

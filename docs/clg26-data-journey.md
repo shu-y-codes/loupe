@@ -1,8 +1,8 @@
-# CLG26: from source files to Streamlit
+# CLG26: from source files to the screen
 
 This is one concrete, reproducible journey through Loupe. It follows the real
 `CLG26` minute and daily files into DuckDB, derives the numbers returned by
-FastAPI, and ends at the charts drawn by Streamlit.
+FastAPI, and ends at the charts the React app draws.
 
 The worked session is **trade date 2025-12-17**. It is useful because the minute
 tape contains all 1,380 expected slots, both grains are present, and the
@@ -40,7 +40,7 @@ That difference is not silently "fixed." A settlement is not required to equal
 the final minute trade, and the vendor's daily volume can include activity that
 never appeared on this tape.
 
-One point on the other Streamlit chart is equally traceable. At
+One point on the other chart is equally traceable. At
 **2025-12-17 08:30 CT** (`14:30Z`), the trailing typical-price VWAP is:
 
 ```text
@@ -82,7 +82,7 @@ flowchart LR
     Insights["insights: bars and VWAP"]
     API["FastAPI /v1: JSON envelopes"]
     Client["LoupeClient: HTTP only"]
-    Streamlit["Streamlit Review: cards and charts"]
+    Web["React Review: cards and charts"]
   end
 
   MinuteParquet -->|"converted once for CSV coverage"| MinuteCSV
@@ -101,7 +101,7 @@ flowchart LR
   Insights --> API
   Findings --> API
   API --> Client
-  Client --> Streamlit
+  Client --> Web
 ```
 
 The source locations after **Load demo data** are:
@@ -134,7 +134,7 @@ The button is a real ingest path, not a shortcut into DuckDB.
 ```mermaid
 sequenceDiagram
   actor User
-  participant UI as Streamlit
+  participant UI as React SPA
   participant Demo as demo.corpus
   participant Client as LoupeClient
   participant Route as POST ingest batches
@@ -428,7 +428,7 @@ The API also returns:
 ```
 
 VWAP partitions by both contract and trade date, so the window cannot leak
-across sessions. A zero-volume denominator returns null and the Streamlit line
+across sessions. A zero-volume denominator returns null and the plotted line
 breaks; Loupe does not draw zero or carry the previous value forward.
 
 ---
@@ -498,12 +498,12 @@ The `frequency` parameter selects the input grain, not the output grain: both
 responses contain daily bars. It is also echoed so the UI can name its source.
 
 `GET /v1/dq/checks` separately supplies the four card counts, family-specific
-overlay marks, close-up picture, and aggregated issues. Streamlit does not
+overlay marks, close-up picture, and aggregated issues. The UI does not
 download raw findings and reconstruct those objects in a widget.
 
 ---
 
-## 10. What Streamlit visualizes
+## 10. What the UI visualizes
 
 The app opens on **Overview**. After the demo load, `CLG26` appears once for
 each held grain.
@@ -568,8 +568,9 @@ SCHEMATIC UI MOCK — printed values are real for 2025-12-17
 └──────────────────┴────────────────────────────────────────────────────────────┘
 ```
 
-The actual rendering uses Altair candlesticks, a volume pane, and a continuous
-VWAP line. The mock exposes the values that their hovers carry.
+The actual rendering is the app's own SVG: candles, a volume pane beneath them on a shared
+x axis, and a VWAP line that breaks rather than joining across a null window. The mock exposes
+the values that their hovers carry.
 
 The main-column order is fixed:
 
@@ -606,7 +607,7 @@ Use this when a displayed number looks surprising:
 | How was VWAP calculated? | [`insights/vwap.py`](../src/loupe/insights/vwap.py) | [`analytics-semantics.md`](../specs/analytics-semantics.md) §4 |
 | Which bar source did the API select? | [`api/routes/analytics.py`](../src/loupe/api/routes/analytics.py) | [`api-contract.md`](../specs/api-contract.md) §2.1, §5 |
 | Where did the card/overlay payload come from? | [`quality/review.py`](../src/loupe/quality/review.py), [`api/routes/dq.py`](../src/loupe/api/routes/dq.py) | [`api-contract.md`](../specs/api-contract.md) §6.6 |
-| What did Streamlit request and draw? | [`ui/app.py`](../src/loupe/ui/app.py), [`ui/client.py`](../src/loupe/ui/client.py), [`ui/review.py`](../src/loupe/ui/review.py), [`ui/charts.py`](../src/loupe/ui/charts.py) | [`loupe-ui-design.md`](../specs/loupe-ui-design.md) |
+| What did the UI request and draw? | [`web/src/App.tsx`](../web/src/App.tsx), [`web/src/api/client.ts`](../web/src/api/client.ts), [`web/src/pages/Review.tsx`](../web/src/pages/Review.tsx), [`web/src/charts/`](../web/src/charts/) | [`loupe-ui-design.md`](../specs/loupe-ui-design.md) |
 
 For the generic architecture around this example, read
 [`docs/how-loupe-works.md`](how-loupe-works.md). For the meaning of every

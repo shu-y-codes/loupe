@@ -1,19 +1,18 @@
 """Fixtures for the integration tier — a real server, over a real file on disk.
 
 Every other tier in this repo stops at a seam. `tests/api/` runs HTTP in-process through
-`TestClient` and is handed a connection somebody already applied the schema to; `tests/ui/`
-drives the pages over a stubbed client that never builds an HTTP request. Both are the right
-shape for what they test, and between them they leave two things unexercised — the ones a
-first run breaks on:
+`TestClient` and is handed a connection somebody already applied the schema to; `web/` drives
+the React pages over a stubbed `fetch` that never opens a socket. Both are the right shape for
+what they test, and between them they leave two things unexercised — the ones a first run
+breaks on:
 
 - **a store nobody has bootstrapped**, because every other fixture hands the app a database
   that is already set up;
-- **the wire between `ui.client` and the API**, because one side is always simulated.
+- **the wire between `loupe.client` and the API**, because one side is always simulated.
 
 So this tier simulates neither. It boots uvicorn on a real socket over a real DuckDB file and
-talks to it with the same `LoupeClient` the Streamlit pages use. It is deliberately small:
-these tests are slow, and their job is to cover seams rather than behaviour the faster tiers
-already own.
+talks to it with a real `LoupeClient`. It is deliberately small: these tests are slow, and
+their job is to cover seams rather than behaviour the faster tiers already own.
 """
 
 from __future__ import annotations
@@ -29,9 +28,8 @@ import pytest
 import uvicorn
 
 from loupe.api import create_app
+from loupe.client import LoupeClient
 from loupe.data import connect
-from loupe.ui import runtime
-from loupe.ui.client import LoupeClient
 
 #: How long to wait for the server thread to bind. Generous: a loaded CI box is slow, and a
 #: flaky integration tier gets muted, which is worse than not having one.
@@ -116,16 +114,13 @@ def live_api(store_path: Path, monkeypatch) -> Iterator[str]:
 
 @pytest.fixture
 def api_client(live_api: str) -> Iterator[LoupeClient]:
-    """The **real** `LoupeClient` the Streamlit pages use, pointed at the live server.
+    """The **real** `LoupeClient`, pointed at the live server.
 
-    Not a stub and not `TestClient`: this is the object `ui.runtime.get_client()` returns in
-    production, so a defect in how it builds a multipart body or reads a problem response
-    shows up here and nowhere else in the suite.
+    Not a stub and not `TestClient`: this is the object a Python caller gets from
+    `loupe.client` in production, so a defect in how it builds a multipart body or reads a
+    problem response shows up here and nowhere else in the suite.
     """
-    client = LoupeClient()
-    runtime.use_client(client)
-    yield client
-    runtime.use_client(None)
+    yield LoupeClient()
 
 
 @pytest.fixture

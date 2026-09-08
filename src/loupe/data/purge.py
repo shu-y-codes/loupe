@@ -120,6 +120,39 @@ def purge_batch(con: duckdb.DuckDBPyConnection, batch_id: str) -> PurgeResult:
     )
 
 
+def forget_batch(con: duckdb.DuckDBPyConnection, batch_id: str) -> PurgeResult:
+    """Purge the batch **and drop its history row**, so those bytes can be loaded again.
+
+    Soft delete is right for `DELETE /v1/ingest/batches/{id}`: the history is worth keeping and
+    a re-upload of bytes the store once held is worth recognising (`specs/data-model.md`,
+    `UNIQUE (file_hash)`). It is wrong for a *swap*. The demo replaces one clean file with a
+    defective copy of the same tape and later puts the clean one back
+    (`specs/loupe-ui-design.md`, Synthetic disclosure), and the surviving `file_hash` refuses
+    that restore as a duplicate of a batch holding no records — so the way out of the demo
+    quietly did nothing, and the reviewer was told it had worked.
+
+    So the caller that intends a replacement says so, and nothing else changes. Ordinary purge
+    keeps its row; this one does not, because a history entry that blocks the undo it is
+    supposed to survive is not history worth keeping.
+
+    Idempotent to a caller re-running a swap: an already-purged batch is forgotten rather than
+    refused, since the state it would refuse for is the state being asked for.
+    """
+    try:
+        result = purge_batch(con, batch_id)
+    except BatchAlreadyPurged:
+        result = PurgeResult(
+            batch_id=batch_id,
+            records_deleted=0,
+            rejects_deleted=0,
+            findings_deleted=0,
+            bars_deleted=0,
+            sessions_affected=0,
+        )
+    con.execute("DELETE FROM stage.ingest_batch WHERE batch_id = ?", [batch_id])
+    return result
+
+
 def _delete(con: duckdb.DuckDBPyConnection, sql: str, *args: object) -> int:
     """Run a DELETE and report the row count, which DuckDB returns as a one-row result."""
     return int(con.execute(sql, list(args)).fetchone()[0])

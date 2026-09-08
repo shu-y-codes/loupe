@@ -15,7 +15,7 @@ specification wins. Execution status and remaining work live in
 - **[What the Loupe pages mean](metrics-primer.md)** — how to read Overview,
   Review, quality families, charts, and metrics.
 - **[CLG26 data journey](clg26-data-journey.md)** — a reproducible example
-  from real source rows through DuckDB and FastAPI to Streamlit.
+  from real source rows through DuckDB and FastAPI to the React charts.
 - **[How Loupe tests work](how-tests-work.md)** — test layers, fixtures,
   integration boundaries, and how to run the suite.
 

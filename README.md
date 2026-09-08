@@ -6,32 +6,44 @@ data and seeing what the usable series looks like.
 It combines deterministic data-quality checks with daily OHLCV bars and rolling 15-minute
 VWAP. It is intentionally not a trading workstation, a warehouse, or a live-feed system.
 
-Stack: Python 3.12+, Streamlit, FastAPI, and DuckDB.
+Stack: Python 3.12+, FastAPI, and DuckDB, with a React (Vite + TypeScript) UI in `web/`.
 
 ## Quick start
 
-Install [uv](https://docs.astral.sh/uv/), then:
+Install [uv](https://docs.astral.sh/uv/) and [Node](https://nodejs.org/) 20+, then:
 
 ```bash
 uv sync
+npm --prefix web install
 ```
 
-Start the API and UI in separate terminals:
+Build the UI once, then start one server:
+
+```bash
+npm --prefix web run build
+uv run uvicorn loupe.api.app:create_app --factory
+```
+
+Open <http://127.0.0.1:8000>. FastAPI serves the built app at `/` and the API at `/v1`, with
+generated OpenAPI documentation at <http://127.0.0.1:8000/v1/docs>.
+
+**While working on the UI**, run the two in separate terminals instead and use Vite's dev
+server, which reloads on save:
 
 ```bash
 uv run uvicorn loupe.api.app:create_app --factory
 ```
 
 ```bash
-uv run streamlit run src/loupe/ui/app.py
+npm --prefix web run dev
 ```
 
-Open <http://localhost:8501>. The API is at <http://127.0.0.1:8000/v1>, with generated
-OpenAPI documentation at <http://127.0.0.1:8000/v1/docs>.
+Open <http://localhost:5173>. Vite proxies `/v1` to the API, so the browser sees one origin
+either way and there is no CORS configuration in this project.
 
 The first API start creates `data/loupe.duckdb`, applies the schema, and seeds reference
 data and the quality-rule catalogue. Set `LOUPE_DB` to use another store. Set
-`LOUPE_API_URL` to point the UI at another API base URL.
+`LOUPE_API_ORIGIN` to point the Vite dev server at an API on another host or port.
 
 To permanently delete all local Loupe data and start with a fresh database, stop the API
 and UI, then run from the repository root:
@@ -63,8 +75,12 @@ the write-ahead log if one exists. The next API start recreates and seeds the da
    picture describe the same evidence. Zoom the OHLCV and rolling 15-minute VWAP charts
    independently.
 7. Optionally select **Inject demo defects**. Loupe writes a labelled copy, never changes the
-   vendor file, and discloses synthetic records on every rerun. **Remove demo defects**
-   restores the clean file.
+   vendor file, and discloses synthetic records on every page load. **Remove demo defects**
+   takes them out and restores the clean file.
+
+Load, inject and remove run on the API (`POST /v1/demo/load|inject|remove`) and stream their
+progress back, because a browser cannot fetch the corpus or read the sample directory itself.
+The fetch still happens only on an explicit press, and ingest still contacts no network.
 
 The vendor corpus is close to defect-free. The separate injector makes otherwise unreachable
 checks visible without presenting planted defects as vendor facts.
@@ -84,7 +100,7 @@ uses the curated demo path rather than hosting a second upload workflow.
 Browser
   │
   ▼
-Streamlit UI ── HTTP/JSON ──► FastAPI /v1
+React SPA (web/) ── HTTP/JSON ──► FastAPI /v1
                                  │
                     ┌────────────┼────────────┐
                     ▼            ▼            ▼
@@ -100,7 +116,12 @@ The boundaries are functional:
 - `quality` runs checks, scores, cleaning rules, reconciliation, and pattern detection.
 - `insights` derives bars, VWAP, comparisons, and publish-gate results.
 - `api` exposes typed HTTP envelopes over those services.
-- `ui` is a thin HTTP client. Streamlit callbacks contain no SQL, scoring, or bar math.
+- `web` is a thin HTTP client and a set of React components. It contains no SQL, scoring, or
+  bar math; its charts draw envelopes the API already decided.
+- `loupe.client` is the same boundary for Python callers — scripts, and the integration tests.
+
+One origin in both modes: Vite proxies `/v1` in development, and FastAPI serves `web/dist`
+alongside `/v1` in production.
 
 FastAPI owns one locked DuckDB connection. That fits the single-user design and protects
 temporary assessment tables from concurrent requests; it is not a multi-user architecture.
@@ -163,9 +184,12 @@ nearer the last trade than the configured 15:00 print.
 
 ## Trade-offs and limitations
 
-- Two processes preserve a real UI/API boundary, at the cost of two startup commands.
-- Streamlit keeps the interface small and testable, but reruns the script on interaction and
-  has no server push.
+- The UI talks HTTP and never imports the API, which preserves a real boundary at the cost of
+  a build step. In production it is still one process and one origin.
+- Charts are the project's own SVG rather than a library. That is what lets an absent
+  settlement be a dashed labelled column instead of a zero-height bar, and it means zoom, pan
+  and reset are also ours to maintain.
+- The UI needs Node to build. The API and the whole Python test suite do not.
 - Overview currently requests `/dq/checks` once per contract and grain, cached against the
   store fingerprint. A bulk endpoint should be added only if measurement shows this loop is
   too slow.
@@ -203,9 +227,16 @@ uv run pytest
 uv run ruff check .
 ```
 
+```bash
+npm --prefix web test        # Vitest + Testing Library
+npm --prefix web run build   # tsc --noEmit, then the production bundle
+```
+
 Tests requiring the fetched corpus are marked `samples` and skip when it is absent. The suite
-also includes a real-process integration tier, API contract tests, DuckDB rule/query tests,
-and Streamlit `AppTest` coverage. The test map is
+also includes a real-process integration tier, API contract tests, and DuckDB rule/query
+tests. The UI has its own suite (`npm --prefix web test`): Vitest and Testing Library over a
+stubbed `fetch`, plus a parity check that fails if a test stub invents a field the API does not
+have. The test map is
 [`docs/how-tests-work.md`](docs/how-tests-work.md).
 
 Product and calculation truth lives in [`specs/`](specs/). Execution status lives in

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from typing import Annotated
 
@@ -60,9 +61,22 @@ class Database:
         self._connection = connection
         self._lock = threading.Lock()
 
-    def acquire(self) -> Iterator[duckdb.DuckDBPyConnection]:
+    @contextmanager
+    def session(self) -> Iterator[duckdb.DuckDBPyConnection]:
+        """The connection, held for the duration of the block.
+
+        A context manager as well as a dependency because the demo routes stream: they hand
+        Starlette a generator that outlives the handler, so they cannot take the connection
+        through `Depends` and must take the lock around each step themselves. Taking it *per
+        step* rather than for the whole stream is deliberate — a corpus load spends a minute
+        on someone else's network, and `GET /v1/health` should still answer during it.
+        """
         with self._lock:
             yield self._connection
+
+    def acquire(self) -> Iterator[duckdb.DuckDBPyConnection]:
+        with self.session() as connection:
+            yield connection
 
 
 def get_con(request: Request) -> Iterator[duckdb.DuckDBPyConnection]:

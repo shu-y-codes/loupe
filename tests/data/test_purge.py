@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from loupe.data import BatchAlreadyPurged, BatchNotFound, load_file, purge_batch
+from loupe.data import (
+    BatchAlreadyPurged,
+    BatchNotFound,
+    forget_batch,
+    load_file,
+    purge_batch,
+)
 from loupe.insights import build_bars
 from loupe.quality import run_rules, seed_quality
 
@@ -109,3 +115,52 @@ def test_purging_a_batch_with_no_records_is_not_an_error(pcon, fixture_path):
     assert result.records_deleted == 0
     assert result.bars_deleted == 0
     assert result.sessions_affected == 0
+
+
+# ------------------------------------------------------------------------ purge and forget
+
+
+def test_forget_releases_the_file_hash_so_the_same_bytes_can_come_back(pcon, fixture_path):
+    """The swap case. Soft delete keeps the key; `forget_batch` is what makes a swap reversible.
+
+    Without this the demo's Remove says it restored the clean file and does not: the re-ingest
+    is refused as a duplicate of a batch that holds no records
+    (`specs/loupe-ui-design.md`, Synthetic disclosure).
+    """
+    path = fixture_path(MINUTE_FIXTURE)
+    batch = load_file(pcon, path)
+    forget_batch(pcon, batch.batch_id)
+
+    assert pcon.execute(
+        "SELECT count(*) FROM stage.ingest_batch WHERE batch_id = ?", [batch.batch_id]
+    ).fetchone()[0] == 0
+    assert pcon.execute(
+        "SELECT count(*) FROM stage.market_record WHERE batch_id = ?", [batch.batch_id]
+    ).fetchone()[0] == 0
+
+    again = load_file(pcon, path)
+    assert again.batch_id != batch.batch_id
+    assert again.rows_accepted > 0
+
+
+def test_forget_still_reports_what_the_purge_removed(pcon, fixture_path):
+    batch = load_file(pcon, fixture_path(MINUTE_FIXTURE))
+    result = forget_batch(pcon, batch.batch_id)
+    assert result.records_deleted > 0
+
+
+def test_forgetting_an_already_purged_batch_is_not_an_error(pcon, fixture_path):
+    """Idempotent to a caller re-running a swap: the refused state *is* the wanted state."""
+    batch = load_file(pcon, fixture_path(MINUTE_FIXTURE))
+    purge_batch(pcon, batch.batch_id)
+
+    result = forget_batch(pcon, batch.batch_id)
+    assert result.records_deleted == 0
+    assert pcon.execute(
+        "SELECT count(*) FROM stage.ingest_batch WHERE batch_id = ?", [batch.batch_id]
+    ).fetchone()[0] == 0
+
+
+def test_forgetting_an_unknown_batch_still_raises(pcon):
+    with pytest.raises(BatchNotFound):
+        forget_batch(pcon, "01900000-0000-0000-0000-000000000000")

@@ -66,7 +66,7 @@ def test_the_same_file_twice_is_refused_as_a_problem_the_client_can_read(
     place. That round trip — domain error, RFC 7807 body, `ApiProblem` with its `code` intact —
     is only real when there is an HTTP layer between the two ends.
     """
-    from loupe.ui.client import ApiProblem
+    from loupe.client import ApiProblem
 
     upload_file(MINUTE)
     path = fixture_path(MINUTE)

@@ -7,7 +7,8 @@ alwaysApply: true
 
 Lightweight app for **data quality** and **market insights** from historical futures data.
 
-Stack: **Python**, **Streamlit** (UI), **FastAPI** (API), **DuckDB** (analytics store/query).
+Stack: **Python**, **FastAPI** (API), **DuckDB** (analytics store/query), and a
+**React** (Vite + TypeScript) SPA in `web/`, served by FastAPI at one origin.
 
 ## Layers (keep these separate)
 
@@ -15,15 +16,16 @@ Stack: **Python**, **Streamlit** (UI), **FastAPI** (API), **DuckDB** (analytics 
 - `insights`: market views derived from clean(er) series
 - `data`: DuckDB load/query; no UI widgets here
 - `api`: FastAPI routes that call quality/insights/data
-- `ui`: Streamlit pages that call the API or shared services — keep widgets thin
+- `web`: React pages that call the API over HTTP — keep components thin
+- `loupe.client`: the Python HTTP client for scripts and `tests/integration/`
 
-Do not put SQL, quality rules, or insight math in Streamlit callbacks.
+Do not put SQL, quality rules, or insight math in the UI.
 
 ## Data
 
 - Historical futures only unless the user asks otherwise
 - Treat missing contracts, rolls, and timestamps as first-class quality issues
-- DuckDB files and secrets stay out of git (`.env`, `.streamlit/secrets.toml`, `*.duckdb`)
+- DuckDB files, `node_modules/`, `web/dist/` and secrets stay out of git (`.env`, `*.duckdb`)
 
 ## Agent workflow
 
