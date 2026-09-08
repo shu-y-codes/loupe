@@ -2,7 +2,9 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-08: Overview is the default landing. Same day: Overview family cells show
+Revised 2026-09-08: Review header names contract context, selected-grain observed coverage,
+Quality grain, and the independent filtered window. Same day: Overview is the default landing.
+Same day: Overview family cells show
 headline `count unit` only; detail stays on Review. Same day: Overview | Review in the sidebar;
 Overview table fits the main column. Same day: two pages — Review (one contract) and Overview
 (corpus family tiles); locked decision 6 keeps no-auth and drops “one reviewer page” as a
@@ -398,6 +400,11 @@ Daily OHLCV then 15-minute VWAP, full width, **selected-grain and selected-famil
 volume); picture of the selected family **below** VWAP; selected-family aggregated issues
 (What / Days / Records / What we did). Report-only:
 no apply or override.
+
+The Review header names contract, contract month, exchange, selected-grain **observed**
+coverage, and resolved Quality grain. From / To is an independent evidence scope and,
+when set, is appended as the Review window; it never rewrites observed coverage into a
+listing or expiry claim. Missing optional contract metadata is omitted.
 
 **Overview.** Corpus scan: one row per loaded contract × held grain; columns are the four
 family headlines (`count unit`) plus Grain; full held window. Detail stays on Review.

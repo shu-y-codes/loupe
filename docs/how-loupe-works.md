@@ -646,6 +646,11 @@ Two destinations in one Streamlit script (`ui/app.py`). Sidebar switch: **Overvi
 default **Overview** (`ui/chrome.render_destination`). Shared on both: demo ingest
 (`ui/demo.py`). Charts in `ui/charts.py` (Altair). HTTP only via `LoupeClient`.
 
+Review reuses the selected row from `GET /contracts` for its header; it makes no detail
+request. The caption shows contract month, exchange, the resolved grain's full **observed**
+coverage, and Quality grain. From / To is appended separately as the Review window, so a
+filtered chart never makes its selected dates look like listing or expiry dates.
+
 ```mermaid
 flowchart TB
   subgraph shared [Every rerun]

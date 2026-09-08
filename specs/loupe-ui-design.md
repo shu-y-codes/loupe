@@ -1,6 +1,8 @@
 # Loupe UI design
 
-Revised 2026-09-08: **Overview** is the default landing. Same day: Overview family cells
+Revised 2026-09-08: Review header names contract month, exchange, selected-grain observed
+coverage, Quality grain, and the independent filtered review window. Same day:
+**Overview** is the default landing. Same day: Overview family cells
 show headline `count unit` only; detail stays on Review. Same day: Overview table fits the
 main column (heavier Contract); sidebar switch is **Overview | Review**. Same day: two
 pages — **Review** (one contract, four cards and two charts) and **Overview** (corpus
@@ -155,6 +157,24 @@ Cards, patterns, selected-family issues, picture, overlays and OHLCV all use tha
 Minute reads derived daily bars from the minute tape; Daily reads supplied vendor daily bars.
 Changing family never changes grain.
 
+**Review header.** Under **Loupe**, show:
+
+```text
+{contract} · {contract month} · {exchange} · {Grain} coverage: {first observed} – {last observed} · {Grain} quality grain
+```
+
+For example:
+
+```text
+CLG26 · February 2026 · NYMEX · Minute coverage: Dec 3, 2020 – Jan 20, 2026 · Minute quality grain
+```
+
+Coverage is the full **observed** range for the resolved grain from `GET /v1/contracts`;
+it is not a listing or expiry claim. Switching Quality grain switches the coverage row.
+From / To independently scope the evidence. When either is set, append
+`Review window: …`; do not replace or crop the coverage text. Omit a month, exchange, or
+coverage segment whose metadata is unavailable rather than inventing it.
+
 **Load demo data** is the only v1 UI ingest path. Locked decision 9 already named the
 button; it is chrome here, not only a sentence in the solution brief. It posts files
 already on local disk to `POST /v1/ingest/batches` with `origin=demo`
@@ -192,8 +212,9 @@ missing minute tape. There is no pre-commit sidebar matrix.
 
 ```
 ┌──────────────────┬──────────────────────────────────────────────────────────┐
-│ LOUPE            │  ESZ25 · 2025-06-02 → 2025-06-30                         │
-│ [Overview|Review]│                                                          │
+│ LOUPE            │  ESZ25 · December 2025 · CME · Minute coverage:          │
+│ [Overview|Review]│  Jan 18, 2024 – Dec 19, 2025 · Minute quality grain      │
+│                  │  Review window: Jun 2, 2025 – Jun 30, 2025               │
 │                  │                                                          │
 │ Contract         │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────────────┐  │
 │  [ESZ25     ▾]   │  │ Selected│ │Duplicates│ │ Invalid │ │ Recurring     │  │
