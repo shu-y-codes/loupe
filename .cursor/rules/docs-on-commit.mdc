@@ -1,0 +1,27 @@
+---
+description: Patch matching docs in the same commit as the change they describe
+alwaysApply: true
+---
+
+# Docs travel with the commit
+
+When behaviour, tests, public commands, or page meaning change, **update the matching doc in the same commit**. Do not leave a primer or spec teaching the old path. Do this as part of the work. If the user asks to commit, include the doc patch.
+
+`specs/` remains law. Primers in `docs/` are maps. Do not invent a new file when an existing one owns the topic. Amend in place. Never edit `_notes/founding/`. Do not promote `_notes/` into the commit as a second spec.
+
+## Which file
+
+| You changed… | Patch |
+|---|---|
+| Product, formula, API shape, UI law | the owning file under `specs/` |
+| Slice sequence or done-when | `plans/` |
+| Who calls whom in the running app | `docs/how-loupe-works.md` |
+| What Overview / Review numbers mean | `docs/metrics-primer.md` |
+| Test folders, seams, fixtures, how to run | `docs/how-tests-work.md` |
+| Clone, start, walkthrough | `README.md` |
+
+Skip a file that would still teach the right thing. A test-only change that does not move folders, seams, shared fixtures, or how pytest is run does not need a primer rewrite.
+
+## Commit checklist
+
+Before `git commit`, grep the change against the table above. If a diagram, command, or folder list would now be wrong, fix it in this commit — not later.

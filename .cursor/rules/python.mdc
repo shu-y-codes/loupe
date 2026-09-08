@@ -26,3 +26,4 @@ def load_prices(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
 ```
 
 - Use pytest; name tests `test_<behavior>`. Mock I/O, not DuckDB SQL shape when a temp DB is easy
+- Test layout and seams: `docs/how-tests-work.md`

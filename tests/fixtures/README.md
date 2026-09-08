@@ -1,5 +1,7 @@
 # Fixtures
 
+How these files sit in the suite: [`docs/how-tests-work.md`](../../docs/how-tests-work.md).
+
 Tiny, hand-built, committed CSVs, each carrying exactly one planted defect, so a failing test
 names the rule it broke. The real corpus is unsuitable as a unit-test fixture: it is 15.5 MB,
 it cannot be committed, and it is far too clean to exercise the rule catalogue
