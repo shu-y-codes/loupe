@@ -123,11 +123,51 @@ def test_dual_grain_contract_defaults_minute_and_passes_it_explicitly(app):
 
     grain = test.sidebar.segmented_control(key="quality_grain_display")
     assert grain.value == "Minute"
-    assert "Minute quality grain" in " ".join(c.value for c in test.caption)
+    captions = " ".join(c.value for c in test.caption)
+    assert (
+        "ESZ25 · December 2025 · CME · "
+        "Minute coverage: Jan 18, 2024 – Dec 19, 2025 · Minute quality grain"
+    ) in captions
     assert any(
         params.get("frequency") == "minute"
         for name, params in client.calls
         if name in {"checks", "bars_daily"}
+    )
+
+
+def test_review_header_renders_clg26_contract_context_and_observed_coverage(app):
+    contracts = {
+        "data": [
+            {
+                "contract_id": "CLG26",
+                "root": "CL",
+                "exchange": "NYMEX",
+                "contract_month": "2026-02",
+                "coverage": {
+                    "minute": {
+                        "first_trade_date": "2020-12-03",
+                        "last_trade_date": "2026-01-20",
+                        "sessions": 314,
+                        "records": 105384,
+                    },
+                    "daily": {
+                        "first_trade_date": "2018-01-22",
+                        "last_trade_date": "2026-01-20",
+                        "sessions": 2012,
+                        "records": 2012,
+                    },
+                },
+                "frequencies_available": ["daily", "minute"],
+            }
+        ],
+        "total": 1,
+    }
+    test = _no_exception(app(client=FakeClient(contracts=contracts)))
+
+    assert any(
+        "CLG26 · February 2026 · NYMEX · "
+        "Minute coverage: Dec 3, 2020 – Jan 20, 2026 · Minute quality grain" in caption.value
+        for caption in test.caption
     )
 
 
@@ -144,12 +184,39 @@ def test_daily_quality_grain_labels_vwap_context_and_preserves_dates(app):
     )
 
     assert test.sidebar.segmented_control(key="quality_grain_display").value == "Daily"
+    captions = " ".join(c.value for c in test.caption)
+    assert (
+        "ESZ25 · December 2025 · CME · "
+        "Daily coverage: Jun 4, 2021 – Dec 19, 2025 · Daily quality grain"
+    ) in captions
     assert any("context only for Daily quality grain" in c.value for c in test.caption)
     assert all(
         params.get("frequency") == "daily"
         for name, params in client.calls
         if name in {"checks", "bars_daily"}
     )
+
+
+def test_review_header_keeps_full_coverage_and_appends_selected_window(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(
+        app(
+            client=client,
+            start=date(2025, 6, 2),
+            end=date(2025, 6, 30),
+        )
+    )
+
+    captions = " ".join(c.value for c in test.caption)
+    assert "Minute coverage: Jan 18, 2024 – Dec 19, 2025" in captions
+    assert "Review window: Jun 2, 2025 – Jun 30, 2025" in captions
+
+
+def test_review_header_omits_unavailable_optional_contract_metadata(app):
+    test = _no_exception(app())
+    captions = " ".join(c.value for c in test.caption)
+    assert "ZCZ25 · Daily quality grain" in captions
+    assert "coverage:" not in captions
 
 
 def test_explicit_dates_survive_contract_change(app):

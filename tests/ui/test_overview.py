@@ -198,7 +198,11 @@ def test_overview_click_through_opens_review_on_that_contract_and_grain(app):
         "Invalid values",
         "Recurring patterns",
     ]
-    assert any("Minute quality grain" in c.value for c in after.caption)
+    assert any(
+        "ESZ25 · December 2025 · CME · "
+        "Minute coverage: Jan 18, 2024 – Dec 19, 2025 · Minute quality grain" in c.value
+        for c in after.caption
+    )
 
 
 def test_overview_empty_store_invites_demo_load(app):

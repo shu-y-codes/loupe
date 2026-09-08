@@ -156,7 +156,11 @@ def main() -> None:
     if destination == "Review":
         state = render_sidebar(contracts, frequencies)
         render_demo(client, health)
-        render_header(state)
+        selected_contract = next(
+            (row for row in contract_rows if row.get("contract_id") == state.contract),
+            None,
+        )
+        render_header(state, selected_contract)
     else:
         render_demo(client, health)
         render_overview_header()

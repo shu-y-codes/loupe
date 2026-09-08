@@ -8,7 +8,8 @@ them. There is no file uploader. Overview | Review is not a persona selector.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from typing import Any
 
 import streamlit as st
 
@@ -110,13 +111,24 @@ def render_sidebar(
     )
 
 
-def render_header(state: SidebarState) -> None:
+def render_header(state: SidebarState, contract_metadata: dict[str, Any] | None = None) -> None:
+    """Review heading: contract context, observed grain coverage, then filtered scope."""
     st.title("Loupe")
     if state.contract:
-        window = _window_caption(state.start, state.end)
         parts = [state.contract]
+        metadata = contract_metadata or {}
+        month = _contract_month_caption(metadata.get("contract_month"))
+        if month:
+            parts.append(month)
+        exchange = str(metadata.get("exchange") or "").strip()
+        if exchange:
+            parts.append(exchange)
         if state.frequency:
+            coverage = _coverage_caption(metadata, state.frequency)
+            if coverage:
+                parts.append(coverage)
             parts.append(f"{state.frequency.title()} quality grain")
+        window = _window_caption(state.start, state.end)
         if window:
             parts.append(window)
         st.caption(" · ".join(parts))
@@ -124,11 +136,50 @@ def render_header(state: SidebarState) -> None:
         st.caption("Four checks and two charts on one selected contract.")
 
 
+def _as_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _human_date(value: Any) -> str | None:
+    parsed = _as_date(value)
+    return f"{parsed:%b} {parsed.day}, {parsed.year}" if parsed else None
+
+
+def _contract_month_caption(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = date.fromisoformat(f"{value}-01" if len(value) == 7 else value)
+    except ValueError:
+        return None
+    return f"{parsed:%B} {parsed.year}"
+
+
+def _coverage_caption(metadata: dict[str, Any], frequency: str) -> str | None:
+    coverage = (metadata.get("coverage") or {}).get(frequency) or {}
+    first = _human_date(coverage.get("first_trade_date"))
+    last = _human_date(coverage.get("last_trade_date"))
+    if not first or not last:
+        return None
+    return f"{frequency.title()} coverage: {first} – {last}"
+
+
 def _window_caption(start: date | None, end: date | None) -> str:
     if start and end:
-        return f"{start.isoformat()} → {end.isoformat()}"
+        if start == end:
+            return f"Review window: {_human_date(start)}"
+        return f"Review window: {_human_date(start)} – {_human_date(end)}"
     if start:
-        return f"from {start.isoformat()}"
+        return f"Review window: from {_human_date(start)}"
     if end:
-        return f"to {end.isoformat()}"
+        return f"Review window: through {_human_date(end)}"
     return ""

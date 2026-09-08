@@ -232,9 +232,37 @@ EMPTY_BATCHES: dict[str, Any] = {"data": [], "total": 0}
 #: Mixed grains so the ingested-file expander can name all three coverage groups.
 MIXED_COVERAGE_CONTRACTS: dict[str, Any] = {
     "data": [
-        {"contract_id": "ESZ25", "root": "ES", "frequencies_available": ["daily", "minute"]},
-        {"contract_id": "ZCZ25", "root": "ZC", "frequencies_available": ["daily"]},
-        {"contract_id": "SR3G26", "root": "SR3", "frequencies_available": ["minute"]},
+        {
+            "contract_id": "ESZ25",
+            "root": "ES",
+            "exchange": "CME",
+            "contract_month": "2025-12",
+            "coverage": {
+                "daily": {
+                    "first_trade_date": "2021-06-04",
+                    "last_trade_date": "2025-12-19",
+                    "sessions": 1145,
+                    "records": 1145,
+                },
+                "minute": {
+                    "first_trade_date": "2024-01-18",
+                    "last_trade_date": "2025-12-19",
+                    "sessions": 224,
+                    "records": 114477,
+                },
+            },
+            "frequencies_available": ["daily", "minute"],
+        },
+        {
+            "contract_id": "ZCZ25",
+            "root": "ZC",
+            "frequencies_available": ["daily"],
+        },
+        {
+            "contract_id": "SR3G26",
+            "root": "SR3",
+            "frequencies_available": ["minute"],
+        },
     ],
     "total": 3,
 }

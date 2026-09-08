@@ -52,8 +52,9 @@ Add **Quality grain** to the sidebar for a contract holding both frequencies:
 - A minute-only or daily-only contract has no choice control; show the held grain as
   quiet context.
 - Default a dual-grain contract to **Minute** (the existing finest-grain API default),
-  but echo the choice in the page header/chart subtitle. Never change grain when the
-  family changes.
+  but echo the choice in the page header/chart subtitle. The header also names contract
+  month, exchange, and that grain's full observed coverage; From / To remains a separate
+  Review window. Never change grain when the family changes.
 
 This is preferable to automatically picking daily for Invalid and minute for Gaps:
 family-dependent source switching would make cards move under the reader and would hide
@@ -95,6 +96,9 @@ scope-key rule with its own selection name.
 
 1. Sidebar Quality grain control, default, single-grain state, and persistence when
    contract changes.
+   The Review header is
+   `{contract} · {contract month} · {exchange} · {Grain} coverage: {first} – {last} · {Grain} quality grain`;
+   coverage is observed, follows grain, and is not cropped by From / To.
 2. Every family card, selected-family issue row, overlay, picture and OHLCV bar uses the
    selected grain. Name the OHLCV source: **Derived from minute** or **Supplied daily**.
 3. Heading becomes **Issues in selected family** (or includes the family label). The
@@ -177,8 +181,10 @@ No new store and no new rule execution.
 
 ## UI shape
 
-- `chrome.py`: Quality grain selector from `frequencies_available`.
+- `chrome.py`: Quality grain selector from `frequencies_available`; contract-context,
+  selected-grain coverage, and independent Review-window header.
 - `app.py` / `client.py`: pass frequency explicitly to checks and Daily OHLCV; pass
+  the already-fetched selected contract row to the header; pass
   scope identity (contract, grain, effective dates/data extent) to chart rendering.
 - `review.py`: source subtitle; selected-family issue heading; honest Invalid evidence
   grain; pattern “showing N” explainer.
@@ -225,6 +231,10 @@ API sends the selected scope and chart-ready evidence.
    different range; both charts must fit the new scope without double-clicking.
 10. Run `uv run pytest tests/quality tests/api tests/ui`; add an integration assertion
    against a dual-grain fixture. Browser-pass CLG26 at both grains before marking done.
+11. AppTest asserts contract month, exchange, and human-readable observed coverage for the
+    resolved grain. Switching grain switches coverage; explicit From / To is appended as
+    `Review window` without changing the full coverage span. Missing optional metadata is
+    omitted cleanly.
 
 ## Files
 
@@ -237,6 +247,7 @@ API sends the selected scope and chart-ready evidence.
 - `src/loupe/api/routes/dq.py`, `src/loupe/api/models.py`
 - `src/loupe/ui/chrome.py`, `app.py`, `client.py`, `review.py`, `charts.py`
 - `tests/quality/`, `tests/api/`, `tests/ui/`, focused integration fixture
+- `docs/metrics-primer.md`, `docs/how-loupe-works.md`, `docs/clg26-data-journey.md`
 
 ## Non-goals
 
