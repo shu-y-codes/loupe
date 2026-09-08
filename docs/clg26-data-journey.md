@@ -361,10 +361,7 @@ record_count      1
 expected_count    null
 completeness_pct  null
 ```
-
-`expected_count` is null because one supplied daily row is not one sample from
-a 1,380-minute grid. Daily completeness is evaluated as a daily series, not as
-`1 / 1,380`.
+Note: the API uses 'expected_count' and 'completeness_pct' on both bar sources, but they are only applicable to minute-derived bars, so they will always be null for supplied daily bars.
 
 ---
 
