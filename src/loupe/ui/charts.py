@@ -7,6 +7,8 @@ field may still arrive on the bar envelope for the publish gate; this module ign
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 import altair as alt
@@ -24,12 +26,61 @@ _PATTERN = "#7c3aed"
 _VOLUME_BAD = "#c2410c"
 _VOLUME = "#94a3b8"
 
+#: How to reset the shared-x zoom on Daily OHLCV + volume (`specs/loupe-ui-design.md`).
+OHLCV_ZOOM_CAPTION = "Drag the dates to pan or zoom. Double-click to reset."
+VWAP_ZOOM_CAPTION = "Drag the timestamps to pan or zoom. Double-click to reset."
+
+_OHLCV_TOOLTIP = [
+    alt.Tooltip("trade_date:T", title="Date"),
+    alt.Tooltip("open:Q", title="Open"),
+    alt.Tooltip("high:Q", title="High"),
+    alt.Tooltip("low:Q", title="Low"),
+    alt.Tooltip("close:Q", title="Close"),
+    alt.Tooltip("status:N", title="Status"),
+]
+
 
 def _date_str(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return str(value)[:10]
     text = str(value)
     return text[:10] if text else text
+
+
+def overlay_status(family: str, row: Any) -> str:
+    """Plain status for chart hover — selected-family marks, not max_severity."""
+    session = getattr(row, "session", None)
+    if session is None and isinstance(row, dict):
+        session = row.get("session")
+        partial = bool(row.get("partial_gap"))
+        duplicate = bool(row.get("duplicate"))
+        invalid = bool(row.get("invalid"))
+        invalid_volume = bool(row.get("invalid_volume"))
+        pattern_member = bool(row.get("pattern_member"))
+    else:
+        partial = bool(getattr(row, "partial_gap", False))
+        duplicate = bool(getattr(row, "duplicate", False))
+        invalid = bool(getattr(row, "invalid", False))
+        invalid_volume = bool(getattr(row, "invalid_volume", False))
+        pattern_member = bool(getattr(row, "pattern_member", False))
+
+    if family == "gaps":
+        if session == "absent":
+            return "gap: session missing"
+        if partial:
+            return "gap: session-open hole"
+    elif family == "duplicates":
+        if duplicate:
+            return "duplicate"
+    elif family == "invalid":
+        if invalid_volume and not invalid:
+            return "volume defect"
+        if invalid:
+            return "invalid value"
+    elif family == "patterns":
+        if pattern_member:
+            return "pattern member"
+    return "clean"
 
 
 def overlay_frame(bars: list[dict[str, Any]], marks: list[dict[str, Any]]) -> pd.DataFrame:
@@ -85,53 +136,97 @@ def overlay_frame(bars: list[dict[str, Any]], marks: list[dict[str, Any]]) -> pd
     return frame.sort_values("trade_date").reset_index(drop=True)
 
 
-def overlay_legend(family: str, marks: list[dict[str, Any]]) -> str:
-    """Caption that names the marks actually drawn for this family — not a static label."""
+def overlay_legend_entries(family: str) -> list[tuple[str, str]]:
+    """Named marks for the selected family — a chart legend, not a caption of dates."""
     if family == "gaps":
-        holes = [_date_str(m["trade_date"]) for m in marks if m.get("partial_gap")]
-        absent = [_date_str(m["trade_date"]) for m in marks if m.get("session") == "absent"]
-        return (
-            "Triangles: "
-            + (", ".join(holes) if holes else "none")
-            + ". Dashed: "
-            + (", ".join(absent) if absent else "none")
-            + "."
-        )
+        return [
+            ("Session-open hole", _GAP),
+            ("Settlement never arrived", _ABSENT),
+        ]
     if family == "duplicates":
-        pins = [_date_str(m["trade_date"]) for m in marks if m.get("duplicate")]
-        return "Pins on kept timestamps: " + (", ".join(pins) if pins else "none") + "."
+        return [("Kept timestamp", _DUP)]
     if family == "invalid":
-        painted = [_date_str(m["trade_date"]) for m in marks if m.get("invalid")]
-        volumes = [_date_str(m["trade_date"]) for m in marks if m.get("invalid_volume")]
-        return (
-            "Painted: "
-            + (", ".join(painted) if painted else "none")
-            + ". Volume pane: "
-            + (", ".join(volumes) if volumes else "none")
-            + "."
-        )
+        return [
+            ("Invalid value", _INVALID),
+            ("Volume defect", _VOLUME_BAD),
+        ]
     if family == "patterns":
-        banded = [_date_str(m["trade_date"]) for m in marks if m.get("pattern_member")]
-        return "Bands on participating sessions: " + (", ".join(banded) if banded else "none") + "."
-    return ""
+        return [("Participating session", _PATTERN)]
+    return []
 
 
-def candles(
+def _legend_layer(entries: list[tuple[str, str]]) -> alt.Chart:
+    """Invisible points whose colour encoding is the OHLCV legend."""
+    frame = pd.DataFrame(
+        {"mark": [name for name, _ in entries], "trade_date": pd.NaT, "y": [None] * len(entries)}
+    )
+    return (
+        alt.Chart(frame)
+        .mark_point(opacity=0, filled=True)
+        .encode(
+            x=alt.X("trade_date:T", title=None),
+            y=alt.Y("y:Q", title="Price", scale=alt.Scale(zero=False)),
+            color=alt.Color(
+                "mark:N",
+                scale=alt.Scale(
+                    domain=[name for name, _ in entries],
+                    range=[colour for _, colour in entries],
+                ),
+                legend=alt.Legend(title=None, orient="bottom", symbolOpacity=1),
+            ),
+        )
+    )
+
+
+def chart_scope_key(
+    scope: dict[str, Any] | None,
+    rows: list[dict[str, Any]],
+    field: str,
+) -> str:
+    """Stable for family-only reruns; changes with scope or returned data extent."""
+    values = sorted(str(row.get(field)) for row in rows if row.get(field) is not None)
+    payload = {
+        **(scope or {}),
+        "extent": [values[0], values[-1]] if values else [],
+    }
+    encoded = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha1(encoded.encode()).hexdigest()[:12]
+
+
+def _x_zoom(prefix: str, scope_key: str) -> alt.Parameter:
+    return alt.selection_interval(
+        bind="scales",
+        encodings=["x"],
+        name=f"{prefix}_{scope_key}",
+    )
+
+
+def _with_status(frame: pd.DataFrame, family: str) -> pd.DataFrame:
+    out = frame.copy()
+    out["status"] = [overlay_status(family, row) for row in out.itertuples()]
+    return out
+
+
+def ohlcv_chart(
     bars: list[dict[str, Any]],
     overlay: dict[str, Any] | None,
     *,
     family: str,
     height: int = 260,
-) -> None:
-    """Daily OHLCV with selected-family marks. Never a zero-filled absent bar."""
+    scope_key: str = "default",
+) -> alt.Chart | None:
+    """Daily OHLCV + volume, shared-x pan/zoom, selected-family legend. Never a zero-filled bar."""
     marks = list((overlay or {}).get("ohlcv") or [])
     frame = overlay_frame(bars, marks)
     if frame.empty:
-        st.caption("No bars in this window.")
-        return
+        return None
+    frame = _with_status(frame, family)
 
     present = frame.dropna(subset=["open", "high", "low", "close"])
     layers: list[alt.Chart] = []
+    entries = overlay_legend_entries(family)
+    if entries:
+        layers.append(_legend_layer(entries))
 
     if family == "patterns":
         bands = frame[frame["pattern_member"]]
@@ -147,22 +242,25 @@ def candles(
     if not present.empty:
         paint = family == "invalid"
         present = present.copy()
-        present["fill"] = [
+        present["bar_color"] = [
             _INVALID if paint and bool(row.invalid) else _NEUTRAL for row in present.itertuples()
         ]
-        base = alt.Chart(present).encode(x=alt.X("trade_date:T", title=None))
+        base = alt.Chart(present).encode(
+            x=alt.X("trade_date:T", title=None),
+            tooltip=_OHLCV_TOOLTIP,
+        )
         layers.append(
             base.mark_rule().encode(
                 y=alt.Y("low:Q", title="Price", scale=alt.Scale(zero=False)),
                 y2="high:Q",
-                color=alt.Color("fill:N", scale=None, legend=None),
+                color=alt.Color("bar_color:N", scale=None, legend=None),
             )
         )
         layers.append(
             base.mark_bar(size=6).encode(
                 y="open:Q",
                 y2="close:Q",
-                color=alt.Color("fill:N", scale=None, legend=None),
+                color=alt.Color("bar_color:N", scale=None, legend=None),
             )
         )
 
@@ -172,7 +270,7 @@ def candles(
             layers.append(
                 alt.Chart(holes)
                 .mark_point(shape="triangle-up", size=90, color=_GAP, filled=True)
-                .encode(x="trade_date:T", y="high:Q")
+                .encode(x="trade_date:T", y="high:Q", tooltip=_OHLCV_TOOLTIP)
             )
         absent = frame[frame["session"] == "absent"]
         if not absent.empty:
@@ -181,10 +279,21 @@ def candles(
             dashed = absent.copy()
             dashed["y"] = y_lo
             dashed["y2"] = y_hi
+            dashed["label_y"] = y_hi
+            absent_tip = [
+                alt.Tooltip("trade_date:T", title="Date"),
+                alt.Tooltip("status:N", title="Status"),
+            ]
             layers.append(
                 alt.Chart(dashed)
                 .mark_rule(strokeDash=[4, 3], color=_ABSENT, strokeWidth=2)
-                .encode(x="trade_date:T", y="y:Q", y2="y2:Q")
+                .encode(x="trade_date:T", y="y:Q", y2="y2:Q", tooltip=absent_tip)
+            )
+            # Canvas-style on-chart label — Vega legends do not show stroke-dash well.
+            layers.append(
+                alt.Chart(dashed)
+                .mark_text(text="absent", dy=-8, fontSize=10, fontWeight="bold", color=_ABSENT)
+                .encode(x="trade_date:T", y="label_y:Q", tooltip=absent_tip)
             )
 
     if family == "duplicates" and not present.empty:
@@ -193,62 +302,93 @@ def candles(
             layers.append(
                 alt.Chart(pins)
                 .mark_point(shape="diamond", size=80, color=_DUP, filled=True)
-                .encode(x="trade_date:T", y="close:Q")
+                .encode(x="trade_date:T", y="close:Q", tooltip=_OHLCV_TOOLTIP)
             )
 
     if not layers:
+        return None
+
+    zoom = _x_zoom("ohlcv_x", scope_key)
+    price = layers[0]
+    for layer in layers[1:]:
+        price = price + layer
+    price = price.properties(height=height)
+
+    volume = _volume_chart(frame, family)
+    if volume is None:
+        return price.add_params(zoom)
+    return alt.vconcat(price, volume).resolve_scale(x="shared").add_params(zoom)
+
+
+def candles(
+    bars: list[dict[str, Any]],
+    overlay: dict[str, Any] | None,
+    *,
+    family: str,
+    height: int = 260,
+    scope_key: str = "default",
+) -> None:
+    """Daily OHLCV with selected-family marks. Never a zero-filled absent bar."""
+    chart = ohlcv_chart(
+        bars, overlay, family=family, height=height, scope_key=scope_key
+    )
+    if chart is None:
         st.caption("No bars in this window.")
         return
-    chart = layers[0]
-    for layer in layers[1:]:
-        chart = chart + layer
-    st.altair_chart(chart.properties(height=height), width="stretch")
-    st.caption(overlay_legend(family, marks))
-
-    _volume_pane(frame, family)
+    st.altair_chart(
+        chart, width="stretch", theme=None, key=f"ohlcv_chart_{scope_key}"
+    )
+    st.caption(OHLCV_ZOOM_CAPTION)
 
 
-def _volume_pane(frame: pd.DataFrame, family: str) -> None:
+def _volume_chart(frame: pd.DataFrame, family: str) -> alt.Chart | None:
     present = frame.dropna(subset=["volume"])
     if present.empty:
-        return
+        return None
     present = present.copy()
-    present["fill"] = [
+    if "status" not in present.columns:
+        present = _with_status(present, family)
+    present["bar_color"] = [
         _VOLUME_BAD if family == "invalid" and bool(row.invalid_volume) else _VOLUME
         for row in present.itertuples()
     ]
-    chart = (
+    tip = [
+        alt.Tooltip("trade_date:T", title="Date"),
+        alt.Tooltip("volume:Q", title="Volume"),
+        alt.Tooltip("status:N", title="Status"),
+    ]
+    return (
         alt.Chart(present)
         .mark_bar()
         .encode(
             x=alt.X("trade_date:T", title=None),
             y=alt.Y("volume:Q", title="Volume"),
-            color=alt.Color("fill:N", scale=None, legend=None),
+            color=alt.Color("bar_color:N", scale=None, legend=None),
+            tooltip=tip,
         )
         .properties(height=90)
     )
-    st.altair_chart(chart, width="stretch")
 
 
-def vwap_line(
+def vwap_chart(
     points: list[dict[str, Any]],
     overlay: dict[str, Any] | None,
     *,
     family: str,
-) -> None:
+    show_family_marks: bool = True,
+    scope_key: str = "default",
+) -> alt.Chart | None:
     """The rolling line. Null windows stay breaks. Selected family may name them."""
     if not points:
-        st.caption("No VWAP points in this window.")
-        return
+        return None
     frame = pd.DataFrame(points)
     if frame.empty:
-        st.caption("No VWAP points in this window.")
-        return
+        return None
     stamp = "ts_utc" if "ts_utc" in frame.columns else frame.columns[0]
     frame[stamp] = pd.to_datetime(frame[stamp], utc=True)
     value = "vwap" if "vwap" in frame.columns else frame.columns[-1]
     vwap_meta = (overlay or {}).get("vwap") or {}
-    name_breaks = bool(vwap_meta.get("name_breaks")) and family in {
+    name_breaks = show_family_marks and bool(vwap_meta.get("name_breaks")) and family in {
         "gaps",
         "patterns",
         "invalid",
@@ -256,7 +396,7 @@ def vwap_line(
     pattern_hours = vwap_meta.get("pattern_hours") or []
 
     layers: list[alt.Chart] = []
-    if family == "patterns" and pattern_hours:
+    if show_family_marks and family == "patterns" and pattern_hours:
         hours = {_hour_from_bucket(bucket) for bucket in pattern_hours}
         hours.discard(None)
         shade = frame.copy()
@@ -292,14 +432,42 @@ def vwap_line(
                 .encode(x=f"{stamp}:T", y="y:Q")
             )
     if not layers:
-        st.caption("No VWAP points in this window.")
-        return
+        return None
     chart = layers[0]
     for layer in layers[1:]:
         chart = chart + layer
-    st.altair_chart(chart.properties(height=200), width="stretch")
+    return chart.properties(height=200).add_params(_x_zoom("vwap_x", scope_key))
+
+
+def vwap_line(
+    points: list[dict[str, Any]],
+    overlay: dict[str, Any] | None,
+    *,
+    family: str,
+    show_family_marks: bool = True,
+    scope_key: str = "default",
+) -> None:
+    """Rolling VWAP with an x zoom independent of Daily OHLCV."""
+    chart = vwap_chart(
+        points,
+        overlay,
+        family=family,
+        show_family_marks=show_family_marks,
+        scope_key=scope_key,
+    )
+    if chart is None:
+        st.caption("No VWAP points in this window.")
+        return
+    st.altair_chart(chart, width="stretch", key=f"vwap_chart_{scope_key}")
+    vwap_meta = (overlay or {}).get("vwap") or {}
+    name_breaks = show_family_marks and bool(vwap_meta.get("name_breaks")) and family in {
+        "gaps",
+        "patterns",
+        "invalid",
+    }
     if name_breaks:
         st.caption("Crosses name a break where window volume was dropped.")
+    st.caption(VWAP_ZOOM_CAPTION)
     st.caption(helptext.JARGON["vwap"])
 
 
@@ -335,32 +503,77 @@ def gaps_ribbon(slots: list[dict[str, Any]]) -> None:
     st.altair_chart(chart, width="stretch")
 
 
-def pattern_histogram(buckets: list[dict[str, Any]]) -> None:
+def pattern_histogram_chart(
+    buckets: list[dict[str, Any]], *, axis_label: str
+) -> alt.Chart | None:
     if not buckets:
-        return
+        return None
     frame = pd.DataFrame(buckets)
     if frame.empty or "label" not in frame.columns:
-        return
+        return None
+    frame["findings_share"] = frame["share_of_findings"]
+    frame["records_share"] = frame["share_of_records"]
+    frame["lift_label"] = frame["lift"].map(lambda value: f"{value:.1f}×")
+    frame["label_y"] = frame[["share_of_findings", "share_of_records"]].max(axis=1)
     long = frame.melt(
-        id_vars=["label"],
+        id_vars=[
+            "label",
+            "lift",
+            "lift_label",
+            "label_y",
+            "support",
+            "distinct_days",
+            "findings_share",
+            "records_share",
+        ],
         value_vars=[c for c in ("share_of_findings", "share_of_records") if c in frame.columns],
         var_name="share",
         value_name="value",
     )
     long["share"] = long["share"].map(
-        {"share_of_findings": "share of findings", "share_of_records": "share of records"}
+        {
+            "share_of_findings": "Findings",
+            "share_of_records": "Records (exposure)",
+        }
     )
-    chart = (
+    tooltip = [
+        alt.Tooltip("label:N", title="Bucket"),
+        alt.Tooltip("findings_share:Q", title="Findings share", format=".1%"),
+        alt.Tooltip("records_share:Q", title="Records share", format=".1%"),
+        alt.Tooltip("lift:Q", title="Lift", format=".1f"),
+        alt.Tooltip("support:Q", title="Support"),
+        alt.Tooltip("distinct_days:Q", title="Distinct days"),
+    ]
+    bars = (
         alt.Chart(long)
         .mark_bar()
         .encode(
-            x=alt.X("label:N", title=None),
-            y=alt.Y("value:Q", title=None),
+            x=alt.X("label:N", title=axis_label),
+            y=alt.Y("value:Q", title="Share (%)", axis=alt.Axis(format="%")),
             color=alt.Color("share:N", legend=alt.Legend(title=None)),
             xOffset="share:N",
+            tooltip=tooltip,
         )
-        .properties(height=160)
     )
+    labels = (
+        alt.Chart(frame)
+        .mark_text(dy=-8, fontWeight="bold")
+        .encode(
+            x=alt.X("label:N", title=axis_label),
+            y=alt.Y("label_y:Q", title="Share (%)", axis=alt.Axis(format="%")),
+            text=alt.Text("lift_label:N"),
+            tooltip=tooltip,
+        )
+    )
+    return (bars + labels).properties(height=180)
+
+
+def pattern_histogram(
+    buckets: list[dict[str, Any]], *, axis_label: str = "Bucket"
+) -> None:
+    chart = pattern_histogram_chart(buckets, axis_label=axis_label)
+    if chart is None:
+        return
     st.altair_chart(chart, width="stretch")
 
 

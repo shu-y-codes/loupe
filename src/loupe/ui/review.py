@@ -1,11 +1,13 @@
 """The reviewer main column: cards, charts, picture, aggregated issues.
 
 HTTP only. Family membership, overlay marks and What-we-did come from `GET /v1/dq/checks`.
-This module does not group `findings[]` and does not import `quality`.
+This module does not group `findings[]` and does not import `quality`. The four cards *are*
+the family control; there is no Check row and no score caption.
 """
 
 from __future__ import annotations
 
+import html
 from typing import Any
 
 import pandas as pd
@@ -14,7 +16,6 @@ import streamlit as st
 from . import charts
 from . import help as helptext
 from .client import ApiProblem
-from .runtime import checks_score_caption
 
 _FAMILY_ORDER = ("gaps", "duplicates", "invalid", "patterns")
 _FAMILY_LABEL = {
@@ -27,56 +28,64 @@ _FAMILY_LABEL = {
 
 def render_review(
     checks: dict[str, Any],
-    bars: list[dict[str, Any]],
+    bars: dict[str, Any] | list[dict[str, Any]],
     vwap: dict[str, Any] | ApiProblem | None,
+    *,
+    scope_identity: dict[str, Any] | None = None,
 ) -> None:
-    """Cards, score caption, Daily OHLCV, VWAP, picture, issues — that order is load-bearing."""
-    family = _family_control(checks)
+    """Cards, Daily OHLCV, VWAP, picture, issues — that order is load-bearing."""
+    family = _selected_family()
     _family_cards(checks, family)
-    st.caption(checks_score_caption(checks), help=helptext.JARGON["scope_signature"])
 
     if not checks.get("checked"):
         st.info("Validation has not finished for this contract yet.")
         return
 
     overlay = checks.get("overlay") or {}
+    frequency = (checks.get("scope") or {}).get("frequency") or (
+        scope_identity or {}
+    ).get("frequency")
+    bar_rows = bars.get("data", []) if isinstance(bars, dict) else bars
+    bar_meta = bars.get("meta", {}) if isinstance(bars, dict) else {}
+    source = bar_meta.get("bar_source") or (
+        "derived_from_minute" if frequency == "minute" else "supplied_daily"
+    )
     st.subheader("Daily OHLCV")
-    st.caption("Clean series · selected family. Rule IDs are a caption, not the candle.")
-    charts.candles(bars, overlay, family=family)
+    source_label = (
+        "Derived from minute" if source == "derived_from_minute" else "Supplied daily"
+    )
+    st.caption(
+        f"{source_label} · {str(frequency or '').title()} quality grain · selected family. "
+        "Rule IDs stay off the candle."
+    )
+    charts.candles(
+        bar_rows,
+        overlay,
+        family=family,
+        scope_key=charts.chart_scope_key(scope_identity, bar_rows, "trade_date"),
+    )
 
     st.subheader("Rolling 15-minute VWAP")
-    _vwap_panel(vwap, overlay, family)
+    _vwap_panel(vwap, overlay, family, frequency, scope_identity)
 
     _picture(overlay.get("picture") or {}, family)
-    _issues(checks.get("issues") or [])
+    _issues(checks.get("issues") or [], family)
 
 
-def _family_control(checks: dict[str, Any]) -> str:
-    families = checks.get("families") or []
-    options = [row["family"] for row in families if row.get("family") in _FAMILY_ORDER]
-    if not options:
-        options = list(_FAMILY_ORDER)
-    labels = {
-        row["family"]: row.get("label") or _FAMILY_LABEL[row["family"]]
-        for row in families
-        if row.get("family") in _FAMILY_ORDER
-    }
-    for name in options:
-        labels.setdefault(name, _FAMILY_LABEL.get(name, name))
-    selected = st.segmented_control(
-        "Check",
-        options,
-        format_func=lambda name: labels.get(name, name),
-        key="family",
-        default="gaps" if "gaps" in options else options[0],
-        required=True,
-        width="stretch",
-        help=helptext.JARGON["marked sessions"],
-    )
-    return selected or "gaps"
+def _selected_family() -> str:
+    family = st.session_state.get("family") or "gaps"
+    if family not in _FAMILY_ORDER:
+        family = "gaps"
+        st.session_state["family"] = family
+    return family
+
+
+def _select_family(name: str) -> None:
+    st.session_state["family"] = name
 
 
 def _family_cards(checks: dict[str, Any], selected: str) -> None:
+    """The four cells are the family control. Count leads; detail is body size."""
     families = checks.get("families") or []
     by_id = {row["family"]: row for row in families}
     columns = st.columns(4)
@@ -91,22 +100,35 @@ def _family_cards(checks: dict[str, Any], selected: str) -> None:
         with column, st.container(border=True):
             if name == selected:
                 st.badge("Selected")
-            unit = card.get("unit") or ""
-            value = f"{card.get('count', 0)} {unit}".strip()
-            st.metric(
+            st.button(
                 card.get("label") or _FAMILY_LABEL[name],
-                value,
+                key=f"family_card_{name}",
+                type="primary" if name == selected else "secondary",
+                width="stretch",
+                on_click=_select_family,
+                args=(name,),
+            )
+            unit = card.get("unit") or ""
+            count_label = f"{card.get('count', 0)} {unit}".strip()
+            # Count slightly larger than body; detail is regular — not st.metric's inverted
+            # hierarchy (label small / value huge).
+            st.markdown(
+                f'<p style="font-size:1.125rem;font-weight:600;margin:0.25rem 0 0 0">'
+                f"{html.escape(count_label)}</p>",
+                unsafe_allow_html=True,
                 help=helptext.CARDS.get(name),
             )
-            detail = card.get("detail") or ""
+            detail = (card.get("detail") or "").strip()
             if detail:
-                st.caption(detail)
+                st.markdown(detail)
 
 
 def _vwap_panel(
     vwap: dict[str, Any] | ApiProblem | None,
     overlay: dict[str, Any],
     family: str,
+    quality_frequency: str | None,
+    scope_identity: dict[str, Any] | None,
 ) -> None:
     """The panel stays and explains itself; it never silently renders empty."""
     if isinstance(vwap, ApiProblem):
@@ -118,7 +140,17 @@ def _vwap_panel(
     if vwap is None:
         st.caption("No VWAP points in this window.")
         return
-    charts.vwap_line(vwap.get("data") or [], overlay, family=family)
+    points = vwap.get("data") or []
+    context_only = quality_frequency == "daily"
+    if context_only:
+        st.caption("Minute tape · context only for Daily quality grain")
+    charts.vwap_line(
+        points,
+        overlay,
+        family=family,
+        show_family_marks=not context_only,
+        scope_key=charts.chart_scope_key(scope_identity, points, "ts_utc"),
+    )
 
 
 def _picture(picture: dict[str, Any], family: str) -> None:
@@ -149,15 +181,36 @@ def _picture(picture: dict[str, Any], family: str) -> None:
         field = picture.get("field")
         if field:
             st.markdown(f"Broken cell: **{field}**")
+        evidence_frequency = picture.get("evidence_frequency")
+        evidence_source = picture.get("evidence_source")
+        if evidence_frequency or evidence_source:
+            st.caption(
+                "Evidence · "
+                + " · ".join(
+                    str(value)
+                    for value in (evidence_frequency, evidence_source)
+                    if value
+                )
+            )
         bar = picture.get("bar")
         if bar:
             st.dataframe(pd.DataFrame([bar]), hide_index=True, width="stretch")
     elif kind == "pattern_histogram":
-        charts.pattern_histogram(picture.get("buckets") or [])
+        shown = picture.get("buckets_shown") or len(picture.get("buckets") or [])
+        total = picture.get("patterns_total") or shown
+        st.caption(f"Showing {shown} of {total} standing patterns")
+        charts.pattern_histogram(
+            picture.get("buckets") or [],
+            axis_label=picture.get("axis_label") or picture.get("dimension") or "Bucket",
+        )
+        st.caption(
+            "A findings share much larger than record exposure is over-representation. "
+            "The configured standing threshold, not raw count alone, determines inclusion."
+        )
 
 
-def _issues(issues: list[dict[str, Any]]) -> None:
-    st.subheader("Issues in this window")
+def _issues(issues: list[dict[str, Any]], family: str) -> None:
+    st.subheader(f"Issues in selected family · {_FAMILY_LABEL.get(family, family)}")
     if not issues:
         st.success("This check ran. Nothing in this window.")
         return

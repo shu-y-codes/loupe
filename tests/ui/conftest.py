@@ -29,9 +29,16 @@ def fake() -> FakeClient:
 def app(fake: FakeClient):
     """An `AppTest` over the real page with the stub in front of it."""
 
-    def _run(client: FakeClient | None = None, **session: Any):
+    def _run(
+        client: FakeClient | None = None,
+        destination: str | None = "Review",
+        **session: Any,
+    ):
         runtime.use_client(client or fake)
         test = AppTest.from_file(APP, default_timeout=30)
+        if destination is not None:
+            session.setdefault("destination", destination)
+            session.setdefault("destination_display", destination)
         for key, value in session.items():
             test.session_state[key] = value
         return test.run()

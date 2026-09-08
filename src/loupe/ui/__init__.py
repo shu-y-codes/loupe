@@ -4,7 +4,8 @@ Owns pages and clients. Owns no SQL, no rule logic and no aggregation — those 
 `data`, `quality` and `insights`, and the client is the only way this package reaches them
 (`specs/loupe-solution-design.md` §6).
 
-`app.py` is the page and draws on import, so it is deliberately not imported here; run it with
+`app.py` is the entry (Review default, Overview sibling) and draws on import, so it is
+deliberately not imported here; run it with
 `streamlit run src/loupe/ui/app.py`, or point `AppTest` at it.
 """
 

@@ -8,12 +8,14 @@ have missed these helpers.
 from __future__ import annotations
 
 from datetime import date
+from types import SimpleNamespace
 
 from helpers import findings
 
 from loupe.insights import build_bars
 from loupe.quality import CATALOGUE, review_checks, strip_family
 from loupe.quality.catalogue import STRIP_FAMILY_RULES
+from loupe.quality.review import _bar_dates, _invalid_picture, _pattern_picture
 
 
 def test_every_rule_is_in_exactly_one_strip_family_or_off_strip():
@@ -113,3 +115,98 @@ def test_outliers_do_not_count_on_a_card(qcon, run_fixture):
         if strip_family(row[0]) == "invalid"
     ]
     assert invalid["count"] == len(open_invalid)
+
+
+def test_bar_dates_respect_the_quality_grain_source(qcon):
+    qcon.execute(
+        """
+        INSERT INTO mart.bar_daily (
+            contract_id, trade_date, basis, source, source_frequency,
+            close_convention, open, high, low, close, volume
+        ) VALUES
+            ('ESZ25', DATE '2025-01-02', 'clean', 'vendor', 'daily',
+             'settlement', 1, 2, 0, 1, 10),
+            ('ESZ25', DATE '2025-01-03', 'clean', 'derived', 'minute',
+             'last_trade', 1, 2, 0, 1, 10)
+        """
+    )
+
+    minute = _bar_dates(qcon, "ESZ25", None, None, "clean", "minute")
+    daily = _bar_dates(qcon, "ESZ25", None, None, "clean", "daily")
+
+    assert minute == {date(2025, 1, 3)}
+    assert daily == {date(2025, 1, 2)}
+
+
+def test_invalid_picture_uses_subject_map_and_source_record(qcon, fixture_path):
+    from loupe.data import load_file
+
+    load_file(qcon, fixture_path("val_zero_volume_with_range.csv"))
+    record_id, trade_date = qcon.execute(
+        "SELECT record_id, trade_date FROM stage.market_record ORDER BY source_row LIMIT 1"
+    ).fetchone()
+    picture = _invalid_picture(
+        qcon,
+        [
+            {
+                "rule_id": "VAL.ZERO_VOLUME_WITH_RANGE",
+                "label": "Zero volume with a price range",
+                "trade_date": trade_date,
+                "frequency": "minute",
+                "record_id": record_id,
+                "details": {},
+            }
+        ],
+        "ESZ25",
+        "minute",
+        "clean",
+    )
+
+    assert picture["field"] == "volume"
+    assert picture["evidence_frequency"] == "minute"
+    assert picture["evidence_source"] == "source_record"
+    assert picture["bar"]["record_id"] == record_id
+
+
+def test_issues_are_only_the_selected_family(qcon, run_fixture):
+    run_fixture("con_close_out_of_range.csv")
+    build_bars(qcon)
+
+    page = review_checks(qcon, "ESZ25", family="invalid", frequency="minute")
+
+    assert page.issues
+    assert {row["family"] for row in page.issues} == {"invalid"}
+
+
+def test_pattern_picture_focuses_one_rule_and_dimension():
+    def pattern(rule_id, dimension, bucket, lift):
+        return SimpleNamespace(
+            rule_id=rule_id,
+            dimension=dimension,
+            bucket=bucket,
+            share_of_findings=0.8,
+            share_of_records=0.04,
+            lift=lift,
+            support=40,
+            distinct_days=5,
+            narrative=f"{rule_id} in {bucket}",
+        )
+
+    picture = _pattern_picture(
+        [
+            pattern("CMP.MISSING_TIMESTAMP", "day_of_week", "Monday", 20.0),
+            pattern("CMP.MISSING_TIMESTAMP", "day_of_week", "Tuesday", 10.0),
+            pattern("VAL.OFF_TICK_PRICE", "hour_of_day", "12:00-13:00", 5.0),
+        ]
+    )
+
+    assert picture["rule_id"] == "CMP.MISSING_TIMESTAMP"
+    assert picture["dimension"] == "day_of_week"
+    assert picture["patterns_total"] == 3
+    assert picture["buckets_shown"] == 2
+    assert {row["label"] for row in picture["buckets"]} == {"Monday", "Tuesday"}
+    assert all(
+        {"share_of_findings", "share_of_records", "lift", "support", "distinct_days"}
+        <= set(row)
+        for row in picture["buckets"]
+    )

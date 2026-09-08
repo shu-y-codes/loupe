@@ -500,6 +500,8 @@ class FamilyCard(BaseModel):
 
 
 class AggregatedIssue(BaseModel):
+    """One row from the family selected on `/dq/checks`."""
+
     family: str
     what: str = Field(description="`dq.dq_rule.name`, or a pattern narrative.")
     days: int
@@ -527,18 +529,20 @@ class Overlay(BaseModel):
     ohlcv: list[OverlayMark]
     vwap: dict[str, Any] = Field(
         default_factory=dict,
-        description="`pattern_hours` and `name_breaks`. VWAP points still come from "
-        "`/analytics/vwap`; null windows are already the break.",
+        description="`pattern_hours` and `name_breaks`, already filtered to the selected "
+        "quality grain. VWAP points still come from `/analytics/vwap`; null windows are "
+        "already the break.",
     )
     picture: dict[str, Any] = Field(
         default_factory=dict,
         description="`kind` is `gaps_ribbon`, `absent_session`, `duplicate_rows`, "
-        "`invalid_cell`, `pattern_histogram`, or `empty`. Rule IDs are a caption list.",
+        "`invalid_cell`, `pattern_histogram`, or `empty`. Invalid evidence names its "
+        "grain/source; pattern evidence is one rule/dimension group. Rule IDs are captions.",
     )
 
 
 class DqChecksResponse(BaseModel):
-    """The one-page reviewer envelope (`specs/api-contract.md` §6.6)."""
+    """One grain × selected family reviewer envelope (`specs/api-contract.md` §6.6)."""
 
     scope: Scope
     contract_id: str
@@ -550,7 +554,9 @@ class DqChecksResponse(BaseModel):
         description="True when a completed run exists. Zero on a card then means the check ran."
     )
     families: list[FamilyCard]
-    issues: list[AggregatedIssue]
+    issues: list[AggregatedIssue] = Field(
+        description="Only the family named by `overlay.family`; never an all-family inventory."
+    )
     overlay: Overlay
     meta: dict[str, Any] = Field(default_factory=dict)
 

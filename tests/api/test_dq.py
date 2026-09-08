@@ -145,3 +145,50 @@ def test_unknown_run_is_404(client):
     response = client.get("/v1/dq/runs/01900000-0000-0000-0000-000000000000")
     assert response.status_code == 404
     assert response.json()["code"] == "STR.UNKNOWN_RUN"
+
+
+def test_checks_echoes_grain_and_returns_selected_family_only(client, upload):
+    upload("rec_corroboration_minute.csv")
+    upload("rec_corroboration_daily.csv")
+    assert client.post("/v1/dq/runs").status_code == 200
+
+    for frequency, source in (("minute", "derived_from_minute"), ("daily", "supplied_daily")):
+        checks = client.get(
+            "/v1/dq/checks",
+            params={
+                "contract": "ESZ25",
+                "family": "invalid",
+                "frequency": frequency,
+            },
+        )
+        assert checks.status_code == 200, checks.text
+        body = checks.json()
+        assert body["scope"]["frequency"] == frequency
+        assert body["scope"]["frequency_defaulted"] is False
+        assert {row["family"] for row in body["issues"]} <= {"invalid"}
+        picture = body["overlay"]["picture"]
+        if picture["kind"] == "invalid_cell":
+            assert picture["evidence_frequency"] == frequency
+            assert picture["evidence_source"] == (
+                "vendor" if frequency == "daily" else "source_record"
+            )
+
+        bars = client.get(
+            "/v1/analytics/bars/daily",
+            params={"contract": "ESZ25", "frequency": frequency},
+        ).json()
+        assert bars["scope"]["frequency"] == frequency
+        assert bars["meta"]["bar_source"] == source
+
+
+def test_checks_defaults_dual_grain_to_minute(client, upload):
+    upload("rec_corroboration_minute.csv")
+    upload("rec_corroboration_daily.csv")
+    assert client.post("/v1/dq/runs").status_code == 200
+
+    body = client.get(
+        "/v1/dq/checks", params={"contract": "ESZ25", "family": "invalid"}
+    ).json()
+
+    assert body["scope"]["frequency"] == "minute"
+    assert body["scope"]["frequency_defaulted"] is True

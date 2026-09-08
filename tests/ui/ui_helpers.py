@@ -40,7 +40,16 @@ class FakeClient:
             "contracts": CONTRACTS,
             "findings": {"data": FINDINGS, "total": len(FINDINGS)},
             "changelog": {"data": CHANGELOG, "total": len(CHANGELOG), "run_id": "run-1"},
-            "bars_daily": {"data": BARS},
+            "bars_daily": {
+                "scope": {
+                    "contracts": ["ZCZ25"],
+                    "basis": "clean",
+                    "frequency": "daily",
+                    "frequency_defaulted": False,
+                },
+                "data": BARS,
+                "meta": {"bar_source": "supplied_daily"},
+            },
             "vwap": {"data": VWAP},
             "compare": {"data": COMPARE},
             "insights_patterns": PATTERNS,
@@ -159,6 +168,7 @@ def _batch(
     origin: str,
     batch_id: str,
     frequency: str = "minute",
+    contracts_detected: list[str] | None = None,
 ) -> dict[str, Any]:
     """A `BatchSummary`-shaped row. Keys are a subset of the model; see the stub-parity guard."""
     return {
@@ -175,7 +185,7 @@ def _batch(
         "rows_read": 100,
         "rows_accepted": 100,
         "rows_rejected": 0,
-        "contracts_detected": ["ESZ25"],
+        "contracts_detected": contracts_detected if contracts_detected is not None else ["ESZ25"],
         "sessions_detected": 10,
         "trade_date_range": ["2024-01-18", "2025-12-19"],
         "dq_run_id": "run-1",
@@ -219,10 +229,112 @@ SYNTHETIC_BATCHES: dict[str, Any] = {
 
 EMPTY_BATCHES: dict[str, Any] = {"data": [], "total": 0}
 
+#: Mixed grains so the ingested-file expander can name all three coverage groups.
+MIXED_COVERAGE_CONTRACTS: dict[str, Any] = {
+    "data": [
+        {"contract_id": "ESZ25", "root": "ES", "frequencies_available": ["daily", "minute"]},
+        {"contract_id": "ZCZ25", "root": "ZC", "frequencies_available": ["daily"]},
+        {"contract_id": "SR3G26", "root": "SR3", "frequencies_available": ["minute"]},
+    ],
+    "total": 3,
+}
+
+MIXED_COVERAGE_BATCHES: dict[str, Any] = {
+    "data": [
+        _batch(
+            filename="ESZ25.parquet",
+            file_format="parquet",
+            origin="demo",
+            batch_id="b-esz-m",
+            frequency="minute",
+            contracts_detected=["ESZ25"],
+        ),
+        _batch(
+            filename="ESZ25.csv",
+            file_format="csv",
+            origin="demo",
+            batch_id="b-esz-d",
+            frequency="daily",
+            contracts_detected=["ESZ25"],
+        ),
+        _batch(
+            filename="ZCZ25.parquet",
+            file_format="parquet",
+            origin="demo",
+            batch_id="b-zcz",
+            frequency="daily",
+            contracts_detected=["ZCZ25"],
+        ),
+        _batch(
+            filename="SR3G26.csv",
+            file_format="csv",
+            origin="demo",
+            batch_id="b-sr3",
+            frequency="minute",
+            contracts_detected=["SR3G26"],
+        ),
+    ],
+    "total": 4,
+}
+
+PLANTED_MANIFEST: dict[str, Any] = {
+    "source": "data/samples/SR3G26.csv",
+    "output": "data/demo/SR3G26.injected.csv",
+    "rows_in": 345,
+    "rows_out": 348,
+    "seed": 20260906,
+    "defects": [
+        {
+            "defect_id": "d-gap",
+            "rule_id": "CMP.MISSING_TIMESTAMP",
+            "kind": "delete_run",
+            "contract_id": "SR3G26",
+            "source_row": 12,
+            "original": None,
+            "injected": None,
+        },
+        {
+            "defect_id": "d-dup",
+            "rule_id": "UNQ.EXACT_DUPLICATE",
+            "kind": "duplicate_row",
+            "contract_id": "SR3G26",
+            "source_row": 40,
+            "original": None,
+            "injected": None,
+        },
+        {
+            "defect_id": "d-val",
+            "rule_id": "VAL.NEGATIVE_VOLUME",
+            "kind": "negate_volume",
+            "contract_id": "SR3G26",
+            "source_row": 88,
+            "original": "100",
+            "injected": "-100",
+        },
+        {
+            "defect_id": "d-tim",
+            "rule_id": "TIM.OUT_OF_ORDER",
+            "kind": "swap_timestamps",
+            "contract_id": "SR3G26",
+            "source_row": 120,
+            "original": None,
+            "injected": None,
+        },
+    ],
+}
+
 CONTRACTS = {
     "data": [
-        {"contract_id": "ZCZ25", "root": "ZC"},
-        {"contract_id": "ESZ25", "root": "ES"},
+        {
+            "contract_id": "ZCZ25",
+            "root": "ZC",
+            "frequencies_available": ["daily"],
+        },
+        {
+            "contract_id": "ESZ25",
+            "root": "ES",
+            "frequencies_available": ["minute"],
+        },
     ],
     "total": 2,
 }
@@ -564,6 +676,8 @@ _PICTURES: dict[str, dict[str, Any]] = {
         "caption": "Close outside the bar range",
         "rule_ids": ["CON.CLOSE_OUT_OF_RANGE"],
         "field": "close",
+        "evidence_frequency": "daily",
+        "evidence_source": "vendor",
         "bar": {
             "trade_date": "2025-12-12",
             "open": 410.25,
@@ -578,18 +692,31 @@ _PICTURES: dict[str, dict[str, Any]] = {
         "trade_date": None,
         "caption": PATTERNS["data"][0]["narrative"],
         "rule_ids": [PATTERNS["data"][0]["rule_id"]],
+        "rule_id": PATTERNS["data"][0]["rule_id"],
+        "dimension": "hour_of_day",
+        "axis_label": "Hour of day, exchange local",
+        "patterns_total": 1,
+        "buckets_shown": 1,
         "buckets": [
             {
                 "label": PATTERNS["data"][0]["bucket"],
                 "share_of_findings": PATTERNS["data"][0]["share_of_findings"],
                 "share_of_records": PATTERNS["data"][0]["share_of_records"],
+                "lift": PATTERNS["data"][0]["lift"],
+                "support": PATTERNS["data"][0]["support"],
+                "distinct_days": PATTERNS["data"][0]["distinct_days"],
             }
         ],
     },
 }
 
 CHECKS: dict[str, Any] = {
-    "scope": {"contracts": ["ZCZ25"], "basis": "clean"},
+    "scope": {
+        "contracts": ["ZCZ25"],
+        "basis": "clean",
+        "frequency": "daily",
+        "frequency_defaulted": False,
+    },
     "contract_id": "ZCZ25",
     "score": 41.0,
     "scope_signature": "cmp+val+con+unq+tim",
@@ -674,6 +801,13 @@ def checks_response(**params: Any) -> dict[str, Any]:
     return {
         **CHECKS,
         "contract_id": params.get("contract") or "ZCZ25",
+        "scope": {
+            **CHECKS["scope"],
+            "contracts": [params.get("contract") or "ZCZ25"],
+            "frequency": params.get("frequency") or "daily",
+            "frequency_defaulted": "frequency" not in params,
+        },
+        "issues": [row for row in CHECKS["issues"] if row["family"] == family],
         "overlay": {
             "family": family,
             "ohlcv": OHLCV_MARKS,

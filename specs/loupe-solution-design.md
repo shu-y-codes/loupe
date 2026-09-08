@@ -2,9 +2,16 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-07: one reviewer page — four family cards and two charts; personas are
-not a view selector (slice 9). Same day: v1 UI ingest is Load demo data; capability
-preview is API-only and disclosed in place (slice 8).
+Revised 2026-09-08: Overview is the default landing. Same day: Overview family cells show
+headline `count unit` only; detail stays on Review. Same day: Overview | Review in the sidebar;
+Overview table fits the main column. Same day: two pages — Review (one contract) and Overview
+(corpus family tiles); locked decision 6 keeps no-auth and drops “one reviewer page” as a
+persona ban. Same day: §12 makes grain/source, selected-family issues, pattern evidence and
+chart identity explicit; §17 inserts slice 11 and moves the README walkthrough to 12.
+Revised 2026-09-07: reviewer chrome — cards are the family selector, no score
+caption, OHLCV legend + zoom, grouped sidebar. Same day: one reviewer page — four family
+cards and two charts; personas are not a view selector (slice 9). Same day: v1 UI ingest is
+Load demo data; capability preview is API-only and disclosed in place (slice 8).
 Revised 2026-09-06: `specs/api-contract.md` promoted (slice 4 done-when 1).
 Revised 2026-09-05: `specs/analytics-semantics.md` promoted (slice 3 done-when 1).
 `specs/dq-rules-and-scoring.md` promoted (slice 2). Slice 1 specs (`data-model.md`,
@@ -20,6 +27,7 @@ as binding. Execution sequence: `plans/`.
 | Detail | Document |
 |---|---|
 | Reviewer page (cards, overlay, charts, tooltips) | `specs/loupe-ui-design.md` |
+| Overview page (corpus family tiles) | `specs/loupe-ui-design.md` (Overview) |
 | Analytics semantics (bars, VWAP, grid) | `specs/analytics-semantics.md` |
 | Data model / DDL | `specs/data-model.md` |
 | DQ rules and scoring | `specs/dq-rules-and-scoring.md` |
@@ -56,12 +64,14 @@ trading workstation or a data warehouse.
 ## 2. What the page answers
 
 No authentication in v1. RBAC is a documented extension that filters contract scope without
-changing endpoint signatures. The UI is **one reviewer page**, not three views.
+changing endpoint signatures. The UI is **two pages**, not a persona selector: **Review**
+(one contract, four cards and two charts) and **Overview** (loaded contracts × grain,
+family-tile table). Default landing is Overview.
 
 | Product question (§1) | What the page shows |
 |---|---|
-| **Can I trust this data?** | Four named checks (gaps, duplicates, invalid values, recurring patterns) for one selected contract × date window. Score as a caption with `scope_signature`. Aggregated issues: What / Days / Records / What we did. Report-only: no apply or override. |
-| **What does this data look like?** | Daily OHLCV then rolling 15-minute VWAP, full width, marks for the **selected family** (not `max_severity`). Picture of that family below VWAP. Daily-only keeps the VWAP panel and says “needs minute bars”. |
+| **Can I trust this data?** | Four named checks (gaps, duplicates, invalid values, recurring patterns) for one selected contract × date window. The four cards *are* the selector. Aggregated issues: What / Days / Records / What we did. Report-only: no apply or override. The page does not draw a score. |
+| **What does this data look like?** | Daily OHLCV then rolling 15-minute VWAP, full width, marks for the **selected family** (not `max_severity`) with an OHLCV legend. Picture of that family below VWAP. Daily-only keeps the VWAP panel and says “needs minute bars”. |
 
 Illustrative question — *"I want to backtest ES through a wild market. How clean is this
 data?"* — remains valid. The shipped sample runs **2021–2026**, so demos use a volatile window
@@ -83,15 +93,16 @@ measurement, not about a Risk view: load the minute tape alongside the daily fil
 contracts you care about so the score can include it.
 
 The failure is silent if the page does not say so. A **daily-only** contract still fills the
-four cards and the daily chart, the score computes, reconciliation is out of scope, §11.3
-renormalises the denominator from 1.20 to 1.00, and a five-dimension measurement is displayed
-on the same 0–100 scale as a six-dimension one.
+four cards and the daily chart, the score still computes on the API envelope, reconciliation
+is out of scope, and §11.3 renormalises the denominator from 1.20 to 1.00. The reviewer page
+does not draw that number.
 
 **One grain scores what a file says about itself; two grains score whether it is true.** Where
-a contract holds one, every surface that shows a score must say which dimensions were in scope
-(`specs/dq-rules-and-scoring.md` §11.3), and the missing companion grain is named as advice —
-on `POST /v1/ingest/preview` for API callers, and in the score caption after load. Never as a
-gate. The v1 UI does not host a pre-commit preview panel.
+a contract holds one, every surface that **shows a score** must say which dimensions were in
+scope (`specs/dq-rules-and-scoring.md` §11.3), and the missing companion grain is named as
+advice — on `POST /v1/ingest/preview` for API callers. The reviewer page does not show a
+score; daily-only VWAP says “needs minute bars”. Never as a gate. The v1 UI does not host a
+pre-commit preview panel.
 
 ---
 
@@ -112,7 +123,8 @@ These are no longer open. State them in the delivered README.
    not zero or forward-filled.
 5. **Rules are deterministic and data-driven.** AI is a documented narrative extension only;
    raw market data never leaves the process.
-6. **No authentication.** The UI is one reviewer page, not a view selector.
+6. **No authentication.** Two pages, still not a persona selector: **Review** (one contract)
+   and **Overview** (corpus family tiles). Neither page is role-shaped.
 7. **Ingestion is synchronous.** Streamlit has no server push; at sample scale a job table buys
    nothing. Async is an extension if ingest exceeds ~30s; enforce a hard upload size cap.
 8. **Both granularities are accepted; capability follows from input.** Gate on CSV/Parquet only,
@@ -132,8 +144,8 @@ Capability follows from what was supplied. **The v1 UI does not host a pre-commi
 panel.** `POST /v1/ingest/preview` stays as an API dry run (and for any non-UI caller). Demo
 load already skips per-file preview (`validate=False`, then one corpus-wide run). The
 dashboard discloses what is unavailable **in place** after load — a daily-only contract keeps
-the VWAP panel and says "needs minute bars"; a daily-only score caption names the missing
-companion grain. There is no sidebar capability matrix before commit.
+the VWAP panel and says "needs minute bars". There is no sidebar capability matrix before
+commit.
 
 | Uploaded | Daily OHLCV | Rolling 15-min VWAP | Reconciliation (`REC.*`) |
 |---|---|---|---|
@@ -238,7 +250,8 @@ HuggingFace dataset `lynx1231/historical-futures-data-sample` (public evaluation
 - **Name the companion grain** (§2, "Advise loading both grains"):
   a daily file with no minute tape for that contract cannot be reconciled. Neither file is
   refused and neither is incomplete on its own terms. The API preview says what the second
-  file would add; the v1 UI says the same in the score caption after load.
+  file would add; the v1 UI says the same in place after load by keeping the VWAP panel
+  with “needs minute bars”. It does not draw a score caption.
 
 ### Oracle (test asset, not runtime)
 
@@ -372,44 +385,71 @@ Full contract: `specs/api-contract.md`.
 Wireframes, overlay grammar, and tooltip copy: `specs/loupe-ui-design.md`. Journeys
 (historical, locked): `_notes/founding/loupe-solution-design.md` (App Usage).
 
-**One page.** Sidebar: contract picker, trade dates, Load demo data, ingested-file list.
-No persona radio. Main column, in this order: four family cards (Gaps, Duplicates, Invalid
-values, Recurring patterns); score as a caption under the cards (`scope_signature` required);
-Daily OHLCV then 15-minute VWAP, full width, **selected-family** marks (not `max_severity`);
-picture of the selected family **below** VWAP; aggregated issues (What / Days / Records /
-What we did). Report-only: no apply or override.
+**Two pages.** Sidebar: Overview | Review switch (default Overview). Shared: Load demo data,
+ingested files grouped by contract coverage (Daily + minute / Daily-only / Minute-only). No
+persona radio.
+
+**Review.** Contract picker, explicit Quality grain for dual-grain contracts
+(Minute default; single-grain is quiet context), trade dates. Main
+column, in this order: four family cards (Gaps, Duplicates, Invalid values, Recurring
+patterns) — the cards *are* the family selector, no Check control and no score caption;
+Daily OHLCV then 15-minute VWAP, full width, **selected-grain and selected-family** marks
+(not `max_severity`) with an OHLCV legend, independent pan/zoom (shared x across OHLCV +
+volume); picture of the selected family **below** VWAP; selected-family aggregated issues
+(What / Days / Records / What we did). Report-only:
+no apply or override.
+
+**Overview.** Corpus scan: one row per loaded contract × held grain; columns are the four
+family headlines (`count unit`) plus Grain; full held window. Detail stays on Review.
+Table fits the main column; Contract is heavier than the family headlines. No contract
+picker, Quality grain, or dates.
+Selecting a row opens Review on that contract and grain. Chrome: `specs/loupe-ui-design.md`.
 
 Invariants the chrome must keep:
 
-- Cards select the family and therefore the overlay and the picture. Zero on a card means
-  the check ran.
+- Cards *are* the selector. Clicking a card selects the overlay and the picture. Zero on a
+  card means the check ran. Help on the count, not the family name.
+- Cards, patterns, issues, overlay, picture and OHLCV use one explicit Quality grain and
+  source: Minute → derived bars; Daily → supplied vendor bars. Changing family keeps grain.
+- Invalid evidence names its actual subject field and carries the finding grain/source.
+- Pattern picture prose and chart are one `(rule_id, dimension)` group with exposure shares,
+  lift, support and days supplied by the API.
+- No score caption on this page (`score` / `scope_signature` may still arrive on
+  `GET /v1/dq/checks`).
 - A gap can mark an absent day with **no** bar row. Never a zero-filled settlement candle.
 - Minute `CMP.MISSING_TIMESTAMP` can mark a derived daily session.
 - `OUT.*` stays off the strip. Rule IDs are captions, not headlines.
 - Daily-only keeps the VWAP panel and says “needs minute bars”.
+- OHLCV marks are a legend, not a caption. Daily OHLCV and the volume pane pan/zoom on a
+  shared x; VWAP zooms independently; double-click resets both. Contract, grain, or date
+  scope changes reset chart identity to the returned extent; family-only changes preserve it.
+- VWAP remains minute. Daily Quality grain on a dual-grain contract labels it context-only
+  and suppresses daily-family marks; daily-only still says “needs minute bars”.
+- Ingested files group by contract coverage. Planted defects group by strip family, with
+  **Other (off the strip)** for injectable rules that are not on the four cards.
 - Widgets call HTTP only. They do not group `findings[]` to build cards or overlay marks.
 
 v1 UI ingest path: **Load demo data** posts local files to `POST /v1/ingest/batches` with
 `origin=demo`. There is no file uploader, no confirm-upload, and no sidebar preview panel.
-After a successful load the sidebar lists batches from `GET /v1/ingest/batches` (filename,
-format, origin) — inventory of what was ingested, not a directory walk. Demo CSV rows
-(`origin = demo` and CSV) are marked converted from Parquet, not as defects; injected CSV
-is the synthetic disclosure, not that mark.
+After a successful load the sidebar lists batches from `GET /v1/ingest/batches` grouped by
+contract coverage using `GET /v1/contracts` (Daily + minute / Daily-only / Minute-only).
+Demo CSV rows (`origin = demo` and CSV) are marked converted from Parquet, not as defects;
+injected CSV is the synthetic disclosure, not that mark.
 
 Capability preview is **UI-absent and API-only.** `POST /v1/ingest/preview` stays.
 Unavailable capabilities are explained in place on the dashboard after load (disabled VWAP
 with reason), not silently omitted and not via a pre-commit sidebar matrix.
 
-Help on **named boxes** (family cards, headers), one sentence, not every grid cell.
-Skip aggregated-issue What cells and picture sentences. Streamlit: `st.metric(..., help=...)`,
-dataframe column `help`, chart caption.
+Help on **named boxes** (family-card counts, headers), one sentence, not every grid cell.
+Skip aggregated-issue What cells and picture sentences. Streamlit: `st.metric(..., help=...)`
+on the count, dataframe column `help`. Overlay marks are a chart legend.
 
 ### Demo priorities
 
 1. **Selected-family overlay** on Daily OHLCV — the four checks, not worst-severity paint.
 2. **Absent settlement as a dashed column** — never a zero-filled bar.
 3. **Timezone misalignment** as centrepiece finding when relevant.
-4. **Reconciliation in the score caption** when both frequencies are loaded.
+4. **Daily-only VWAP in place** with “needs minute bars” — not a score caption.
 
 ---
 
@@ -422,7 +462,7 @@ dataframe column `help`, chart caption.
 | Contract | FastAPI `TestClient` against OpenAPI shapes | `tests/api/` |
 | Oracle | Minute→daily open/high/low vs vendor daily; boundary recovery | Real `data/samples/` (fetched, not committed) |
 | Injection | Labelled synthetic defects with manifest | Derived from samples |
-| UI | One-page assembly (no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
+| UI | Two-page assembly (Review + Overview, no persona switch); family overlay vs caption; VWAP in-place refusal; absence of apply/override | `streamlit.testing.v1.AppTest` over a stubbed API client, `tests/ui/` |
 | Integration | Cold start, the real client against a real server, durability on disk | uvicorn on an ephemeral port over a file-backed store, `tests/integration/` |
 | Stub parity | Every stubbed envelope's keys exist on the model it stands in for | `tests/ui/test_pages.py` |
 
@@ -515,6 +555,10 @@ User                    Streamlit                     FastAPI                   
  │◄─ Cards/charts update ───┤◄── JSON ───────────────────┤                           │
 ```
 
+Overview does not call bars or VWAP. It lists `GET /v1/contracts`, then one
+`GET /v1/dq/checks?contract=&frequency=` per held grain. The widget does not group
+`findings[]`. Selecting a row sets Review's contract and Quality grain.
+
 ---
 
 ## 16. Deliverables checklist
@@ -522,7 +566,11 @@ User                    Streamlit                     FastAPI                   
 - [ ] Working app (venv and/or Docker)  
 - [ ] README: philosophy, architecture, trade-offs, limitations, extensibility, walkthrough  
 - [ ] Architecture overview (this doc + layer diagram in README)  
-- [ ] UI: one reviewer page (four cards, family overlay, picture below VWAP) + Load demo data + ingested-file list + named-box tooltips  
+- [ ] UI: Review (four cards *are* the selector, family overlay with legend,
+      zoomable OHLCV + volume, picture below VWAP, no score caption) + Overview
+      (corpus family tiles, click-through to Review) + Load demo data +
+      ingested files grouped by coverage + planted defects grouped by family + named-box
+      tooltips on counts
 - [ ] Unit + integration tests; oracle test marked optional if samples absent  
 - [ ] `tools/fetch_samples.py` + gitignore for `data/samples/` and `*.duckdb`  
 
@@ -541,4 +589,10 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 7. Demo corpus — fetch, CSV conversion, Load demo data and Inject
 8. Ingest chrome — one sidebar ingest path; ingested-file list and CSV conversion mark
 9. Reviewer-facing UI — four family cards, selected-family overlay, picture below VWAP
-10. README walkthrough against real `ESZ25` (or chosen volatile window), describing the page slice 9 ships
+10. Reviewer chrome after click-test — cards as the family control, no score line, zoom + legend, grouped sidebar (`plans/10-reviewer-chrome.md`)
+11. Grain-honest review — explicit quality frequency, source-aligned evidence, honest Invalid/pattern pictures, VWAP zoom (`plans/11-grain-honest-review.md`)
+12. README walkthrough against real `ESZ25` (or chosen volatile window), describing Review after slice 11 and the Overview switch if slice 13 has shipped
+13. Overview page — corpus family-tile table, Review main column unchanged (`plans/13-overview-page.md`)
+14. Overview table chrome — fit and wrap, Overview left of Review; its Review default is superseded by slice 16 (`plans/14-overview-table.md`)
+15. Overview family headlines only — `count unit` in the grid, detail stays on Review (`plans/15-overview-headlines.md`)
+16. Overview default landing — cold sessions open on the corpus scan (`plans/16-overview-default.md`)

@@ -6,8 +6,10 @@ the fixture-to-rule mapping. Promoted from research `_notes/cursor/04-dq-rules-a
 `specs/data-model.md` §4. Sample rates used as calibration: `specs/sample-corpus.md` §7.
 Session grid, bar provenance and MAD method: `specs/analytics-semantics.md`.
 
-Revised 2026-09-07: reviewer-strip family set (§11.8); drop persona-dashboard sentences.
-The score formula and rule triggers are unchanged.
+Revised 2026-09-08: reviewer pattern evidence is frequency-scoped and grouped by one
+`(rule_id, dimension)` without changing lift or thresholds. Revised 2026-09-07: the reviewer page does not draw a score (`specs/loupe-ui-design.md`);
+§11.3 still applies when a score is displayed. Same day: reviewer-strip family set (§11.8);
+drop persona-dashboard sentences. The score formula and rule triggers are unchanged.
 
 Revised 2026-09-05: promoted from research; first normative version. Same day: `dq.dq_rule.weight`
 renamed `triage_weight` and defined as worklist ordering only (§11.4) — it had no role in any
@@ -437,8 +439,9 @@ auto-excluded (locked with the cleaning policy). Dimension `validity`.
 
 ## 11. The DQ score
 
-Displayed wherever a score appears. The reviewer page shows it as a caption under the four
-family cards, with `scope_signature` required (§11.3). The definition is in the UI tooltip.
+Displayed wherever a score appears. `scope_signature` is required **when a score is
+displayed** (§11.3). The reviewer page does not draw a score; chrome is
+`specs/loupe-ui-design.md`.
 
 ### 11.1 Per-dimension sub-score
 
@@ -774,6 +777,12 @@ count.
 
 `narrative` is generated from a template, not a language model. Aggregates only; raw market
 data never leaves the process (locked decision 5).
+
+When a reviewer selects one Quality grain, pattern detection is rerun within that frequency
+scope: the finding numerator and record-exposure denominator both carry the same frequency
+predicate. The picture then focuses one top-ranked `(rule_id, dimension)` group; its sentence,
+buckets, lift values and axes may not mix another rule or dimension. This is presentation
+grouping only; the lift formula and standing thresholds above do not change.
 
 ---
 

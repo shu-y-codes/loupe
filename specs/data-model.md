@@ -5,7 +5,8 @@
 by `specs/sample-corpus.md`. Summary and layer boundaries: `specs/loupe-solution-design.md`
 §6, §7, §10.
 
-Revised 2026-09-05: promoted from research; first normative version.
+Revised 2026-09-08: `user` / `role` still absent; the UI is Review + Overview, not a
+role view selector. Revised 2026-09-05: promoted from research; first normative version.
 
 Validated against DuckDB 1.4.5. `UUID`, `JSON`, `TIMESTAMPTZ`, `CHECK`, `PRIMARY KEY`,
 `UNIQUE`, `DEFAULT uuid()`, `DEFAULT now()`, `GENERATED ALWAYS AS ... VIRTUAL` and table-level
@@ -723,7 +724,7 @@ genuinely gates, and it gates the output, not the upload.
 
 | Not modelled | Why |
 |---|---|
-| `user`, `role`, `role_view` | No authentication in v1. The UI is one reviewer page; nothing here is a view selector. |
+| `user`, `role`, `role_view` | No authentication in v1. The UI is Review + Overview, not a role view selector. |
 | `report_catalog`, `chart` registry | Registry indirection for a fixed set of charts is cost without benefit. Add it when the set becomes user-extensible. |
 | Bid/ask, or any quote-level data | Genuinely not in the source. Only aggregated bars are supplied, so no spread, depth or quote-based check is possible. |
 | A separate settlement-price column | Not needed rather than not available. The vendor's daily `close` **is** a settlement price, so it is stored in `close` on a `source = 'vendor'` bar and distinguished by `close_convention`. A parallel column would be null on every minute-derived bar and would duplicate what the discriminator already says. |

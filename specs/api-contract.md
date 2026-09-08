@@ -8,8 +8,11 @@ Analytics semantics: `specs/analytics-semantics.md`. Rule IDs and score fields:
 `specs/dq-rules-and-scoring.md`. Storage: `specs/data-model.md`. Sample numbers cited in
 examples are owned by `specs/sample-corpus.md`.
 
-Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
-issues for the one-page reviewer UI. Same day: ingest validate and
+Revised 2026-09-08: `/dq/checks` gains explicit frequency, selected-family issues and
+source-aligned Invalid/pattern evidence. Same day: the UI is Review + Overview, still not
+persona-aware (§8). Revised 2026-09-07: `GET /v1/dq/checks` — family cards, overlay marks, picture, aggregated
+issues for the one-page reviewer UI. The envelope still carries `score` / `scope_signature`;
+the reviewer page does not draw them (`specs/loupe-ui-design.md`). Same day: ingest validate and
 `POST /v1/dq/runs` materialise `mart.bar_daily` before returning (gap from slices 3/4).
 Revised 2026-09-06: promoted from research; first normative version. Same day: v1 vs
 extension boundaries for finding override, suggestion apply/dismiss, and catalogue
@@ -486,7 +489,7 @@ frequencies; returns the same `CAP.FREQUENCY_UNAVAILABLE` refusal when only one 
 
 ```
 GET  /v1/dq/summary?contract=&start=&end=&basis=&frequency=
-GET  /v1/dq/checks?contract=&start=&end=&family=&basis=
+GET  /v1/dq/checks?contract=&start=&end=&family=&basis=&frequency=
 GET  /v1/dq/metrics?contract=&start=&end=&frequency=&group_by=day|contract|rule|dimension|frequency&dimension=
 GET  /v1/dq/findings?contract=&start=&end=&frequency=&rule_id=&severity=&status=&limit=&offset=
 GET  /v1/dq/findings/{finding_id}
@@ -762,22 +765,27 @@ rather than these rows.
 
 ### 6.6 Checks (reviewer strip)
 
-One request for the one-page reviewer UI (`specs/loupe-ui-design.md`). Cards, overlay marks,
-picture payload, and aggregated issues are composed in `quality`. A client that can only
-build the page by grouping `GET /v1/dq/findings` in a widget has missed this route.
+One request for Review (`specs/loupe-ui-design.md`). Cards, overlay marks,
+picture payload, and aggregated issues are composed in `quality`. Overview loops this
+route per contract × grain; it still must not group `GET /v1/dq/findings` in a widget. The
+envelope still carries `score` and `scope_signature`; Review does not draw them.
 
-`contract` is **required** and names one contract. `family` selects the overlay and picture
+`contract` is **required** and names one contract. `family` selects the overlay, picture,
+and `issues[]`
 (`gaps` | `duplicates` | `invalid` | `patterns`; default `gaps`). `start` / `end` are trade
-dates. `basis` defaults to `clean`.
+dates. `basis` defaults to `clean`. `frequency` is `minute` or `daily`; it may be omitted by
+general API consumers and then defaults to the finest held grain, but the reviewer UI must
+always pass it. The resolved value and whether it defaulted are echoed in
+`scope.frequency` / `scope.frequency_defaulted`.
 
 ```
-GET /v1/dq/checks?contract=ESZ25&start=2025-06-02&end=2025-06-30&family=gaps
+GET /v1/dq/checks?contract=ESZ25&start=2025-06-02&end=2025-06-30&family=gaps&frequency=minute
 ```
 
 ```json
 {
   "scope": {"contracts": ["ESZ25"], "start": "2025-06-02", "end": "2025-06-30",
-            "basis": "clean"},
+            "basis": "clean", "frequency": "minute", "frequency_defaulted": false},
   "contract_id": "ESZ25",
   "score": 96.0,
   "scope_signature": "cmp+val+con+unq+tim",
@@ -800,7 +808,7 @@ GET /v1/dq/checks?contract=ESZ25&start=2025-06-02&end=2025-06-30&family=gaps
   "issues": [
     {"family": "gaps", "what": "Missing grid slots", "days": 1, "records": 4,
      "what_we_did": "excluded 4 records"},
-    {"family": "invalid", "what": "Close outside the bar range", "days": 1, "records": 1,
+    {"family": "gaps", "what": "Partial session", "days": 1, "records": 4,
      "what_we_did": "Flagged; not auto-dropped"}
   ],
   "overlay": {
@@ -825,7 +833,13 @@ GET /v1/dq/checks?contract=ESZ25&start=2025-06-02&end=2025-06-30&family=gaps
 }
 ```
 
-**Cards.** `count` is findings in the family for this contract × window, except Recurring
+**Grain.** Findings and recurring patterns are filtered before cards, selected-family issues,
+overlay, and picture are composed. Pattern filtering uses the same frequency predicate on
+both findings and record exposure; it never parses a narrative or infers grain from a bucket.
+`frequency=minute` tests presence against `mart.bar_daily.source='derived'`;
+`frequency=daily` tests against `source='vendor'`. The page's bars call uses the same grain.
+
+**Cards.** `count` is findings in the family for this contract × window × frequency, except Recurring
 patterns, whose `count` is standing patterns from `GET /v1/insights/patterns` (not finding
 count). Zero is a real answer when `checked` is true (a completed run exists). `OUT.*` does
 not increment any card. Family membership lives next to `SETTLEMENT_RULES` in the catalogue.
@@ -839,10 +853,19 @@ gate.
 
 **Picture kinds:** `gaps_ribbon`, `absent_session`, `duplicate_rows`, `invalid_cell`,
 `pattern_histogram`, `empty`. Rule IDs travel as a caption list, not as the headline.
+`invalid_cell` names `field` from finding details, then the catalogue's subject-field map,
+otherwise an honest unknown; it carries `evidence_frequency` and `evidence_source`, and fetches
+the finding's `record_id` when present. Daily evidence uses the supplied vendor row/bar.
+`pattern_histogram` is one `(rule_id, dimension)` group and includes `rule_id`, `dimension`,
+`axis_label`, `patterns_total`, and `buckets_shown`. Every bucket includes `label`,
+`share_of_findings`, `share_of_records`, `lift`, `support`, and `distinct_days`; the client
+does not calculate lift or mix groups.
 
-**Issues.** One row per *(family, plain-language issue)*. `what` is `dq.dq_rule.name` or
+**Issues.** `issues[]` contains only the requested family, one row per
+*(family, plain-language issue)*. `what` is `dq.dq_rule.name` or
 the pattern narrative. `what_we_did` is from the changelog; the client does not re-derive
-cleaning. Unknown `family` is 400.
+cleaning. Consumers needing every family use four checks calls or the summary/findings
+endpoints. Unknown `family` or unavailable frequency is 400/422 as applicable.
 
 ---
 
@@ -879,8 +902,8 @@ v1 surfaces suggestions as report-only text (exercise: identify and suggest, not
 
 ## 8. Authentication
 
-**None in v1.** The UI is one reviewer page, not a view selector and not an authorisation
-boundary. Nothing in this contract is persona-aware.
+**None in v1.** Two pages (Review and Overview), not a persona selector and not an
+authorisation boundary. Nothing in this contract is persona-aware.
 
 **Extension:** auth dependency at the FastAPI router level, role claim, filter `contract`
 scope per role. **No endpoint signature changes** — the API is resource-shaped, not

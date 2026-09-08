@@ -1,10 +1,13 @@
 """Page tests (`plans/09-reviewer-ui.md` done-when 7, solution brief §13).
 
-`AppTest` over a stubbed client. These assert **view assembly** — four family cards, family
-overlay vs caption, VWAP refused in place, report-only — and never a number the API decided.
+`AppTest` over a stubbed client. These assert **view assembly** — four family cards as the
+selector, no score caption, family overlay vs picture, VWAP refused in place, report-only —
+and never a number the API decided.
 """
 
 from __future__ import annotations
+
+from datetime import date
 
 from ui_helpers import (
     BATCHES,
@@ -13,6 +16,8 @@ from ui_helpers import (
     CONTRACTS,
     FINDINGS,
     HEALTH,
+    MIXED_COVERAGE_BATCHES,
+    MIXED_COVERAGE_CONTRACTS,
     MIXED_SCOPE,
     PATTERNS,
     RECONCILED,
@@ -50,6 +55,9 @@ def test_every_stub_matches_the_response_model_it_stands_in_for():
         ("SYNTHETIC_HEALTH", SYNTHETIC_HEALTH, models.Health),
         ("BATCHES", BATCHES, models.BatchesResponse),
         ("BATCH", BATCHES["data"][0], models.BatchSummary),
+        ("MIXED_COVERAGE_BATCHES", MIXED_COVERAGE_BATCHES, models.BatchesResponse),
+        ("MIXED_COVERAGE_CONTRACTS", MIXED_COVERAGE_CONTRACTS, models.ContractsResponse),
+        ("MIXED_CONTRACT", MIXED_COVERAGE_CONTRACTS["data"][0], models.Contract),
         ("SYNTHETIC_BATCHES", SYNTHETIC_BATCHES, models.BatchesResponse),
         ("INJECTED_BATCH", SYNTHETIC_BATCHES["data"][2], models.BatchSummary),
         ("CORROBORATION", FINDINGS[0]["corroboration"], models.Corroboration),
@@ -69,18 +77,17 @@ def _no_exception(test):
 
 
 def _labels(test) -> list[str]:
-    return [m.label for m in test.metric]
-
-
-def _legend(test) -> str:
-    return " ".join(
-        c.value
-        for c in test.caption
-        if c.value.startswith("Triangles:")
-        or c.value.startswith("Painted:")
-        or c.value.startswith("Pins on")
-        or c.value.startswith("Bands on")
-    )
+    return [
+        b.label
+        for b in test.button
+        if b.label
+        in {
+            "Gaps",
+            "Duplicates",
+            "Invalid values",
+            "Recurring patterns",
+        }
+    ]
 
 
 # ----------------------------------------------------------------- chrome
@@ -88,6 +95,15 @@ def _legend(test) -> str:
 
 def test_the_page_renders(app):
     _no_exception(app())
+
+
+def test_review_nav_is_present_and_not_a_persona_radio(app):
+    test = _no_exception(app())
+    nav = test.sidebar.segmented_control(key="destination_display")
+    assert list(nav.options) == ["Overview", "Review"]
+    assert nav.value == "Review"
+    assert not test.sidebar.radio
+    assert not test.radio
 
 
 def test_the_sidebar_holds_contract_and_dates_and_no_persona_or_uploader(app):
@@ -99,6 +115,56 @@ def test_the_sidebar_holds_contract_and_dates_and_no_persona_or_uploader(app):
     assert [d.label for d in test.sidebar.date_input] == ["From", "To"]
     assert not test.file_uploader
     assert not test.sidebar.file_uploader
+
+
+def test_dual_grain_contract_defaults_minute_and_passes_it_explicitly(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(app(client=client))
+
+    grain = test.sidebar.segmented_control(key="quality_grain_display")
+    assert grain.value == "Minute"
+    assert "Minute quality grain" in " ".join(c.value for c in test.caption)
+    assert any(
+        params.get("frequency") == "minute"
+        for name, params in client.calls
+        if name in {"checks", "bars_daily"}
+    )
+
+
+def test_daily_quality_grain_labels_vwap_context_and_preserves_dates(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(
+        app(
+            client=client,
+            quality_grain="daily",
+            quality_grain_display="Daily",
+            start=None,
+            end=None,
+        )
+    )
+
+    assert test.sidebar.segmented_control(key="quality_grain_display").value == "Daily"
+    assert any("context only for Daily quality grain" in c.value for c in test.caption)
+    assert all(
+        params.get("frequency") == "daily"
+        for name, params in client.calls
+        if name in {"checks", "bars_daily"}
+    )
+
+
+def test_explicit_dates_survive_contract_change(app):
+    client = FakeClient(contracts=MIXED_COVERAGE_CONTRACTS)
+    test = _no_exception(app(client=client))
+    test.sidebar.date_input(key="start").set_value(date(2025, 1, 2))
+    test.sidebar.date_input(key="end").set_value(date(2025, 1, 3))
+    test = _no_exception(test.run())
+    test = _no_exception(test.sidebar.selectbox(key="contract").select("ZCZ25").run())
+
+    assert test.sidebar.date_input(key="start").value == date(2025, 1, 2)
+    assert test.sidebar.date_input(key="end").value == date(2025, 1, 3)
+    last_checks = [params for name, params in client.calls if name == "checks"][-1]
+    assert last_checks["start"] == date(2025, 1, 2)
+    assert last_checks["end"] == date(2025, 1, 3)
 
 
 # ------------------------------------------------------------- family cards
@@ -114,69 +180,77 @@ def test_four_family_labels_are_visible_after_a_stubbed_load(app):
     ]
 
 
+def test_cards_are_the_family_control_not_a_check_row(app):
+    test = _no_exception(app())
+    labels = [getattr(control, "label", "") or "" for control in test.segmented_control]
+    assert "Check" not in labels
+    assert test.sidebar.segmented_control(key="destination_display").value == "Review"
+
+
+def test_the_page_does_not_draw_a_score_caption(app):
+    test = _no_exception(app())
+    assert not any(c.value.startswith("Score ") for c in test.caption)
+    captions = " ".join(c.value for c in test.caption)
+    assert "cmp+val+con+unq+tim" not in captions
+    assert "load the minute tape" not in captions.lower()
+    assert any("Double-click" in c.value for c in test.caption)
+
+
 def test_zero_on_a_card_is_a_real_answer(app):
     """Duplicates is 0 in the stub because the check ran, not because it is hidden."""
     test = _no_exception(app())
-    dup = next(m for m in test.metric if m.label == "Duplicates")
-    assert dup.value.startswith("0")
+    counts = " ".join(m.value for m in test.markdown)
+    assert "0 records" in counts
+    assert "0 exact copies" in counts
 
 
-def test_every_family_card_carries_one_sentence_of_help(app):
+def test_every_family_card_carries_one_sentence_of_help_on_the_count(app):
     test = _no_exception(app())
-    for tile in test.metric:
-        assert tile.help, f"{tile.label} has no help"
-        assert tile.help.count(".") <= 2, f"{tile.label} help is not one line"
-
-
-def test_a_score_says_which_dimensions_it_was_measured_over(app):
-    """§11.3: a five-dimension score is not a six-dimension score wearing the same number."""
-    test = _no_exception(app())
-    captions = " ".join(c.value for c in test.caption)
-    assert "cmp+val+con+unq+tim" in captions
-    assert "only one frequency" in captions
-    assert "load the minute tape" in captions.lower()
-
-
-def test_the_disclosure_caption_reads_as_sentences(app):
-    test = _no_exception(app())
-    caption = next(c.value for c in test.caption if c.value.startswith("Score "))
-    assert "contract Settlement" not in caption
-    assert "for this contract. Settlement" in caption
-
-
-def test_nothing_is_disclosed_when_every_dimension_was_in_scope(app):
-    """The notice must be absent when it would be false, or it becomes furniture."""
-    body = {**CHECKS, "dimensions_not_in_scope": [], "scope_signature": "cmp+val+con+unq+tim+rec"}
-    test = _no_exception(app(client=FakeClient(checks=body)))
-    captions = " ".join(c.value for c in test.caption)
-    assert "only one frequency" not in captions
-    assert "load the minute tape" not in captions.lower()
-    assert "Zero on a card means the check ran" in captions
+    # Count lines are markdown with help (not st.metric — count leads, detail is body).
+    count_tiles = [
+        m
+        for m in test.markdown
+        if m.help and any(unit in m.value for unit in ("runs", "records", "rows", "standing"))
+    ]
+    assert len(count_tiles) == 4
+    for tile in count_tiles:
+        assert tile.help.count(".") <= 2, f"{tile.value!r} help is not one line"
+    blob = " ".join(m.value for m in test.markdown)
+    assert "2 runs" in blob
+    assert "0 records" in blob
+    assert "1 rows" in blob
+    assert "1 standing" in blob
+    assert "1.125rem" in blob
 
 
 # ----------------------------------------------------------------- overlay
 
 
 def test_gaps_vs_invalid_changes_overlay_marks_not_only_a_caption(app):
-    """Same overlay payload, different flags drawn. A renamed caption would share dates."""
+    """Same overlay payload, different picture. The family switch is not a renamed caption."""
     gaps = _no_exception(app(family="gaps"))
     invalid = _no_exception(app(family="invalid"))
 
-    gaps_legend = _legend(gaps)
-    invalid_legend = _legend(invalid)
-
-    assert gaps_legend.startswith("Triangles:")
-    assert "2025-12-11" in gaps_legend
-    assert "2025-09-16" in gaps_legend
-    assert "Painted:" not in gaps_legend
-
-    assert invalid_legend.startswith("Painted:")
-    assert "2025-12-12" in invalid_legend
-    assert "Triangles:" not in invalid_legend
-    assert gaps_legend != invalid_legend
-
+    assert any("Picture of gaps" in h.value for h in gaps.subheader)
     pictures = " ".join(m.value for m in invalid.markdown)
-    assert "Broken cell" in pictures or "close" in pictures.lower()
+    assert "Broken cell" in pictures
+    gaps_pictures = " ".join(m.value for m in gaps.markdown)
+    assert "Broken cell" not in gaps_pictures
+
+
+def test_clicking_a_card_changes_the_overlay_family(app):
+    """The cells are the selector. A second Check control would fail this click."""
+    client = FakeClient()
+    test = _no_exception(app(client=client))
+    labels = [getattr(control, "label", "") or "" for control in test.segmented_control]
+    assert "Check" not in labels
+    card = next(b for b in test.button if b.label == "Invalid values")
+    after = _no_exception(card.click().run())
+    assert after.session_state["family"] == "invalid"
+    pictures = " ".join(m.value for m in after.markdown)
+    assert "Broken cell" in pictures
+    families = [params.get("family") for name, params in client.calls if name == "checks"]
+    assert "invalid" in families
 
 
 def test_issues_table_is_what_days_records_what_we_did(app):
@@ -209,9 +283,7 @@ def test_no_apply_or_override_control_exists_in_the_tree(app):
     labels += [s.label.lower() for s in test.selectbox]
     labels += [s.label.lower() for s in test.sidebar.selectbox]
     forbidden = ("apply", "override", "dismiss", "accept", "resolve", "edit")
-    assert not [
-        label for label in labels if any(word in label for word in forbidden)
-    ], labels
+    assert not [label for label in labels if any(word in label for word in forbidden)], labels
 
 
 # -------------------------------------------------------- capability refusal

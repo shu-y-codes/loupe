@@ -1,8 +1,9 @@
-"""The Loupe page. Run it with `streamlit run src/loupe/ui/app.py`.
+"""The Loupe UI. Run it with `streamlit run src/loupe/ui/app.py`.
 
-Composed of functions that take data and emit elements, deliberately: `AppTest` can only
-assert over a page shaped that way, and a script that interleaved `st.*` calls with fetching
-would be untestable without a live API (`plans/05-ui.md` done-when 4).
+Two destinations (Review, Overview). Composed of functions that take data and emit
+elements, deliberately: `AppTest` can only assert over a page shaped that way, and a
+script that interleaved `st.*` calls with fetching would be untestable without a live
+API (`plans/05-ui.md` done-when 4).
 
 The whole script is one `main()` so the module can be imported without drawing anything.
 """
@@ -15,9 +16,10 @@ import streamlit as st
 
 # Absolute, not relative: `streamlit run` executes this file as `__main__` rather than as a
 # module of the package, so a relative import fails at launch as well as under test.
-from loupe.ui.chrome import render_header, render_sidebar
+from loupe.ui.chrome import render_destination, render_header, render_sidebar
 from loupe.ui.client import ApiProblem, ApiUnavailable, LoupeClient
 from loupe.ui.demo import render_demo, render_synthetic_notice
+from loupe.ui.overview import cached_rows, render_overview, render_overview_header
 from loupe.ui.review import render_review
 from loupe.ui.runtime import get_client
 
@@ -28,11 +30,15 @@ def contract_ids(client: LoupeClient) -> list[str]:
         body = client.contracts()
     except (ApiProblem, ApiUnavailable):
         return []
-    return [
-        row["contract_id"]
-        for row in body.get("data", [])
-        if row.get("contract_id")
-    ]
+    return [row["contract_id"] for row in body.get("data", []) if row.get("contract_id")]
+
+
+def contract_catalogue(client: LoupeClient) -> list[dict[str, Any]]:
+    """Loaded contracts with their held grains for the Quality grain control."""
+    try:
+        return list(client.contracts().get("data", []))
+    except (ApiProblem, ApiUnavailable):
+        return []
 
 
 def read_health(client: LoupeClient) -> dict[str, Any] | None:
@@ -82,10 +88,16 @@ def store_is_ready(health: dict[str, Any]) -> bool:
 
 
 def load_checks(
-    client: LoupeClient, contract: str, start, end, family: str
+    client: LoupeClient, contract: str, start, end, family: str, frequency: str
 ) -> dict[str, Any] | None:
     try:
-        return client.checks(contract=contract, start=start, end=end, family=family)
+        return client.checks(
+            contract=contract,
+            start=start,
+            end=end,
+            family=family,
+            frequency=frequency,
+        )
     except ApiUnavailable as exc:
         st.error(str(exc))
         return None
@@ -94,22 +106,24 @@ def load_checks(
         return None
 
 
-def load_bars(client: LoupeClient, contract: str, start, end) -> list[dict[str, Any]]:
+def load_bars(client: LoupeClient, contract: str, start, end, frequency: str) -> dict[str, Any]:
     try:
         return client.bars_daily(
-            contract=contract, start=start, end=end, basis="clean"
-        ).get("data", [])
+            contract=contract,
+            start=start,
+            end=end,
+            basis="clean",
+            frequency=frequency,
+        )
     except ApiProblem as problem:
         st.warning(str(problem))
-        return []
+        return {"data": []}
     except ApiUnavailable as exc:
         st.warning(str(exc))
-        return []
+        return {"data": []}
 
 
-def load_vwap(
-    client: LoupeClient, contract: str, start, end
-) -> dict[str, Any] | ApiProblem | None:
+def load_vwap(client: LoupeClient, contract: str, start, end) -> dict[str, Any] | ApiProblem | None:
     try:
         return client.vwap(contract=contract, start=start, end=end)
     except ApiProblem as problem:
@@ -131,11 +145,21 @@ def main() -> None:
     if health is None:
         return
 
-    contracts = contract_ids(client)
-    state = render_sidebar(contracts)
-    # Demo ingest is the only UI path into the store; the ingested-file list sits with it.
-    render_demo(client, health)
-    render_header(state)
+    contract_rows = contract_catalogue(client)
+    contracts = [row["contract_id"] for row in contract_rows if row.get("contract_id")]
+    frequencies = {
+        row["contract_id"]: list(row.get("frequencies_available") or [])
+        for row in contract_rows
+        if row.get("contract_id")
+    }
+    destination = render_destination()
+    if destination == "Review":
+        state = render_sidebar(contracts, frequencies)
+        render_demo(client, health)
+        render_header(state)
+    else:
+        render_demo(client, health)
+        render_overview_header()
 
     if not store_is_ready(health):
         return
@@ -144,20 +168,37 @@ def main() -> None:
     # whether the data behind it was planted (`plans/07-demo-corpus.md` done-when 5).
     render_synthetic_notice(health)
 
-    if not state.contract:
-        st.info(
-            "No contracts loaded yet. Load demo data from the sidebar to see quality for it."
-        )
+    if destination == "Overview":
+        rows = cached_rows(client, health, contract_rows) if contract_rows else []
+        render_overview(rows)
         return
 
+    if not state or not state.contract:
+        st.info("No contracts loaded yet. Load demo data from the sidebar to see quality for it.")
+        return
+    if not state.frequency:
+        st.warning("The selected contract does not report a held quality grain.")
+        return
+
+    st.session_state.setdefault("family", "gaps")
     family = st.session_state.get("family") or "gaps"
-    checks = load_checks(client, state.contract, state.start, state.end, family)
+    checks = load_checks(client, state.contract, state.start, state.end, family, state.frequency)
     if checks is None:
         return
 
-    bars = load_bars(client, state.contract, state.start, state.end)
+    bars = load_bars(client, state.contract, state.start, state.end, state.frequency)
     vwap = load_vwap(client, state.contract, state.start, state.end)
-    render_review(checks, bars, vwap)
+    render_review(
+        checks,
+        bars,
+        vwap,
+        scope_identity={
+            "contract": state.contract,
+            "frequency": state.frequency,
+            "start": state.start,
+            "end": state.end,
+        },
+    )
 
 
 main()

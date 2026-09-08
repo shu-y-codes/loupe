@@ -127,6 +127,24 @@ def test_the_walkthrough_from_an_empty_store_to_a_reconciled_book(api_client, up
     assert row["score"] is None
 
 
+def test_dual_grain_review_stays_aligned_over_http(api_client, upload_file):
+    upload_file(MINUTE)
+    upload_file(DAILY)
+    api_client._request("POST", "/dq/runs")
+
+    for frequency, source in (("minute", "derived_from_minute"), ("daily", "supplied_daily")):
+        checks = api_client.checks(
+            contract="ESZ25", family="invalid", frequency=frequency
+        )
+        bars = api_client.bars_daily(contract="ESZ25", frequency=frequency)
+
+        assert checks["scope"]["frequency"] == frequency
+        assert checks["scope"]["frequency_defaulted"] is False
+        assert {row["family"] for row in checks["issues"]} <= {"invalid"}
+        assert bars["scope"]["frequency"] == frequency
+        assert bars["meta"]["bar_source"] == source
+
+
 def test_a_daily_finding_carries_its_corroboration_over_the_wire(api_client, upload_file):
     """§8.7's qualification has to survive serialisation, not just exist in `quality`.
 

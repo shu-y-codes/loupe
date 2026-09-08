@@ -33,16 +33,32 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 7 | demo corpus / first run | **done** | [07-demo-corpus.md](07-demo-corpus.md) |
 | 8 | ingest chrome | **done** | [08-ingest-chrome.md](08-ingest-chrome.md) |
 | 9 | reviewer-facing UI | **done** | [09-reviewer-ui.md](09-reviewer-ui.md) |
-| 10 | README walkthrough | pending | [10-readme-walkthrough.md](10-readme-walkthrough.md) |
+| 10 | reviewer chrome (click-test) | **done** | [10-reviewer-chrome.md](10-reviewer-chrome.md) |
+| 11 | grain-honest review | pending | [11-grain-honest-review.md](11-grain-honest-review.md) |
+| 12 | README walkthrough | pending | [12-readme-walkthrough.md](12-readme-walkthrough.md) |
+| 13 | overview page | **done** | [13-overview-page.md](13-overview-page.md) |
+| 14 | overview table chrome | **done** | [14-overview-table.md](14-overview-table.md) |
+| 15 | overview headlines only | **done** | [15-overview-headlines.md](15-overview-headlines.md) |
+| 16 | overview default landing | **done** | [16-overview-default.md](16-overview-default.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
 was split out again once the ingest path itself changed — dropping the uploader and listing
 what loaded is chrome the walkthrough would otherwise describe wrongly. Slice 9 rebuilds the
-main page around the brief’s four checks and two charts (no persona selector); slice 10 then
-carries three findings from slice 6's integration tier and a limitations list that is already
-decided, so it is assembly rather than discovery — and it must describe the page slice 9
-ships, not Summary / Specifics by persona.
+main page around the brief’s four checks and two charts (no persona selector). Slice 10 is
+chrome a click-test of 9 asked for (cards as the control, no score line, zoom + legend,
+grouped sidebar). Slice 11 makes the selected quality grain explicit, aligns cards and
+evidence with the plotted source, fixes Invalid and pattern pictures, and adds VWAP zoom.
+Slice 12 then carries three findings from slice 6's integration tier and a limitations list
+that is already decided, so it is assembly rather than discovery — and it must describe
+the page after slice 11. Slice 13 adds an **Overview** sibling (corpus family-tile table)
+without changing Review’s main column; it waits on 11 for honest grain rows. If 12 writes
+after 13, name the Review / Overview switch; if 12 has already shipped, 13 patches it.
+Slice 14 is Overview chrome after a live pass of 13: table fits and wraps, Overview sits
+to the left of Review, default landing stays Review. Slice 15 drops family *detail* from
+Overview cells after a Glide probe showed newlines do not render; the grid keeps
+`count unit` only. Slice 16 supersedes only the landing default: cold sessions now open
+on Overview; selecting a row still opens Review.
 
 ## Archive
 
