@@ -2,9 +2,11 @@
 
 Refined design for the Market Data Quality & Analytics exercise.
 
-Revised 2026-09-08: two pages — Review (one contract) and Overview (corpus family tiles);
-locked decision 6 keeps no-auth and drops “one reviewer page” as a persona ban. Same day:
-§12 makes grain/source, selected-family issues, pattern evidence and
+Revised 2026-09-08: Overview is the default landing. Same day: Overview family cells show
+headline `count unit` only; detail stays on Review. Same day: Overview | Review in the sidebar;
+Overview table fits the main column. Same day: two pages — Review (one contract) and Overview
+(corpus family tiles); locked decision 6 keeps no-auth and drops “one reviewer page” as a
+persona ban. Same day: §12 makes grain/source, selected-family issues, pattern evidence and
 chart identity explicit; §17 inserts slice 11 and moves the README walkthrough to 12.
 Revised 2026-09-07: reviewer chrome — cards are the family selector, no score
 caption, OHLCV legend + zoom, grouped sidebar. Same day: one reviewer page — four family
@@ -64,7 +66,7 @@ trading workstation or a data warehouse.
 No authentication in v1. RBAC is a documented extension that filters contract scope without
 changing endpoint signatures. The UI is **two pages**, not a persona selector: **Review**
 (one contract, four cards and two charts) and **Overview** (loaded contracts × grain,
-family-tile table). Default landing is Review.
+family-tile table). Default landing is Overview.
 
 | Product question (§1) | What the page shows |
 |---|---|
@@ -383,7 +385,7 @@ Full contract: `specs/api-contract.md`.
 Wireframes, overlay grammar, and tooltip copy: `specs/loupe-ui-design.md`. Journeys
 (historical, locked): `_notes/founding/loupe-solution-design.md` (App Usage).
 
-**Two pages.** Sidebar: Review | Overview switch (default Review). Shared: Load demo data,
+**Two pages.** Sidebar: Overview | Review switch (default Overview). Shared: Load demo data,
 ingested files grouped by contract coverage (Daily + minute / Daily-only / Minute-only). No
 persona radio.
 
@@ -398,7 +400,9 @@ volume); picture of the selected family **below** VWAP; selected-family aggregat
 no apply or override.
 
 **Overview.** Corpus scan: one row per loaded contract × held grain; columns are the four
-family tiles plus Grain; full held window. No contract picker, Quality grain, or dates.
+family headlines (`count unit`) plus Grain; full held window. Detail stays on Review.
+Table fits the main column; Contract is heavier than the family headlines. No contract
+picker, Quality grain, or dates.
 Selecting a row opens Review on that contract and grain. Chrome: `specs/loupe-ui-design.md`.
 
 Invariants the chrome must keep:
@@ -589,3 +593,6 @@ Done-when and file lists: `plans/`. Promote the matching research note into `spe
 11. Grain-honest review — explicit quality frequency, source-aligned evidence, honest Invalid/pattern pictures, VWAP zoom (`plans/11-grain-honest-review.md`)
 12. README walkthrough against real `ESZ25` (or chosen volatile window), describing Review after slice 11 and the Overview switch if slice 13 has shipped
 13. Overview page — corpus family-tile table, Review main column unchanged (`plans/13-overview-page.md`)
+14. Overview table chrome — fit and wrap, Overview left of Review; its Review default is superseded by slice 16 (`plans/14-overview-table.md`)
+15. Overview family headlines only — `count unit` in the grid, detail stays on Review (`plans/15-overview-headlines.md`)
+16. Overview default landing — cold sessions open on the corpus scan (`plans/16-overview-default.md`)

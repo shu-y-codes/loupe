@@ -99,7 +99,9 @@ def test_the_page_renders(app):
 
 def test_review_nav_is_present_and_not_a_persona_radio(app):
     test = _no_exception(app())
-    assert test.sidebar.segmented_control(key="destination_display").value == "Review"
+    nav = test.sidebar.segmented_control(key="destination_display")
+    assert list(nav.options) == ["Overview", "Review"]
+    assert nav.value == "Review"
     assert not test.sidebar.radio
     assert not test.radio
 

@@ -2,7 +2,7 @@
 
 The sidebar is the whole of the page's input surface (`specs/loupe-ui-design.md` Sidebar).
 Demo ingest and the ingested-file list live in `demo.py`, next to the button that produces
-them. There is no file uploader. Review | Overview is not a persona selector.
+them. There is no file uploader. Overview | Review is not a persona selector.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from datetime import date
 
 import streamlit as st
 
-PAGES = ("Review", "Overview")
+PAGES = ("Overview", "Review")
 
 
 @dataclass(frozen=True)
@@ -38,13 +38,14 @@ def apply_pending_open() -> None:
 
 
 def render_destination() -> str:
-    """Review | Overview under the Loupe title. Default Review."""
+    """Overview | Review under the Loupe title. Default Overview."""
     apply_pending_open()
     st.sidebar.title("Loupe")
-    current = st.session_state.get("destination") or "Review"
+    current = st.session_state.get("destination") or "Overview"
     if current not in PAGES:
-        current = "Review"
+        current = "Overview"
         st.session_state["destination"] = current
+        st.session_state["destination_display"] = current
     if "destination_display" not in st.session_state:
         st.session_state["destination_display"] = current
     selected = st.sidebar.segmented_control(
@@ -52,7 +53,7 @@ def render_destination() -> str:
         list(PAGES),
         key="destination_display",
     )
-    destination = str(selected or "Review")
+    destination = str(selected or "Overview")
     st.session_state["destination"] = destination
     return destination
 

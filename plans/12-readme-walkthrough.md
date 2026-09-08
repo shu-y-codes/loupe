@@ -17,7 +17,10 @@ the pattern picture. This walkthrough describes **that** page, so it runs after 
 parallel. [13-overview-page.md](13-overview-page.md) adds an Overview sibling. If 13 has
 shipped when this is written, name the Review / Overview switch; do not wait on 13 to
 describe Review. [14-overview-table.md](14-overview-table.md) puts Overview to the left
-of Review (default still Review); name that order if 14 has shipped.
+of Review; [16-overview-default.md](16-overview-default.md) makes Overview the default
+landing. Name the shipped order and landing behaviour.
+[15-overview-headlines.md](15-overview-headlines.md) keeps Overview family cells as
+`count unit` only; name that if 15 has shipped.
 
 **Slices 7–11 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
 corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md) there is

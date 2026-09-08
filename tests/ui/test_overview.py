@@ -7,9 +7,12 @@ bars or VWAP.
 
 from __future__ import annotations
 
+import pandas as pd
 from ui_helpers import CHECKS, MIXED_COVERAGE_CONTRACTS, FakeClient
 
-from loupe.ui.overview import OverviewRow, collect_rows, family_cell, scopes
+from loupe.ui.overview import OverviewRow, collect_rows, family_cell, scopes, style_overview
+
+FAMILY_COLUMNS = ("Gaps", "Duplicates", "Invalid values", "Recurring patterns")
 
 
 def _no_exception(test):
@@ -32,7 +35,12 @@ def _labels(test) -> list[str]:
 
 
 def _overview_table(test):
-    tables = [frame.value for frame in test.dataframe]
+    tables = []
+    for frame in test.dataframe:
+        value = frame.value
+        if isinstance(value, pd.io.formats.style.Styler):
+            value = value.data
+        tables.append(value)
     return next(
         frame
         for frame in tables
@@ -76,7 +84,15 @@ def test_family_cell_does_not_paint_unchecked_as_zero():
             }
         },
     )
-    assert family_cell(live, "gaps") == "2 runs\n1 session-open hole · 1 session absent"
+    assert family_cell(live, "gaps") == "2 runs"
+    large = OverviewRow(
+        contract_id="CLG26",
+        root="CL",
+        frequency="minute",
+        checked=True,
+        families={"gaps": {"count": 21919, "unit": "runs", "detail": "not rendered"}},
+    )
+    assert family_cell(large, "gaps") == "21,919 runs"
 
 
 def test_collect_rows_calls_checks_per_scope_and_not_findings():
@@ -93,15 +109,32 @@ def test_collect_rows_calls_checks_per_scope_and_not_findings():
     assert rows[0].families["gaps"]["count"] == CHECKS["families"][0]["count"]
 
 
-def test_review_is_the_default_destination(app):
-    test = _no_exception(app())
-    assert test.sidebar.segmented_control(key="destination_display").value == "Review"
-    assert _labels(test) == [
-        "Gaps",
-        "Duplicates",
-        "Invalid values",
-        "Recurring patterns",
-    ]
+def test_overview_is_the_default_destination(app):
+    test = _no_exception(app(destination=None))
+    nav = test.sidebar.segmented_control(key="destination_display")
+    assert list(nav.options) == ["Overview", "Review"]
+    assert nav.value == "Overview"
+    assert _labels(test) == []
+    assert _overview_table(test) is not None
+
+
+def test_invalid_destination_falls_back_to_overview(app):
+    test = _no_exception(app(destination="Not a page"))
+    assert test.sidebar.segmented_control(key="destination_display").value == "Overview"
+    assert test.session_state["destination"] == "Overview"
+
+
+def test_style_overview_weights_contract_not_family_detail():
+    frame = pd.DataFrame(
+        {
+            "Contract": ["ESZ25"],
+            "Grain": ["Minute"],
+            "Gaps": ["2 runs"],
+        }
+    )
+    html = style_overview(frame).to_html()
+    assert "font-weight: bold" in html
+    assert "ESZ25" in html
 
 
 def test_overview_table_has_family_tile_headers_and_one_row_per_grain(app):
@@ -125,6 +158,10 @@ def test_overview_table_has_family_tile_headers_and_one_row_per_grain(app):
     assert sorted(es["Grain"].tolist()) == ["Daily", "Minute"]
     assert (table["Contract"] == "ZCZ25").sum() == 1
     assert (table["Contract"] == "SR3G26").sum() == 1
+    assert all("\n" not in str(value) for column in FAMILY_COLUMNS for value in table[column])
+    assert not any(
+        "session-open hole" in str(value) for column in FAMILY_COLUMNS for value in table[column]
+    )
     assert not any(name in {"bars_daily", "vwap"} for name, _ in client.calls)
     assert not test.sidebar.selectbox
     assert not test.sidebar.date_input

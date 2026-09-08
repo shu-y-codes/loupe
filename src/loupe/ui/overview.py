@@ -115,11 +115,24 @@ def family_cell(row: OverviewRow, family: str) -> str:
     card = row.families.get(family) or {}
     count = card.get("count", 0)
     unit = card.get("unit") or ""
-    detail = (card.get("detail") or "").strip()
-    lead = f"{count} {unit}".strip()
-    if detail:
-        return f"{lead}\n{detail}"
-    return lead
+    return f"{count:,} {unit}".strip()
+
+
+def style_overview(frame: pd.DataFrame) -> pd.io.formats.style.Styler:
+    """Contract is the scan headline; family cells contain compact headlines only."""
+    return frame.style.set_properties(subset=["Contract"], **{"font-weight": "bold"})
+
+
+def _column_config() -> dict[str, Any]:
+    families = {
+        label: st.column_config.TextColumn(label, width="medium", help=helptext.CARDS[family])
+        for family, label in FAMILY_LABEL.items()
+    }
+    return {
+        "Contract": st.column_config.TextColumn("Contract", width=96),
+        "Grain": st.column_config.TextColumn("Grain", width=80),
+        **families,
+    }
 
 
 def queue_open(contract_id: str, frequency: str) -> None:
@@ -163,23 +176,12 @@ def render_overview(rows: list[OverviewRow]) -> None:
         ]
     )
     event = st.dataframe(
-        frame,
+        style_overview(frame),
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
         key="overview_table",
-        column_config={
-            "Gaps": st.column_config.TextColumn("Gaps", help=helptext.CARDS["gaps"]),
-            "Duplicates": st.column_config.TextColumn(
-                "Duplicates", help=helptext.CARDS["duplicates"]
-            ),
-            "Invalid values": st.column_config.TextColumn(
-                "Invalid values", help=helptext.CARDS["invalid"]
-            ),
-            "Recurring patterns": st.column_config.TextColumn(
-                "Recurring patterns", help=helptext.CARDS["patterns"]
-            ),
-        },
+        column_config=_column_config(),
     )
     selected = getattr(getattr(event, "selection", None), "rows", None) or []
     if selected:

@@ -4,7 +4,11 @@
 **Overview** to the left of **Review** in the sidebar switch. **Default landing stays
 Review.** Click-through and the checks loop do not change.
 
-**Status.** pending — blocked on [13-overview-page.md](13-overview-page.md) (done).
+**Status.** done — 2026-09-08
+
+Follow-on (family cells = `count unit` only; Glide will not break lines):
+[15-overview-headlines.md](15-overview-headlines.md). Do not reopen this file for that
+work.
 
 Written 2026-09-08, after a live Overview pass: Glide sizes family columns to the
 longest pattern sentence, so the table scrolls horizontally. A canvas table

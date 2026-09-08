@@ -1,17 +1,20 @@
 # Loupe UI design
 
-Revised 2026-09-08: two pages — **Review** (one contract, four cards and two charts) and
-**Overview** (corpus family-tile table). Sidebar nav is Review | Overview; default Review.
-Review’s main-column order is unchanged. Earlier the same day: grain-honest review — explicit
-Quality grain, source-aligned evidence, selected-family issues, pattern exposure chart,
-independent VWAP zoom and scope-keyed chart identity. Same day: click-test polish — card
-count/detail type hierarchy; OHLCV hover (date, OHLC, status); on-chart **absent** label;
-volume tooltip without colour-field noise; sidebar synthetic warning lists planted file(s)
-by strip family. Same day prior: reviewer chrome — cards *are* the family control (no Check
-row), no score line, OHLCV legend + shared-x zoom, ingested files grouped by contract
-coverage, planted defects grouped by strip family. Same day: Review — four family cards,
-Daily OHLCV then 15-minute VWAP with selected-family overlays, picture of the selected family
-below VWAP. No persona selector. Sidebar ingest is still **Load demo data**.
+Revised 2026-09-08: **Overview** is the default landing. Same day: Overview family cells
+show headline `count unit` only; detail stays on Review. Same day: Overview table fits the
+main column (heavier Contract); sidebar switch is **Overview | Review**. Same day: two
+pages — **Review** (one contract, four cards and two charts) and **Overview** (corpus
+family-tile table). Review’s main-column order is unchanged. Earlier the same day:
+grain-honest review — explicit Quality grain, source-aligned evidence, selected-family
+issues, pattern exposure chart, independent VWAP zoom and scope-keyed chart identity.
+Same day: click-test polish — card count/detail type hierarchy; OHLCV hover (date, OHLC,
+status); on-chart **absent** label; volume tooltip without colour-field noise; sidebar
+synthetic warning lists planted file(s) by strip family. Same day prior: reviewer chrome —
+cards *are* the family control (no Check row), no score line, OHLCV legend + shared-x zoom,
+ingested files grouped by contract coverage, planted defects grouped by strip family. Same
+day: Review — four family cards, Daily OHLCV then 15-minute VWAP with selected-family
+overlays, picture of the selected family below VWAP. No persona selector. Sidebar ingest is
+still **Load demo data**.
 
 ## UI philosophy
 
@@ -117,9 +120,10 @@ composed in `quality`.
 ## Navigation
 
 Two destinations, sidebar only. A segmented control under the Loupe title:
-**Review** | **Overview**. Default **Review**. Not a persona radio, not a main-column tab,
-not a third page. Copy is **Overview**, not Compare — `GET /v1/analytics/compare` already
-means raw vs clean or daily vs derived.
+**Overview** | **Review**. Default **Overview**, so a cold app session opens on the corpus
+scan. Not a persona radio, not a main-column tab, not a third page. Copy is **Overview**,
+not Compare —
+`GET /v1/analytics/compare` already means raw vs clean or daily vs derived.
 
 **Shared.** Load demo data, inject, and the ingested-file list stay on both pages so
 Overview is reachable on an empty store without bouncing back.
@@ -189,7 +193,7 @@ missing minute tape. There is no pre-commit sidebar matrix.
 ```
 ┌──────────────────┬──────────────────────────────────────────────────────────┐
 │ LOUPE            │  ESZ25 · 2025-06-02 → 2025-06-30                         │
-│ [Review|Overview]│                                                          │
+│ [Overview|Review]│                                                          │
 │                  │                                                          │
 │ Contract         │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────────────┐  │
 │  [ESZ25     ▾]   │  │ Selected│ │Duplicates│ │ Invalid │ │ Recurring     │  │
@@ -236,7 +240,7 @@ missing minute tape. There is no pre-commit sidebar matrix.
 ```
 ┌──────────────────┬──────────────────────────────────────────────────────────┐
 │ LOUPE            │  Overview · loaded contracts × grain · full held window  │
-│ [Review|Overview]│                                                          │
+│ [Overview|Review]│                                                          │
 │                  │  Contract   Grain   Gaps        Duplicates  Invalid  Patterns
 │ Demo data        │  ESZ25      Minute  5,209 runs  0 records   1 row    74 standing
 │ Inject defects   │  ZNZ25      Minute  8,554 runs  0           4        21
@@ -249,8 +253,11 @@ missing minute tape. There is no pre-commit sidebar matrix.
 ```
 
 Rows are loaded contract × held grain (a dual-grain contract appears twice). Columns are
-the four family tiles (count, unit, detail) plus Grain. Full held window — empty date
-pickers. HTTP: `GET /v1/contracts`, then `GET /v1/dq/checks?contract=&frequency=` per row.
+the four family headlines (`count unit`) plus Grain. Detail stays on Review. Full held
+window — empty date pickers. The table fits the main-column width without horizontal
+scroll; Contract is visually heavier than the family headlines. Family meaning stays on
+the column-header help. Stay on `st.dataframe` so a row click still opens Review. HTTP:
+`GET /v1/contracts`, then `GET /v1/dq/checks?contract=&frequency=` per row.
 The widget does not group `findings[]`. Cache the table for the current store fingerprint
 (records / synthetic batches) so a rerun does not re-hit checks once per contract. Empty
 store: same Load demo data invitation as Review. `checked: false`: say the check has not
