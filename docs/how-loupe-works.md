@@ -615,6 +615,11 @@ One page (`ui/app.py` → `ui/review.py`). Sidebar: contract, trade dates, demo 
 (`ui/chrome.py`, `ui/demo.py`). Charts in `ui/charts.py` (Altair). HTTP only via
 `LoupeClient`.
 
+Review reuses the selected row from `GET /contracts` for its header; it makes no detail
+request. The caption shows contract month, exchange, the resolved grain's full **observed**
+coverage, and Quality grain. From / To is appended separately as the Review window, so a
+filtered chart never makes its selected dates look like listing or expiry dates.
+
 ```mermaid
 sequenceDiagram
   participant Page as ui/app.main
@@ -655,7 +660,7 @@ sequenceDiagram
 | UI function | Client method | Endpoint | Domain function |
 |---|---|---|---|
 | `read_health` | `health` | `GET /health` | SQL counts |
-| `contract_ids` | `contracts` | `GET /contracts` | `ref.contract` + coverage |
+| `contract_catalogue` | `contracts` | `GET /contracts` | `ref.contract` + per-grain observed coverage; also feeds Review header |
 | `render_demo` / list | `batches` | `GET /ingest/batches` | `_summary` |
 | Load demo | `create_batch` | `POST /ingest/batches` | `load_file` (+ `build_bars`; no `assess`) |
 | After demo files | `run_rules` | `POST /dq/runs` | `assess` + `build_bars` |

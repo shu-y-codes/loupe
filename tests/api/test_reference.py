@@ -18,6 +18,8 @@ def test_contracts_report_observed_coverage(client, upload):
     contract = next(c for c in body["data"] if c["contract_id"] == "ESZ25")
 
     assert contract["root"] == "ES"
+    assert contract["exchange"] == "CME"
+    assert contract["contract_month"] == "2025-12"
     assert contract["frequencies_available"] == ["minute"]
     minute = contract["coverage"]["minute"]
     assert minute["records"] > 0 and minute["sessions"] > 0
