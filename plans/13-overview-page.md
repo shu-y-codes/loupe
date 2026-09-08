@@ -5,6 +5,9 @@ tiles, so a reviewer can cull the demo set. **Review’s main column does not ch
 
 **Status.** done — 2026-09-08
 
+Follow-on chrome (fit, wrap, Overview left of Review): [14-overview-table.md](14-overview-table.md).
+Do not reopen this file for that work.
+
 Written 2026-09-08, after a live-store scan of 40 contracts × grain. Keep
 [09-reviewer-ui.md](09-reviewer-ui.md), [10-reviewer-chrome.md](10-reviewer-chrome.md),
 and 11 **done or pending as they are**. Do not reopen them. Do not reopen

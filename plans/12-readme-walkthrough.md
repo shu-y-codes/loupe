@@ -16,7 +16,8 @@ asked for; slice 11 aligns cards, evidence and charts on an explicit frequency a
 the pattern picture. This walkthrough describes **that** page, so it runs after 11, not in
 parallel. [13-overview-page.md](13-overview-page.md) adds an Overview sibling. If 13 has
 shipped when this is written, name the Review / Overview switch; do not wait on 13 to
-describe Review.
+describe Review. [14-overview-table.md](14-overview-table.md) puts Overview to the left
+of Review (default still Review); name that order if 14 has shipped.
 
 **Slices 7–11 are hard dependencies, not a nicety.** The walkthrough is prose *about* a
 corpus, a sidebar, and the main page. Until [07-demo-corpus.md](07-demo-corpus.md) there is

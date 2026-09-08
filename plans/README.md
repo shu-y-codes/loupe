@@ -37,6 +37,7 @@ Sequence matches `specs/loupe-solution-design.md` §17.
 | 11 | grain-honest review | pending | [11-grain-honest-review.md](11-grain-honest-review.md) |
 | 12 | README walkthrough | pending | [12-readme-walkthrough.md](12-readme-walkthrough.md) |
 | 13 | overview page | **done** | [13-overview-page.md](13-overview-page.md) |
+| 14 | overview table chrome | pending | [14-overview-table.md](14-overview-table.md) |
 
 Slice 7 was split out of the walkthrough once it was clear the prose depends on it: there is
 nothing to describe until the demo corpus, the CSV conversion and the two buttons exist. Slice 8
@@ -51,6 +52,8 @@ that is already decided, so it is assembly rather than discovery — and it must
 the page after slice 11. Slice 13 adds an **Overview** sibling (corpus family-tile table)
 without changing Review’s main column; it waits on 11 for honest grain rows. If 12 writes
 after 13, name the Review / Overview switch; if 12 has already shipped, 13 patches it.
+Slice 14 is Overview chrome after a live pass of 13: table fits and wraps, Overview sits
+to the left of Review, default landing stays Review.
 
 ## Archive
 
